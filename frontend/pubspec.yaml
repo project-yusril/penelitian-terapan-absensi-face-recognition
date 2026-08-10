@@ -1,0 +1,79 @@
+name: absensi_mahasiswa
+description: "Aplikasi Absensi Mahasiswa Elektro Polnep"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # L-01: dependency dipin ke compatible range agar resolusi ulang tidak
+  # menarik breaking release tanpa review.
+
+  # State Management
+  flutter_bloc: ^9.1.1
+  equatable: ^2.0.8
+
+  # HTTP Client
+  dio: ^5.9.2
+
+  # Local Storage
+  shared_preferences: ^2.5.5
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  flutter_secure_storage: ^9.2.4
+
+  # Geolocation
+  geolocator: ^14.0.1
+
+  # Camera & Face Detection
+  camera: ^0.12.0+1
+  google_mlkit_face_detection: ^0.13.2
+  tflite_flutter: ^0.12.1
+  image: ^4.8.0
+
+  # Device Info
+  device_info_plus: ^12.4.0
+  safe_device: ^1.3.10
+
+  # UI Components
+  intl: ^0.20.2
+
+  # Permissions
+  permission_handler: ^12.0.1
+
+  # Push Notification
+  firebase_core: ^4.9.0
+  firebase_messaging: ^16.2.2
+
+  # File Handling
+  file_picker: ^8.1.4
+  path_provider: ^2.1.5
+
+  path: ^1.9.1
+
+  # Connectivity
+  connectivity_plus: ^7.1.1
+
+  # Functional programming
+  dartz: ^0.10.1
+
+  # Utils
+  uuid: ^4.5.3
+  logger: ^2.7.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  # Dipakai langsung oleh camera converter tests untuk membangun CameraImageData.
+  camera_platform_interface: ^2.13.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/

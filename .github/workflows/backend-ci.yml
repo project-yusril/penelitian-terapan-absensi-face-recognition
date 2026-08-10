@@ -1,0 +1,55 @@
+name: Backend CI
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_DATABASE: absensi_mahasiswa_elektro_testing
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3.30'
+          extensions: mbstring, pdo_mysql, openssl
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: composer install --no-interaction --prefer-dist
+      - run: composer validate --strict
+      - run: composer check-platform-reqs
+      - run: composer audit
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Run migrations and tests
+        env:
+          APP_ENV: testing
+          APP_KEY: base64:WfA+3tJeVq6OaK/pxYkybzHpqLsOMEl0so7bpTAcuxg=
+          BIOMETRIC_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: absensi_mahasiswa_elektro_testing
+          DB_USERNAME: root
+          DB_PASSWORD: ''
+        run: php artisan test

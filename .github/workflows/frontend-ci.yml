@@ -1,0 +1,25 @@
+name: Frontend CI
+
+on:
+  pull_request:
+  push:
+
+# L-05: analyzer warning (dan info) menjadi CI failure pada setiap push/PR,
+# bukan hanya saat release manual. `--fatal-warnings --fatal-infos` membuat
+# analyzer keluar non-zero bila ada temuan apa pun.
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.4'
+          cache: true
+      - run: flutter pub get
+      - name: Analyze (warnings and infos are fatal)
+        run: flutter analyze --fatal-warnings --fatal-infos
+      - run: flutter test
