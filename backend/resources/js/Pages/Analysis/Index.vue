@@ -42,18 +42,26 @@ const sim = computed(() => props.simultaneous ?? {});
     <PageHeader title="Analisis & Evaluasi" subtitle="Distribusi jarak wajah, kurva FAR/FRR, EER & threshold optimal (MobileFaceNet)" />
 
     <!-- Filter -->
-    <div class="card mb-5 flex flex-wrap items-end gap-3 p-4">
-        <div>
-            <label class="label">Program Studi</label>
-            <select v-model="prodiId" class="input w-auto py-2" @change="reload">
-                <option value="">Default (semua)</option>
-                <option v-for="p in prodis" :key="p.id" :value="p.id">{{ p.nama }}</option>
-            </select>
+    <div class="card mb-5 p-4">
+        <div class="flex flex-wrap items-end gap-3">
+            <div>
+                <label class="label" for="filter-prodi">Program Studi</label>
+                <select id="filter-prodi" v-model="prodiId" class="input w-auto py-2" aria-describedby="filter-prodi-help" @change="reload">
+                    <option value="">Semua prodi (gabungan)</option>
+                    <option v-for="p in prodis" :key="p.id" :value="p.id">{{ p.nama }}</option>
+                </select>
+            </div>
+            <div>
+                <label class="label" for="filter-threshold">Threshold (θ)</label>
+                <input id="filter-threshold" v-model.number="threshold" type="number" step="0.01" class="input w-32" @change="reload" />
+            </div>
         </div>
-        <div>
-            <label class="label">Threshold (θ)</label>
-            <input v-model.number="threshold" type="number" step="0.01" class="input w-32" @change="reload" />
-        </div>
+        <!-- R-04: filter prodi mempersempit dataset, bukan hanya ambang. Angka
+             gabungan tidak boleh dilaporkan sebagai hasil satu prodi. -->
+        <p id="filter-prodi-help" class="mt-3 text-sm text-slate-400">
+            Filter prodi mempersempit seluruh dataset (genuine/impostor, geofence, latensi, kehadiran), bukan hanya ambang θ.
+            Atribusi memakai prodi mahasiswa. Pilihan <strong>gabungan</strong> menggabungkan semua prodi &mdash; jangan laporkan angkanya sebagai hasil satu prodi.
+        </p>
     </div>
 
     <!-- KPI -->

@@ -1,9 +1,11 @@
 # Kontrak API Saat Ini
 
 **Status:** maintained summary  
-**Pembaruan:** 9 Agustus 2026  
+**Pembaruan:** 11 Agustus 2026
 **Authority:** `backend/routes/api.php`, request validation, services, dan feature tests  
 **Base path:** `/api`
+
+Jika contoh PRD atau task plan berbeda dari dokumen ini, executable routes/validation dan dokumen ini yang berlaku.
 
 ## Aturan Umum
 
@@ -36,6 +38,23 @@ Response selalu generik dan tidak pernah berisi token, baik email terdaftar maup
 ```
 
 Token single-use dan expiring. Reset mencabut token/session lama. Akun hanya otomatis aktif jika sebelumnya `activation_pending=true`.
+
+## Push Notification (FCM)
+
+### `POST /fcm-token`
+
+Protected (semua role terautentikasi). Berada di luar prefix `/auth`.
+
+```json
+{ "fcm_token": "<device-registration-token>" }
+```
+
+- Validasi: `present|nullable|string|max:512`.
+- `fcm_token` non-kosong menyimpan token perangkat sebagai target push milik user.
+- `fcm_token` **string kosong atau `null` berarti revoke**: backend mengosongkan `users.fcm_token` sehingga perangkat tidak lagi menerima push. Mobile mengirim ini saat logout/sesi invalid (penting untuk perangkat bersama, C-06).
+- Response 200 generik (`FCM token updated` / `FCM token cleared`).
+
+Lifecycle klien (register saat login/startup, refresh, revoke saat logout) diimplementasikan di mobile dan bersifat fail-safe bila Firebase belum dikonfigurasi. Pengiriman push nyata memerlukan Firebase project dan `FIREBASE_CREDENTIALS_PATH` di backend. Lihat L-02 di `temuan.md`.
 
 ## Private Files
 
@@ -77,6 +96,21 @@ Response 201 memuat:
 ```
 
 Token hanya boleh digunakan sekali dan terikat user, schedule, course, action, attendance, occurrence date, dan UUID.
+
+> **Production containment:** kontrak permit/attendance scalar di bawah hanya aktif
+> untuk local/testing compatibility. Production selalu mengembalikan
+> `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` sampai challenge-bound capture
+> artifact diverifikasi server/trusted verifier. `BIOMETRIC_ALLOW_CLIENT_CLAIMS`
+> tidak dapat membuka bypass di production.
+
+Containment yang sama berlaku untuk:
+
+- permit attendance;
+- online check-in/check-out dan mixed offline sync;
+- enrollment, duplicate probe, re-enrollment, dan reference embedding;
+- approval enrollment/re-enrollment pada API maupun web.
+
+Read-only status/history yang tidak membuat atau mengaktifkan evidence biometrik tetap mengikuti authentication/authorization normal.
 
 ## Online Check-in/Checkout
 
@@ -138,6 +172,39 @@ Online capture time berasal dari server. Client timestamp tidak dapat memperluas
 ```
 
 `type` menggunakan underscore: `check_in` atau `check_out`, bukan hyphen. Maksimum 20 item. Setiap item memerlukan permit dan UUID berbeda. Hasil dipetakan per `client_uuid`.
+
+## Analisis dan Evaluasi Penelitian
+
+Seluruh endpoint di bawah berada pada group `admin` dan hanya untuk role
+manajemen; halaman web `/analysis` dibatasi `super_admin`.
+
+| Endpoint | Isi |
+|---|---|
+| `GET /admin/analysis/geofence` | Success rate dan distribusi jarak geofence |
+| `GET /admin/analysis/face-verification` | Distribusi distance, FAR/FRR, sweep θ, EER, θ optimal |
+| `GET /admin/analysis/latency` | Statistik dan percentile latensi, agregasi per device |
+| `GET /admin/analysis/attendance-sp` | Distribusi status kehadiran, SP, dan trend mingguan |
+| `GET /admin/analysis/simultaneous-test` | Hasil uji simultan per concurrent level |
+| `GET /admin/analysis/conventional-comparison` | Perbandingan pencatatan konvensional vs sistem |
+
+### Parameter `prodi_id` (canonical — R-04)
+
+- `prodi_id` mempersempit **dataset**, bukan hanya memilih `face_threshold`. Sebelum R-04, filter hanya mengganti ambang sementara dataset genuine/impostor tetap global sehingga setiap prodi menghasilkan FAR/FRR yang identik.
+- Atribusi memakai **prodi subjek** (`users.prodi_id`), sama dengan sumber ambang runtime `ProdiSetting::where('prodi_id', $user->prodi_id)`.
+- `prodi_id` yang tidak dikenal menghasilkan `422` dengan error validasi pada field `prodi_id`, bukan dataset kosong.
+- Mahasiswa terarsip (soft delete) tetap dihitung, sehingga hasil berfilter tidak kehilangan baris yang ikut terhitung tanpa filter.
+- Tanpa `prodi_id`, seluruh prodi digabung. Angka gabungan tidak boleh dilaporkan sebagai hasil satu prodi.
+- Pada `face-verification`, `threshold` eksplisit tetap mengalahkan threshold prodi dan ditandai `test_data.threshold_source = "manual"`.
+
+### Definisi success rate geofence (canonical — R-01)
+
+- `total_attempts` dan `success` dihitung dari action `checkin_success` versus `checkin_failed`.
+- `geofence_valid` **bukan** keberhasilan: itu hanya berarti satu langkah pemeriksaan lolos, sedangkan check-in masih dapat gagal setelahnya pada face atau liveness.
+- Distribusi jarak tetap berasal dari log `geofence_valid`/`geofence_invalid` karena hanya di sana `distance_to_geofence` tercatat.
+- Definisi ini identik antara halaman web dan endpoint API.
+
+Semantik lengkap beserta implikasinya untuk laporan penelitian ada di
+[PRD-07-analisis-evaluasi.md](PRD-07-analisis-evaluasi.md).
 
 ## Health
 

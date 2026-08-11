@@ -2,10 +2,33 @@
 
 > **Status:** target penelitian. Angka contoh bukan hasil pengukuran produksi.
 > Protokol FAR/FRR/PAD/load-test mengikuti R-01 sampai R-05 di
-> [temuan.md](temuan.md); SOP saat ini masih draft non-executable.
+> [temuan.md](temuan.md); SOP saat ini masih draft non-executable. Data legacy
+> client-attested tidak boleh dipresentasikan sebagai evidence production.
 
 ## Akses: Hanya Super Admin
 ## Lokasi: Sidebar menu terpisah (di bawah garis pemisah)
+
+---
+
+## 0. SEMANTIK FILTER PRODI (CANONICAL — R-04)
+
+Berlaku untuk seluruh sub-menu di bawah dan untuk endpoint
+`/api/admin/analysis/*`. Definisi ini adalah sumber kebenaran tunggal;
+implementasinya adalah `App\Traits\ScopesAnalysisDataset` yang dipakai bersama
+oleh `Web\AnalysisController` dan `Api\Admin\AnalysisController`.
+
+| Aturan | Definisi |
+|---|---|
+| Efek filter | `prodi_id` mempersempit **dataset**, bukan hanya memilih `face_threshold`. Sebelum R-04, filter hanya mengganti ambang sementara dataset genuine/impostor tetap global, sehingga setiap prodi menghasilkan FAR/FRR yang identik. |
+| Atribusi prodi | **Prodi subjek** (`users.prodi_id`), bukan prodi mata kuliah. Alasannya, ambang yang benar-benar diterapkan runtime juga berasal dari sana (`ProdiSetting::where('prodi_id', $user->prodi_id)`), sehingga dataset dan threshold selalu berasal dari prodi yang sama. |
+| Cakupan | Genuine/impostor FAR/FRR, sweep θ/EER, distribusi distance, geofence (success rate dan distribusi jarak), latensi termasuk percentile, kehadiran/SP, SP record, uji simultan, dan perbandingan konvensional. |
+| Prodi tidak dikenal | Ditolak `422`, bukan menghasilkan dataset kosong. Dataset kosong yang tidak disengaja mudah salah dibaca sebagai "tidak ada kesalahan verifikasi". |
+| Mahasiswa terarsip | Tetap dihitung (`withTrashed()`). M-19 menjadikan arsip sebagai cara resmi menonaktifkan master tanpa menghancurkan riwayat, sehingga hasil berfilter prodi tidak boleh kehilangan baris yang ikut terhitung saat filter dilepas. |
+| Tanpa filter | Seluruh prodi digabung. Angka gabungan **tidak boleh** dilaporkan sebagai hasil satu prodi. |
+
+> **Untuk laporan penelitian:** setiap angka FAR/FRR/EER wajib disertai prodi
+> asalnya dan θ yang dipakai. Comparator match canonical adalah
+> `distance <= threshold` di mobile, backend, dan analisis (L-08/R-04).
 
 ---
 

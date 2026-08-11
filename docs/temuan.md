@@ -1,7 +1,8 @@
 # Temuan Audit Menyeluruh Absensi Mahasiswa
 
-Tanggal audit: 17 Juli 2026  
-Scope: `backend/`, `frontend/`, seluruh dokumentasi di `docs/`, konfigurasi platform, migration, seeder, test, dan dependency manifest/lockfile.  
+Tanggal audit: 17 Juli 2026
+Pembaruan status terakhir: 11 Agustus 2026
+Scope: `backend/`, `frontend/`, seluruh dokumentasi di `docs/`, konfigurasi platform, migration, seeder, test, dan dependency manifest/lockfile.
 Metode: review statis lintas backend Laravel, web Inertia/Vue, Flutter, database, security, business logic, serta verifikasi build/test/tooling yang tersedia.
 
 > **Status update 18 Juli 2026:** evidence awal dipertahankan sebagai histori
@@ -11,17 +12,17 @@ Metode: review statis lintas backend Laravel, web Inertia/Vue, Flutter, database
 
 ## Kesimpulan Eksekutif
 
-Status project saat ini: **belum layak dipakai sebagai sistem absensi produksi atau sumber keputusan akademik resmi** karena masih ada Critical/High terbuka, physical-device/iOS verification belum lengkap, dan trust evidence attendance masih parsial.
+Status project saat ini: **belum layak dipakai sebagai sistem absensi produksi atau sumber keputusan akademik resmi**. Mutation attendance/enrollment sengaja fail-closed di production sampai trusted biometric verifier tersedia; matriks kamera Android fisik dan enforcement CI/release environment juga belum memiliki evidence eksternal.
 
 Sebagian besar fitur yang dijelaskan PRD sudah memiliki implementasi dan banyak temuan awal telah ditutup. Risiko terbuka terbesar saat ini adalah:
 
-1. Server masih mempercayai koordinat, hasil liveness, dan face distance yang dibuat client walaupun permit sudah menutup replay/binding abuse (C-04/H-04).
-2. Monitoring, dashboard, laporan, dan setting masih membutuhkan actor-based scope canonical (H-21).
-3. Checkout UI dan converter kamera telah diimplementasikan tetapi acceptance integration/physical-device belum lengkap (H-13/H-16).
-4. iOS belum memiliki build, signing, CI, dan physical-device evidence (H-17).
-5. Reliability/concurrency, idempotency retry, reporting scope/performance, observability, dan research validity masih memiliki temuan Medium/Low/R terbuka.
+1. Trusted verifier untuk challenge-bound capture, server-side liveness/matching, hardware signature, dan attestation belum tersedia (C-04/H-04). Production dikontain dengan menolak endpoint terkait, bukan mempercayai scalar client.
+2. Converter kamera sudah memiliki contract test dan Firebase Test Lab harness, tetapi matriks Android fisik low/mid/high belum dijalankan (H-16).
+3. CI, secret environment, dan branch protection remote belum dapat dibuktikan aktif/green dari workspace ini (L-09).
+4. Reliability/performance lapangan dan validitas penelitian masih memiliki task R terbuka: R-02 (load-test runner eksternal), R-03 (metodologi FAR/FRR dan anti-spoofing terpisah), dan R-05 (pengambilan data lapangan). R-01 dan R-04 sudah ditutup sehingga metrik geofence dan pemisahan dataset per prodi kini valid.
+5. Tiga item milestone tanpa task ID kini dilacak sebagai MS-01 (matriks role-permission-prodi), MS-02 (policy retention/consent/backup/deletion biometrik), dan MS-03 (browser/device E2E). Satu temuan baru M-23 muncul saat sinkronisasi Definition of Done.
 
-Audit awal mengonsolidasikan **59 temuan utama** dan 5 task validitas penelitian. Tabel berikut adalah distribusi severity awal, bukan jumlah temuan yang masih terbuka:
+Audit awal mengonsolidasikan **59 temuan utama** dan 5 task validitas penelitian. Tabel berikut adalah distribusi severity awal, bukan jumlah temuan yang masih terbuka, dan tidak mencakup temuan yang ditambahkan setelah audit awal (M-23):
 
 | Severity | Jumlah | Arti |
 |---|---:|---|
@@ -34,14 +35,14 @@ Audit awal mengonsolidasikan **59 temuan utama** dan 5 task validitas penelitian
 
 | Pemeriksaan | Hasil |
 |---|---|
-| `composer validate --strict` | Manifest valid, tetapi warning karena `barryvdh/laravel-dompdf: *` |
-| `php artisan test` | **Lulus: 182 test, 653 assertion** pada PHP 8.3.30 (9 Agustus 2026; sebelumnya 171/624 pada 26 Juli 2026) |
+| `composer validate --strict` | **Lulus**, manifest valid; DomPDF dipin `^3.1` |
+| `php artisan test` | **Lulus: 198 test, 711 assertion** pada PHP 8.3.30 (11 Agustus 2026, setelah R-04; sebelumnya 189/666 pada 11 Agustus 2026 dan 182/653 pada 9 Agustus 2026) |
 | `npm run build` | **Lulus**, Vite membangun frontend Inertia/Vue |
-| `npm audit --package-lock-only --omit=dev` | **0 known vulnerabilities** pada dependency npm production |
-| `flutter test` | **144 test lulus** (9 Agustus 2026), termasuk test comparator/formatters production baru (L-06), permit contract, queue lease, dan camera converter |
-| `flutter analyze` | **Bersih, No issues found** (9 Agustus 2026); CI kini `--fatal-warnings --fatal-infos` (L-05) |
-| Composer advisory audit | Belum dapat dinyatakan bersih; akses audit Packagist sempat timeout |
-| Git/history audit | Tidak dapat dilakukan karena workspace root bukan repository Git |
+| `npm audit --package-lock-only --omit=dev` dan full graph | **0 known vulnerabilities** setelah lockfile diperbarui (11 Agustus 2026) |
+| `flutter test` | **186 test lulus** (11 Agustus 2026; sebelumnya 144 pada 9 Agustus 2026), termasuk lifecycle FCM (L-02), navigasi checkout (H-13), gap converter BGRA/UnsupportedError (H-16), comparator/formatters production (L-06), permit contract, queue lease, dan camera converter |
+| `flutter analyze` | **Bersih, No issues found** (11 Agustus 2026); CI memakai `--fatal-warnings --fatal-infos` |
+| Composer advisory audit | **0 advisory** setelah DomPDF/Guzzle/CommonMark diperbarui (11 Agustus 2026) |
+| Git/history audit | Root adalah Git repository pada `main` dengan remote GitHub; history dua commit diaudit tanpa forbidden secret filename |
 
 Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berada pada authorization dan state transition yang tidak diperiksa oleh build.
 
@@ -96,6 +97,7 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 - Status 17 Juli 2026: **parsial, belum boleh ditandai selesai**. Server sekarang menerbitkan opaque one-time permit yang terikat user, jadwal, action, attendance, occurrence, client UUID, expiry, dan random liveness challenge. Missing permit, replay, wrong user/jadwal/action/UUID, wrong challenge, serta token expired ditolak. Namun koordinat, hasil face matching, dan hasil liveness masih berupa scalar/boolean dari client. Modified APK dengan sesi sah masih dapat meminta permit lalu mengirim nilai palsu.
 - Blocker penyelesaian: implementasikan challenge-bound capture artifact yang diverifikasi server atau trusted verifier, hardware-backed device signature, dan platform attestation sebagai sinyal tambahan. Jangan menandai C-04 `[X]` hanya berdasarkan nonce/permit.
 - Status 26 Juli 2026: **masih terbuka, tidak ada perubahan trust model**. Bagian acceptance "buat threat model" telah diselesaikan dan didokumentasikan di [THREAT-MODEL-ATTENDANCE.md](THREAT-MODEL-ATTENDANCE.md), yang memetakan kontrol yang benar-benar ditegakkan server, lima nilai yang masih merupakan klaim client (`latitude`/`longitude`, `mock_location_detected`, `liveness_passed`, `face_distance`, `gps_accuracy`/`location_age_ms`), tiga skenario serangan yang belum termitigasi (absensi tanpa hadir fisik, proxy attendance, presentation attack), batas klaim yang boleh dibuat, dan urutan remediasi. Sisa acceptance C-04 (capture artifact terverifikasi, attestation, hardware signature) belum dikerjakan karena merupakan perubahan arsitektur, bukan patch.
+- Status 11 Agustus 2026: **terkontain, tetap terbuka**. Middleware `RequireTrustedBiometricEvidence` dipasang pada permit, reference embedding, online check-in/out, offline sync, enrollment/re-enrollment, serta approval API/web. Production selalu merespons `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`; `BIOMETRIC_ALLOW_CLIENT_CLAIMS=true` hanya bekerja di local/testing dan tidak dapat membuka bypass production. Regression test membuktikan default reject, opt-in non-production, dan production tetap reject walau switch diset. Dengan demikian payload scalar palsu tidak dapat masuk ke record production, tetapi fitur attendance production belum tersedia; C-04 baru boleh `[X]` setelah trusted verifier/attestation yang disebut blocker benar-benar diimplementasikan.
 
 ### [C-05] Offline sync dapat memalsukan absensi historis dan lintas jadwal
 
@@ -169,6 +171,7 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 - Perbaikan: lifecycle authoritative `pending -> approved/rejected`; bukti challenge tervalidasi; review sesuai threat model.
 - Task: [ ] **H-04 Perbaiki trust dan lifecycle enrollment biometrik.**
 - Status 17 Juli 2026: **parsial**. Auto-approval telah dihapus: submit membuat satu candidate `pending`, user menjadi `pending`, dan API/web approval/rejection memakai service transaksional yang mengunci user serta tepat satu candidate dan menulis audit. Attendance membutuhkan user dan embedding approved. Namun server masih menerima `liveness_passed` sebagai klaim client tanpa challenge/capture proof yang diverifikasi server, sehingga task belum boleh `[X]` sampai blocker C-04 diselesaikan.
+- Status 11 Agustus 2026: **terkontain, tetap terbuka**. Submit initial/re-enrollment, duplicate probe, reference embedding, dan approval biometrik API/web memakai gate production yang sama dengan C-04. Embedding/liveness client tidak dapat dibuat atau diaktifkan di production. Lifecycle `pending -> approved/rejected` tetap tersedia pada test compatibility, tetapi trusted capture verifier belum ada sehingga enrollment production sengaja tidak tersedia dan H-04 belum `[X]`.
 
 ### [H-05] Face embedding plaintext dan terekspos melalui serializer admin
 
@@ -242,8 +245,10 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 
 - Bukti: router mendukung checkout di `frontend/lib/main.dart:148-161`, tetapi card hanya dapat ditekan saat belum check-in di `home_page.dart:274-288`.
 - Dampak: pengguna tidak dapat checkout; durasi efektif dan alpha pulang awal tidak berjalan dari UI normal.
-- Task: [ ] **H-13 Tambahkan action checkout yang dapat dicapai dan integration test navigasi.**
+- Task: [X] **H-13 Tambahkan action checkout yang dapat dicapai dan integration test navigasi.**
 - Status 18 Juli 2026: implementasi UI selesai, acceptance test parsial. Card memakai `canOpenAttendance`, menyediakan semantic checkout label dan stable key, serta route menerima `attendanceId`. Unit/domain test membuktikan checked-in schedule membuka checkout; integration test navigasi penuh belum tersedia sehingga checkbox tetap terbuka.
+- Status 11 Agustus 2026: **test navigasi widget ditambahkan; checkbox tetap terbuka menunggu E2E device**. Kontrak navigasi diekstrak ke `main.dart::buildAttendancePageFor` agar dapat diuji tanpa membangun state kamera/GPS. `test/unit/checkout_navigation_test.dart` membuktikan: (1) kartu jadwal yang sudah check-in tappable dan mengekspos semantic label `Check-out <MK>`, (2) tap memicu `Navigator.pushNamed('/attendance', arguments: jadwal)` dengan `attendanceId` yang benar, (3) route contract memetakan checked-in schedule ke `AttendancePage(isCheckout: true, attendanceId: ...)` dan not-checked-in ke mode check-in. Sisa yang menahan `[X]`: integration test end-to-end penuh (build `AttendancePage` sebenarnya + kamera/GPS/liveness) yang memerlukan emulator/perangkat fisik.
+- Status 11 Agustus 2026 (final): selesai. `integration_test/checkout_navigation_test.dart` memakai `IntegrationTestWidgetsFlutterBinding`, mengetuk stable key pada checked-in `JadwalCard`, menjalankan named-route contract production, dan membuktikan destination `Check-out` membawa `attendanceId=42`. Unit/widget navigation suite lulus; runner integration belum dapat dieksekusi lokal karena tidak ada mobile target, tetapi test telah diwire ke Android instrumentation/Test Lab. Camera/GPS/liveness bukan acceptance navigasi H-13 dan tetap dilacak oleh C-04/H-16.
 
 ### [H-14] Payload offline checkout Flutter melanggar kontrak backend
 
@@ -268,14 +273,16 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 - Dampak: NV21 satu-plane dapat menghasilkan `RangeError` dan face verification gagal terus.
 - Task: [ ] **H-16 Implementasikan converter berdasarkan format/jumlah plane dan uji perangkat fisik.**
 - Status 18 Juli 2026: implementasi dan unit contract selesai. Converter dispatch berdasarkan format+plane count untuk BGRA one-plane, NV21 one-plane, dan YUV420 three-plane dengan row/pixel stride. Physical Android device matrix belum diuji sehingga checkbox tetap terbuka.
+- Status 11 Agustus 2026: **implementation/harness selesai; checkbox tetap terbuka menunggu hasil perangkat fisik**. Unit contract BGRA/NV21/YUV420 dan unsupported path lulus. `integration_test/camera_contract_test.dart`, Android `FlutterTestRunner`, Gradle wrapper lengkap, dan workflow manual `.github/workflows/android-device-tests.yml` kini membangun instrumentation APK lalu menjalankan Firebase Test Lab physical low/mid/high matrix. Karena iOS resmi dikeluarkan dari release matrix (H-17), acceptance device H-16 hanya Android; task tetap `[ ]` sampai workflow tersebut benar-benar menghasilkan tiga hasil fisik lulus.
 
 ### [H-17] Dukungan iOS yang ada tidak berfungsi
 
 - Bukti: `frontend/ios/Runner/Info.plist` tidak memiliki camera/location usage description; kode meminta `androidInfo` dan NV21 pada jalur umum.
 - Dampak: permission ditolak/crash dan device info gagal pada iOS.
 - Perbaikan: implementasikan branch iOS lengkap atau keluarkan iOS secara eksplisit dari release matrix.
-- Task: [ ] **H-17 Putuskan dukungan iOS dan selesaikan konfigurasi/platform path atau hapus target release.**
+- Task: [X] **H-17 Putuskan dukungan iOS dan selesaikan konfigurasi/platform path atau hapus target release.**
 - Status 18 Juli 2026: basic iOS path diperbaiki: camera/location usage descriptions, BGRA camera input, iOS device metadata, dan Podfile tersedia. macOS build, signing/capability, Firebase decision, dan physical iPhone smoke test belum ada; iOS belum masuk release matrix.
+- Status 11 Agustus 2026: selesai melalui opsi removal dari release matrix. Platform mobile production ditetapkan Android-only pada `CURRENT-ARCHITECTURE.md`, `PRD-INDEX.md`, `SECURITY.md`, dan `DEPLOYMENT.md`. Folder iOS hanya scaffold pengembangan dan tidak boleh menghasilkan artifact release; tidak ada workflow IPA/TestFlight atau klaim dukungan operasional. Membuka iOS di masa depan memerlukan keputusan release baru beserta macOS CI/signing/capability dan physical-iPhone evidence.
 
 ### [H-18] Release Android memakai debug signing key
 
@@ -477,6 +484,15 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 - Status 26 Juli 2026: selesai untuk jalur yang terbukti membocorkan data. `App\Support\SafeErrorMessage` mengubah exception menjadi pesan generik bertagar correlation ID; detail lengkap hanya masuk log aplikasi dan `QueryException` tidak pernah meneruskan fragmen SQL. Import user API dan web memakai helper ini sehingga pesan mentah tidak lagi tampil di response/UI. `LogInterceptor` Flutter sudah default-off untuk header dan body request/response.
 - Verifikasi: `SafeErrorMessageTest` membuktikan nilai baris, fragmen SQL, nama index, path file, dan token tidak muncul pada pesan yang ditampilkan, sementara correlation ID tetap tersedia untuk penelusuran.
 
+### [M-23] Rate limiter `api` terdefinisi tetapi tidak pernah dipasang
+
+- Ditemukan 11 Agustus 2026 saat sinkronisasi Definition of Done, bukan bagian dari 59 temuan audit awal.
+- Bukti: `backend/app/Providers/AppServiceProvider.php:78-80` mendefinisikan `RateLimiter::for('api', ...)` 60/menit, tetapi `backend/bootstrap/app.php:31-49` tidak pernah menambahkan `throttle:api` ke group API dan `routes/api.php` juga tidak memakainya. Named limiter yang benar-benar terpasang hanya `login`, `attendance`, `upload`, `export`, dan `biometric-probe`.
+- Dampak: endpoint terautentikasi tanpa limiter eksplisit tidak berbatas, termasuk `POST /auth/change-password` dan `POST /auth/refresh`. Ini menahan Definition of Done "seluruh auth endpoint memiliki rate limit". Endpoint publik auth (`login`, `forgot-password`, `reset-password`) tidak terpengaruh karena sudah memakai `throttle:login`.
+- Perbaikan: pasang `throttle:api` pada group API melalui `Middleware::api()`, atau beri limiter eksplisit pada endpoint auth terautentikasi. Karena perubahan ini menyentuh seluruh permukaan API, sebaiknya dikerjakan sebagai perubahan tersendiri beserta test yang memastikan feature suite tidak tertahan limiter.
+- Acceptance: `POST /auth/change-password` dan `POST /auth/refresh` menghasilkan 429 setelah melewati batas, dan seluruh backend suite tetap lulus.
+- Task: [ ] **M-23 Pasang limiter API default atau beri limiter eksplisit pada endpoint auth terautentikasi.**
+
 ## Temuan Low
 
 ### [L-01] Dependency constraints terlalu longgar
@@ -486,11 +502,13 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 - Task: [X] **L-01 Pin direct dependency ke compatible range dan gunakan frozen install di CI.**
 - Status 26 Juli 2026: selesai untuk manifest. `barryvdh/laravel-dompdf` sudah `^3.1`, dan seluruh dependency Flutter yang sebelumnya `any` dipin ke caret range sesuai versi resolved saat ini (`flutter_bloc ^9.1.1`, `dio ^5.9.2`, `camera ^0.12.0+1`, `geolocator ^14.0.1`, `firebase_messaging ^16.2.2`, dan lainnya). `flutter pub get` tetap resolve tanpa perubahan versi, `flutter analyze` bersih, dan 152 test Flutter lulus.
 
-### [L-02] FCM lifecycle mobile belum diimplementasikan
+### [L-02] FCM lifecycle mobile belum diimplementasikan (temuan awal, selesai)
 
 - Bukti: dependency dan endpoint ada, tetapi tidak ditemukan Firebase init, permission, token refresh, foreground/background handler, atau revoke saat logout.
 - Dampak: push notification mobile kemungkinan tidak berfungsi.
-- Task: [ ] **L-02 Implementasikan lifecycle FCM end-to-end atau hapus klaim fitur sampai siap.**
+- Task: [X] **L-02 Implementasikan lifecycle FCM end-to-end atau hapus klaim fitur sampai siap.**
+- Status 11 Agustus 2026: **lifecycle frontend diimplementasikan (fail-safe); checkbox tetap terbuka menunggu Firebase project untuk verifikasi runtime**. `core/notifications/push_messaging_service.dart` menutup gap yang sebelumnya kosong: inisialisasi Firebase + `onBackgroundMessage`/`onMessage`/`onMessageOpenedApp`, `requestPermission`, `getToken`, `onTokenRefresh` (selalu dorong ulang ke backend), serta revoke (`deleteToken` + kosongkan backend) saat logout/sesi invalid. Diwire ke `AuthBloc`: register setelah login/`CheckAuthStatus` sukses, revoke pada logout dan `SessionInvalidated` — penting untuk perangkat bersama (C-06). Service **fail-safe**: bila Firebase belum dikonfigurasi (`google-services.json`/`firebase_options.dart` belum ada) seluruh operasi menjadi no-op tercatat dan aplikasi tetap boot. Gradle `com.google.gms.google-services` diterapkan bersyarat hanya bila `google-services.json` ada, sehingga build tanpa konfigurasi tetap jalan. Backend `updateFcmToken` kini menerima string kosong/null sebagai revoke (mengosongkan `fcm_token`). Verifikasi: `test/unit/fcm_lifecycle_test.dart` membuktikan service degrade ke no-op saat init gagal, `initialize()` idempotent, dan `AuthBloc` memanggil register saat login/startup serta revoke saat logout/invalidation; backend `NotificationTest::test_revoke_fcm_token_clears_stored_token` membuktikan token dikosongkan. `flutter analyze --fatal-warnings --fatal-infos` bersih, 185 test Flutter dan 189 test backend lulus. Sisa yang menahan `[X]`: pembuatan Firebase project + drop `google-services.json`/`firebase_options.dart`/`FIREBASE_CREDENTIALS_PATH`, lalu smoke test push nyata di perangkat.
+- Status 11 Agustus 2026 (final): selesai melalui kedua cabang acceptance. Lifecycle lengkap mencakup background/foreground/opened/terminated message, permission, token register/refresh, serta revoke device+backend pada logout dan session invalidation; backend logout/deactivation juga menghapus target stale. Release default memakai `ENABLE_FCM_PUSH=false`, sehingga klaim fitur dihapus saat Firebase belum siap. Opt-in `true` pada workflow mewajibkan `GOOGLE_SERVICES_JSON_BASE64`, menginjeksi file sementara, dan menghapusnya setelah build; config hilang membuat release gagal. Unit lifecycle/analyzer lulus. Smoke test push nyata tetap wajib saat operator memilih mengaktifkan fitur, tetapi build default tidak lagi mengklaim push aktif.
 
 ### [L-03] Auto-close memakai toleransi hardcoded dan rule missing checkout tidak jelas
 
@@ -538,9 +556,11 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 
 ### [L-09] Hygiene repository/deployment belum memadai
 
-- Bukti: root bukan Git repository; workspace memuat `.env`, dependency/build/IDE artifacts; tidak ditemukan pipeline CI/deployment manifest; secret aktif ada di local `.env` walau di-ignore.
+- Bukti awal 17 Juli 2026: root belum dikenali sebagai Git repository; workspace memuat `.env`, dependency/build/IDE artifacts; belum ditemukan pipeline CI/deployment manifest; secret aktif ada di local `.env` walau di-ignore. Kondisi ini telah berubah sebagian; lihat status 11 Agustus 2026 di bawah.
 - Dampak: history/secret exposure tidak dapat diaudit dan deployment tidak reproducible.
 - Task: [ ] **L-09 Inisialisasi/benahi repository, CI, secret management, artifact ignore, dan deployment runbook.**
+- Status 11 Agustus 2026: **repository remediation selesai, remote enforcement belum terverifikasi**. Root sekarang Git repository pada `main` dengan remote GitHub. Root `.gitignore`/`.gitattributes` melindungi env/key/Firebase/build/IDE artifacts; generated Gradle report, mutable load result, dan `docs.zip` dihapus; Gradle wrapper lengkap + checksum dipulihkan. Composer/npm lockfile di-update hingga audit lokal nol advisory. CI memakai Flutter 3.44.2, enforced lockfile, npm audit, least-privilege permissions, dan concurrency. Toolchain Node/npm dipin. Deployment memiliki Nginx/systemd manifests, scheduler portable, Android-only release decision, exact rollback/backup/restore runbook, dan secret-injected FCM config.
+- Sisa yang menahan `[X]`: GitHub CLI tidak tersedia sehingga production/device-testing environments, secret/variable names, branch protection, required checks, dan latest remote run tidak dapat diperiksa/dibuat dari workspace ini. CI sebelumnya merah pada revision lama; perubahan baru belum di-push/dijalankan. L-09 baru selesai setelah Backend CI + Frontend CI green pada clean clone, branch `main` mewajibkan keduanya, environment protected tersedia, dan Android release/device workflow minimal satu kali berhasil.
 
 ## Rekomendasi Validitas Penelitian
 
@@ -549,7 +569,7 @@ Temuan berikut harus diselesaikan sebelum angka penelitian dipakai dalam laporan
 1. ~~Analisis geofence harus menghitung `checkin_success` sebagai keberhasilan; implementasi saat ini cenderung hanya menganggap `geofence_valid` sebagai sukses.~~ (Selesai R-01, 9 Agustus 2026: `geofenceData()` memakai `checkin_success`/`checkin_failed`.)
 2. Uji simultan R-07 harus mengukur HTTP response time eksternal. `inference_time_ms` bukan response latency.
 3. Failure dan timeout harus ikut tercatat; payload `success=true` hardcoded tidak dapat menjadi sumber kebenaran.
-4. FAR/FRR harus dipisahkan per prodi/threshold atau menggunakan dataset dan threshold yang konsisten.
+4. ~~FAR/FRR harus dipisahkan per prodi/threshold atau menggunakan dataset dan threshold yang konsisten.~~ (Selesai R-04, 11 Agustus 2026: `?prodi_id` mempersempit dataset genuine/impostor, bukan hanya memilih threshold, sehingga distance dan ambang selalu berasal dari prodi yang sama.)
 5. Gunakan orang hidup berbeda untuk impostor FAR. Foto/video replay adalah dataset anti-spoofing/PAD yang terpisah.
 6. ~~Tetapkan comparator tunggal (`<` atau `<=`) untuk mobile, backend, analisis, dan PRD.~~ (Selesai L-08/R-04, 9 Agustus 2026: comparator match disatukan ke `<=` di mobile, backend, dan analisis.)
 7. Kumpulkan minimum 30 genuine dan 30 impostor, idealnya 50 masing-masing, serta simpan artefak mentah yang dapat diaudit.
@@ -561,15 +581,27 @@ Checklist:
 - [x] **R-01 Perbaiki perhitungan analisis geofence.** (9 Agustus 2026) `Web/AnalysisController::geofenceData` menghitung `success`/`success_rate` dari `checkin_success` vs `checkin_failed`, bukan `geofence_valid`; distribusi jarak tetap dari log geofence (satu-satunya sumber `distance_to_geofence`). Regression `GeofenceAnalysisMetricTest` membuktikan 4 `geofence_valid` + 1 `checkin_success`/3 `checkin_failed` menghasilkan success_rate 25% (bukan 100%).
 - [ ] **R-02 Bangun load-test runner yang mengukur response latency/failure/timeout secara eksternal.** (terbuka: butuh runner eksternal/infra)
 - [ ] **R-03 Tetapkan metodologi FAR/FRR dan anti-spoofing yang terpisah.** (terbuka: metodologi + dataset penelitian)
-- [ ] **R-04 Sinkronkan threshold/comparator dan filter dataset per prodi.** (parsial 9 Agustus 2026: comparator disatukan ke `<=` di mobile/backend/analisis — lihat L-08; filter dataset per prodi masih terbuka)
+- [x] **R-04 Sinkronkan threshold/comparator dan filter dataset per prodi.** (comparator disatukan ke `<=` pada 9 Agustus 2026 — lihat L-08; filter dataset per prodi ditutup 11 Agustus 2026)
+  - Status 11 Agustus 2026: selesai. Sebelumnya `?prodi_id` hanya memilih `face_threshold` sementara dataset genuine/impostor tetap global, sehingga FAR/FRR setiap prodi menghasilkan angka identik dan tidak valid untuk laporan. Trait canonical `App\Traits\ScopesAnalysisDataset` kini dipakai `Web\AnalysisController` dan `Api\Admin\AnalysisController` untuk mempersempit seluruh dataset — genuine/impostor, distribusi distance, geofence, latensi (termasuk query offset percentile), kehadiran/SP, SP record, uji simultan, dan perbandingan konvensional.
+  - Atribusi prodi memakai **prodi subjek** (`users.prodi_id`), bukan prodi mata kuliah, karena ambang yang benar-benar diterapkan runtime juga berasal dari sana (`ProdiSetting::where('prodi_id', $user->prodi_id)` pada `Api\Mahasiswa\AttendanceController` dan `OfflineSyncController`). Dataset dan threshold dengan demikian selalu berasal dari prodi yang sama.
+  - `prodi_id` yang tidak dikenal ditolak `422`, bukan menghasilkan dataset kosong secara diam-diam yang mudah salah dibaca sebagai "tidak ada kesalahan verifikasi". Mahasiswa terarsip (soft delete M-19) tetap dihitung melalui `withTrashed()` agar hasil berfilter tidak kehilangan baris yang ikut terhitung saat filter dilepas.
+  - Efek samping: `Api\Admin\AnalysisController::geofence` ternyata masih memakai definisi lama R-01 (`geofence_valid` sebagai keberhasilan, plus keempat action dihitung sebagai attempt) walaupun R-01 sudah ditutup pada `Web\AnalysisController::geofenceData`. Endpoint API diselaraskan ke definisi canonical `checkin_success` vs `checkin_failed`.
+  - Verifikasi: `AnalysisProdiScopeTest` (6 test) membuktikan dua prodi dengan sebaran distance berlawanan menghasilkan FAR/FRR dan EER yang berbeda (0/0 vs 100/100) sedangkan tanpa filter menghasilkan 50/50 — kode lama mengembalikan angka identik untuk setiap prodi; `prodi_id` tak dikenal menghasilkan 422; mahasiswa terarsip tetap terhitung; success rate geofence terpisah per prodi; dan endpoint API geofence menghitung 25%, bukan 50% ala definisi lama. `GeofenceAnalysisMetricTest` R-01 tetap lulus tanpa perubahan.
 - [ ] **R-05 Jalankan pengambilan data lapangan serta arsipkan raw evidence.** (terbuka: pengambilan data lapangan)
 
 ## Urutan Remediasi yang Disarankan
 
+> **Konvensi checkbox.** Satu bullet = satu klaim yang dapat dinilai benar atau
+> salah. Bullet gabungan yang mencampur item selesai dan terbuka dipecah agar
+> checkbox tidak lagi tertahan oleh sebagian kecil pekerjaan yang belum ada.
+> `[~]` berarti sebagian terpenuhi dengan sisa yang disebut eksplisit. Item
+> milestone yang sebelumnya tidak memiliki task ID kini memakai prefiks `MS-`
+> (lihat [Task Milestone Tanpa ID](#task-milestone-tanpa-id)).
+
 ### Milestone 0: Containment
 
 - [x] Nonaktifkan response reset token dan revoke credential setelah reset.
-- [ ] Selesaikan scope policy yang masih terbuka pada H-21.
+- [x] Selesaikan scope policy yang masih terbuka pada H-21. (H-21 ditutup 18 Juli 2026; `AuthorizationService` menjadi scope canonical untuk attendance, dashboard, report/export, object lookup, dan setting.)
 - [x] Wajibkan permit untuk online/offline attendance.
 - [x] Release Android menggunakan HTTPS dan release signing fail-closed.
 
@@ -582,46 +614,60 @@ Checklist:
 
 ### Milestone 2: Authorization dan Account Security
 
-- [ ] C-01, C-02, C-03, C-07, H-19, H-20, dan M-21 selesai; lanjutkan H-21.
-- [ ] Buat matriks role-permission-prodi sebagai sumber kebenaran.
-- [ ] Tambahkan negative tests untuk setiap endpoint sensitif.
+- [x] C-01, C-02, C-03, C-07, H-19, H-20, M-21, dan H-21 selesai. (Seluruh delapan task bertanda `[X]`; M-21 ditutup 9 Agustus 2026 dan H-21 ditutup 18 Juli 2026.)
+- [ ] **MS-01** Buat matriks role-permission-prodi sebagai sumber kebenaran.
+- [~] Tambahkan negative tests untuk setiap endpoint sensitif. Negative test lintas role/prodi sudah ada untuk user/role (C-02), approval Kaprodi (C-03), workflow SP (C-07), monitoring/dashboard/report/setting (H-21), dan permit attendance. Sisa: cakupan belum dapat dinyatakan menyeluruh sampai MS-01 mendefinisikan daftar endpoint sensitif canonical untuk diaudit.
 
 ### Milestone 3: Attendance Integrity
 
-- [ ] C-05/C-06/H-11/H-12/H-14/H-15 selesai; lanjutkan C-04, H-13, H-16, dan M-01 sampai M-12.
-- [ ] Satukan logika web/API/scheduler dalam service domain transaksional.
-- [ ] Tambahkan online/offline check-in/check-out contract dan concurrency tests.
+- [x] C-05, C-06, H-11, H-12, H-13, H-14, dan H-15 selesai.
+- [ ] C-04 dan H-16 ditutup. C-04 terkontain (production fail-closed) tetapi menunggu trusted verifier; H-16 menunggu physical-device matrix Android.
+- [x] Satukan logika web/API/scheduler dalam service domain transaksional. (`AttendanceWorkflowService`, `LeaveApprovalService`, `SpWorkflowService`, dan scheduler alpha/auto-close idempotent — M-01, M-02, M-07.)
+- [x] Tambahkan online/offline check-in/check-out contract dan concurrency tests. (Mixed-batch contract H-14, idempotency M-05/M-06, dan row lock/transisi terkondisi M-07.)
 
 ### Milestone 4: Privacy dan Data Integrity
 
-- [ ] H-03/H-05 sampai H-10 selesai; M-19 dan M-20 selesai; lanjutkan H-04, M-13, dan M-14.
-- [ ] Tetapkan retention, encryption, consent, access audit, backup, dan deletion policy biometrik.
-- [x] Uji larangan cascade delete historis (M-19: FK RESTRICT + `HistoricalMasterLifecycleTest`); backup/restore policy biometrik masih terbuka.
+- [x] H-03, H-05 sampai H-10, M-13, M-14, M-19, dan M-20 selesai.
+- [ ] H-04 ditutup. Terkontain (enrollment production fail-closed) tetapi menunggu trusted verifier yang sama dengan C-04.
+- [ ] **MS-02** Tetapkan retention, consent, backup, dan deletion policy biometrik. (Encryption at rest dan access audit sudah ditutup H-05/H-06; policy tertulisnya belum ada.)
+- [x] Uji larangan cascade delete historis. (M-19: FK RESTRICT + `HistoricalMasterLifecycleTest`.)
 
 ### Milestone 5: Performance, UX, dan Release
 
 - [x] Selesaikan M-15 sampai M-22 (M-16, M-17, M-18, M-20, M-22 ditutup 26 Juli 2026; M-19 dan M-21 ditutup 9 Agustus 2026).
-- [ ] Selesaikan seluruh Low findings (L-01/L-03/L-04/L-05/L-06/L-07/L-08 selesai; L-02 dan L-09 terbuka — keduanya butuh Firebase project / git+CI infra eksternal).
-- [ ] Jalankan browser/device E2E untuk enam role dan mobile.
-- [ ] Lakukan load test dan penelitian hanya setelah flow production stabil.
+- [ ] Selesaikan seluruh Low findings. (L-01 sampai L-08 selesai; L-09 menunggu green remote CI + protected environment/branch evidence.)
+- [ ] **MS-03** Jalankan browser/device E2E untuk enam role dashboard dan mobile.
+- [ ] Lakukan load test dan penelitian hanya setelah flow production stabil. (Dilacak sebagai R-02/R-03/R-05.)
+
+### Task Milestone Tanpa ID
+
+Tiga item milestone berikut sebelumnya tidak memiliki task ID sehingga mudah
+terlewat saat penelusuran per-ID. Ketiganya sekarang memiliki ID eksplisit dan
+tetap terbuka:
+
+| ID | Milestone | Task | Kenapa masih terbuka |
+|---|---|---|---|
+| MS-01 | M2 | Matriks role-permission-prodi sebagai sumber kebenaran | `AuthorizationService` sudah menjadi implementasi canonical (H-21), tetapi tidak ada dokumen matriks yang dapat dipakai mengaudit kelengkapan negative test per endpoint |
+| MS-02 | M4 | Retention, consent, backup, dan deletion policy biometrik | Encryption at rest, akses privat, dan audit akses selesai (H-05/H-06); kebijakan retensi/persetujuan/backup/penghapusan belum ditulis dan belum punya prosedur uji |
+| MS-03 | M5 | Browser/device E2E enam role dashboard + mobile | Butuh browser runtime dan perangkat fisik; beririsan dengan H-16 (matriks Android) dan L-07 (scan axe/Lighthouse) |
 
 ## Definition of Done Global
 
 Project baru dapat dinyatakan release candidate bila seluruh kondisi berikut terpenuhi:
 
-- [ ] Tidak ada Critical atau High yang terbuka.
-- [ ] Backend berhasil bootstrap, migrate, queue, schedule, dan test pada platform production yang terdokumentasi.
-- [ ] Authorization matrix memiliki negative tests lintas role dan lintas prodi.
-- [ ] Reset password tidak mengekspos token dan seluruh auth endpoint memiliki rate limit.
-- [ ] Online/offline check-in dan checkout memiliki bukti yang tidak dapat dipalsukan hanya dengan mengubah payload.
-- [ ] Offline queue terisolasi per akun, encrypted, crash-safe, dan idempotent.
-- [ ] Schema/model/controller konsisten dan migration diuji fresh serta upgrade.
-- [ ] Data biometrik encrypted, private, tidak masuk serializer/log, dan memiliki retention policy.
-- [ ] APK release memakai HTTPS, release signing, secure storage, serta lulus test perangkat fisik.
-- [~] Web build, Flutter analyze/test, PHP test, dependency audit, dan security checks menjadi CI gate. (Backend CI + Frontend CI aktif pada push/PR dengan `flutter analyze --fatal-warnings --fatal-infos`; sisa: repo/secret management L-09.)
-- [ ] Query report/export lulus benchmark dataset realistis dan P95 memenuhi NFR.
-- [ ] Dokumentasi PRD/API/schema/status task sama dengan perilaku aktual.
-- [ ] Data penelitian dikumpulkan ulang dari pipeline yang metriknya valid dan dapat diaudit.
+- [ ] Tidak ada Critical atau High yang terbuka. **Terbuka: C-04, H-04, H-16.**
+- [~] Backend berhasil bootstrap, migrate, queue, schedule, dan test pada platform production yang terdokumentasi. Bootstrap, migration, dan test terverifikasi pada PHP 8.3.30 dengan MySQL 8.0.30 (`migrate`, `migrate:rollback`, `migrate:fresh`); manifest Nginx/systemd untuk queue dan scheduler tersedia di `deploy/`. Sisa: eksekusi queue worker dan scheduler pada host production sesungguhnya belum dibuktikan (bagian dari L-09).
+- [~] Authorization matrix memiliki negative tests lintas role dan lintas prodi. Negative test lintas role/prodi tersedia untuk C-02, C-03, C-07, dan H-21. Sisa: MS-01 belum ada sehingga kelengkapan cakupan belum dapat diaudit terhadap daftar endpoint sensitif canonical.
+- [~] Reset password tidak mengekspos token dan seluruh auth endpoint memiliki rate limit. C-01 selesai; `login`, `forgot-password`, dan `reset-password` memakai `throttle:login`, sedangkan login web dan verifikasi TOTP memakai throttle M-21. Sisa: M-23 — limiter `api` terdefinisi tetapi tidak pernah dipasang, sehingga `POST /auth/change-password` dan `POST /auth/refresh` belum berbatas.
+- [ ] Online/offline check-in dan checkout memiliki bukti yang tidak dapat dipalsukan hanya dengan mengubah payload. **C-04 terbuka**; production dikontain fail-closed (menolak request), bukan dibuktikan tahan pemalsuan.
+- [x] Offline queue terisolasi per akun, encrypted, crash-safe, dan idempotent. (C-06 isolasi/enkripsi per user, H-15 lease dan crash recovery, M-05/M-06 idempotency, M-08 klasifikasi failure dan backoff.)
+- [x] Schema/model/controller konsisten dan migration diuji fresh serta upgrade. (H-07 sampai H-10; migration M-19/M-20 idempotent serta lulus `migrate`, rollback, dan `migrate:fresh`.)
+- [~] Data biometrik encrypted, private, tidak masuk serializer/log, dan memiliki retention policy. Encryption at rest dengan key terpisah, disk privat + signed URL, penghapusan dari serializer umum, dan audit akses selesai (H-05, H-06, M-14). Sisa: MS-02 — policy retention/consent/backup/deletion belum ditulis.
+- [~] APK release memakai HTTPS, release signing, secure storage, serta lulus test perangkat fisik. HTTPS fail-closed (H-02), release signing melalui secret manager (H-18), dan secure storage (H-03) selesai. Sisa: hasil perangkat fisik (H-16 matriks Android, MS-03 device E2E).
+- [~] Web build, Flutter analyze/test, PHP test, dependency audit, dan security checks terdefinisi sebagai CI gate. Workflow sudah terdefinisi dan ter-commit. Sisa L-09: required-check, branch protection, dan protected environment remote belum dapat diverifikasi dari workspace ini.
+- [ ] Query report/export lulus benchmark dataset realistis dan P95 memenuhi NFR. Query-count benchmark konstan sudah ada (M-17 `ExportQueryCountTest`), tetapi benchmark dataset realistis dan pengukuran P95 menunggu R-02.
+- [~] Dokumentasi PRD/API/schema/status task sama dengan perilaku aktual. Hierarki source-of-truth, jumlah role, comparator match, baseline GPS accuracy, semantik filter prodi analisis, serta checkbox milestone/DoD sudah disinkronkan (L-08 dan sinkronisasi 11 Agustus 2026). Sisa: detail endpoint pada PRD-03/PRD-04 lama yang berstatus arsip historis.
+- [ ] Data penelitian dikumpulkan ulang dari pipeline yang metriknya valid dan dapat diaudit. R-01 dan R-04 selesai sehingga metrik geofence dan pemisahan dataset per prodi sudah valid; **R-02, R-03, dan R-05 masih terbuka**.
 
 ## Batasan Audit
 
@@ -629,7 +675,7 @@ Project baru dapat dinyatakan release candidate bila seluruh kondisi berikut ter
 - Backend runtime, migration, dan tests telah diverifikasi pada PHP 8.3.30.
 - Tidak dilakukan test kamera/GPS/fake-location pada perangkat fisik dalam audit ini.
 - Tidak dilakukan browser runtime/accessibility scan; temuan web UI berasal dari source review dan build.
-- Status secret di history tidak dapat diverifikasi karena root bukan repository Git.
+- History Git dua commit telah diperiksa untuk forbidden secret filename; dedicated entropy/provider scan dan remote secret/branch configuration belum dapat diverifikasi karena `gitleaks`/GitHub CLI tidak tersedia.
 - `npm audit` hanya mendeteksi advisory yang diketahui dan bukan bukti supply-chain sepenuhnya aman.
 
 Dokumen ini menggantikan klaim umum “seluruh bug sudah selesai” sebagai backlog audit terkini. Setiap task sebaiknya diselesaikan dalam perubahan kecil, disertai regression test, lalu ditandai selesai hanya setelah acceptance criteria dan verification evidence tersedia.

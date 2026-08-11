@@ -6,6 +6,9 @@
 > fixture/consent/script yang benar-benar ada, akun test terisolasi, permit per
 > action/UUID, dan pengukuran eksternal dari load-test runner. Residual research
 > validity mengikuti R-01 sampai R-05 di [temuan.md](temuan.md).
+> Production attendance saat ini fail-closed sampai trusted verifier tersedia;
+> SOP hanya boleh dijalankan pada environment penelitian non-production yang
+> mengaktifkan compatibility mode secara eksplisit dan mengisolasi seluruh data test.
 
 **Konteks:** Dua task riset di `docs/task-baru.md` belum bisa ditutup karena
 butuh sesi data lapangan, bukan koding:
@@ -41,6 +44,12 @@ FAR/FRR/EER.
 - ≥ 1 geofence aktif yang mencakup lokasi pengujian.
 - Threshold prodi (`face_threshold`) di **Settings → Per-Prodi**: pakai default
   `1.00` (akan dikalibrasi via sweep nanti).
+- **Satu sesi = satu prodi.** Sejak R-04, filter `prodi_id` mempersempit dataset
+  (bukan hanya threshold) dan atribusinya memakai prodi subjek
+  (`users.prodi_id`). Pastikan seluruh peserta uji dalam satu sesi berasal dari
+  prodi yang sama, atau catat prodi setiap peserta agar hasil dapat dipisahkan
+  saat analisis. Angka gabungan lintas prodi tidak boleh dilaporkan sebagai
+  hasil satu prodi.
 
 ### 1.3 Backup database (opsional tapi disarankan)
 ```powershell
@@ -96,15 +105,22 @@ sweep θ (0.30–1.40) menghasilkan kurva FAR/FRR yang stabil.
 ### 2.4 Verifikasi hasil & ambil θ optimal
 1. Login web → **Sistem → Analisis**.
 2. Periksa bagian "Kurva FAR vs FRR" — harus sudah muncul (sebelumnya placeholder).
-3. Cek field response endpoint:
+3. Cek field response endpoint **per prodi** (R-04 — tanpa `prodi_id` hasilnya
+   gabungan seluruh prodi dan tidak boleh dilaporkan sebagai hasil satu prodi):
    ```bash
    curl -H "Authorization: Bearer {token_super_admin}" ^
-        http://localhost:8000/api/admin/analysis/face-verification
+        "http://localhost:8000/api/admin/analysis/face-verification?prodi_id={id_prodi}"
    ```
-   Pastikan terisi: `eer`, `optimal_threshold`, `sweep[]`.
+   Pastikan terisi: `eer`, `optimal_threshold`, `sweep[]`. Periksa juga
+   `test_data.genuine_count`/`impostor_count` benar-benar sesuai jumlah sampel
+   prodi tersebut — bila sama dengan total seluruh sesi, berarti filter tidak
+   terpakai. `prodi_id` yang salah menghasilkan `422`, bukan dataset kosong.
 4. **Tulis hasil di laporan:**
-   - Total genuine, impostor, EER, θ optimal.
+   - Prodi, total genuine, impostor, EER, θ optimal. **Setiap angka wajib
+     menyebut prodi asal dan θ yang dipakai.**
    - Tabel sweep θ (0.30, 0.35, …, 1.40) dengan FAR & FRR per titik.
+   - Bila sesi mencakup lebih dari satu prodi, laporkan per prodi secara
+     terpisah; jangan gabungkan dataset yang ambangnya berbeda.
    - Bandingkan dengan θ default `ProdiSetting.face_threshold`.
 5. (Opsional) Update `ProdiSetting.face_threshold` ke θ optimal lewat
    **Settings → Per-Prodi**.

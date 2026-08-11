@@ -8,32 +8,42 @@ use App\Models\Attendance;
 use App\Models\AttendanceLog;
 use App\Models\ProdiSetting;
 use App\Models\SpRecord;
+use App\Traits\ScopesAnalysisDataset;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class AnalysisController extends Controller
 {
+    use ScopesAnalysisDataset;
+
     /**
      * Data evaluasi geofence (distribusi jarak, success rate)
+     *
+     * R-01: success rate diukur dari `checkin_success` vs `checkin_failed`.
+     * `geofence_valid` hanya berarti satu langkah pemeriksaan lolos — check-in
+     * masih bisa gagal setelahnya (face/liveness), sehingga memakainya sebagai
+     * keberhasilan melebih-lebihkan angka. Distribusi jarak tetap dari log
+     * geofence karena hanya di sana `distance_to_geofence` tercatat. Definisi
+     * ini identik dengan `Web\AnalysisController::geofenceData`.
      */
     public function geofence(Request $request): JsonResponse
     {
-        $query = AttendanceLog::whereIn('action', ['checkin_success', 'checkin_failed', 'geofence_valid', 'geofence_invalid']);
+        $prodiId = $this->resolveAnalysisProdiId($request);
 
-        if ($request->filled('date_from')) {
-            $query->where('created_at', '>=', $request->date_from);
-        }
-        if ($request->filled('date_to')) {
-            $query->where('created_at', '<=', $request->date_to);
-        }
+        $scoped = fn (array $actions): Builder => $this->applyDateRange(
+            $this->scopeDatasetToProdi(AttendanceLog::whereIn('action', $actions), $prodiId),
+            $request
+        );
 
-        $logs = $query->get();
+        $outcomes = $scoped(['checkin_success', 'checkin_failed'])->get();
+        $distances = $scoped(['geofence_valid', 'geofence_invalid'])
+            ->pluck('distance_to_geofence')->filter()->values();
 
-        $distances = $logs->map(fn ($log) => $log->distance_to_geofence)->filter()->values();
-
-        $totalAttempts = $logs->count();
-        $successAttempts = $logs->filter(fn ($log) => $log->action === 'geofence_valid')->count();
+        $totalAttempts = $outcomes->count();
+        $successAttempts = $outcomes->filter(fn ($log) => $log->action === 'checkin_success')->count();
         $failedAttempts = $totalAttempts - $successAttempts;
 
         return $this->success([
@@ -62,7 +72,14 @@ class AnalysisController extends Controller
      */
     public function faceVerification(Request $request): JsonResponse
     {
-        $query = Attendance::whereNotNull('checkin_face_distance');
+        // R-04: `prodi_id` mempersempit dataset, bukan hanya memilih threshold,
+        // sehingga distance dan ambang selalu berasal dari prodi yang sama.
+        $prodiId = $this->resolveAnalysisProdiId($request);
+
+        $query = $this->scopeDatasetToProdi(
+            Attendance::whereNotNull('checkin_face_distance'),
+            $prodiId
+        );
 
         if ($request->filled('date_from')) {
             $query->where('tanggal', '>=', $request->date_from);
@@ -71,20 +88,15 @@ class AnalysisController extends Controller
             $query->where('tanggal', '<=', $request->date_to);
         }
 
-        $attendances = $query->get();
-
-        $distances = $attendances->pluck('checkin_face_distance')->filter();
+        $distances = $query->pluck('checkin_face_distance')->filter();
 
         // Hitung FAR/FRR dari labeled test data
-        $genuineLogs = AttendanceLog::whereJsonContains('metadata->label', 'genuine')->get();
-        $impostorLogs = AttendanceLog::whereJsonContains('metadata->label', 'impostor')->get();
-
-        $genuineDistances = $genuineLogs->map(fn ($l) => $l->face_distance)->filter()->values();
-        $impostorDistances = $impostorLogs->map(fn ($l) => $l->face_distance)->filter()->values();
+        $genuineDistances = $this->labeledDistances('genuine', $prodiId);
+        $impostorDistances = $this->labeledDistances('impostor', $prodiId);
 
         // R-02: threshold default = sumber kebenaran tunggal (ProdiSetting.face_threshold).
         // Bisa di-override per prodi via ?prodi_id, atau eksplisit via ?threshold.
-        $prodiThreshold = $this->resolveProdiThreshold($request->get('prodi_id'));
+        $prodiThreshold = $this->resolveProdiThreshold($prodiId);
         $threshold = (float) $request->get('threshold', $prodiThreshold);
 
         [$far, $frr] = $this->computeFarFrr($genuineDistances, $impostorDistances, $threshold);
@@ -119,6 +131,36 @@ class AnalysisController extends Controller
             'eer' => $sweep['eer'],
             'optimal_threshold' => $sweep['optimal_threshold'],
         ]);
+    }
+
+    /**
+     * R-04: dataset berlabel untuk FAR/FRR, dipersempit ke prodi subjek bila
+     * filter aktif. Sejajar dengan `Web\AnalysisController::labeledDistances`.
+     *
+     * @return Collection<int, float>
+     */
+    private function labeledDistances(string $label, ?int $prodiId): Collection
+    {
+        return $this->scopeDatasetToProdi(
+            AttendanceLog::whereJsonContains('metadata->label', $label)
+                ->whereNotNull('face_distance'),
+            $prodiId
+        )->pluck('face_distance')->map(fn ($d) => (float) $d)->values();
+    }
+
+    /**
+     * Filter rentang tanggal bersama untuk query berbasis `attendance_logs`.
+     */
+    private function applyDateRange(Builder $query, Request $request): Builder
+    {
+        if ($request->filled('date_from')) {
+            $query->where('created_at', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->where('created_at', '<=', $request->date_to);
+        }
+
+        return $query;
     }
 
     /**
@@ -203,14 +245,12 @@ class AnalysisController extends Controller
      */
     public function latency(Request $request): JsonResponse
     {
-        $query = AttendanceLog::whereNotNull('inference_time_ms');
+        $prodiId = $this->resolveAnalysisProdiId($request);
 
-        if ($request->filled('date_from')) {
-            $query->where('created_at', '>=', $request->date_from);
-        }
-        if ($request->filled('date_to')) {
-            $query->where('created_at', '<=', $request->date_to);
-        }
+        $query = $this->applyDateRange(
+            $this->scopeDatasetToProdi(AttendanceLog::whereNotNull('inference_time_ms'), $prodiId),
+            $request
+        );
 
         $logs = $query->get();
         $latencies = $logs->map(fn ($l) => $l->inference_time_ms)->filter()->sort()->values();
@@ -249,13 +289,17 @@ class AnalysisController extends Controller
             'semester_id' => 'nullable|exists:semesters,id',
         ]);
 
+        $prodiId = $this->resolveAnalysisProdiId($request);
+
         // Distribusi status kehadiran
-        $statusDistribution = Attendance::select('status', DB::raw('COUNT(*) as count'))
+        $statusDistribution = $this->scopeDatasetToProdi(Attendance::query(), $prodiId)
+            ->select('status', DB::raw('COUNT(*) as count'))
             ->groupBy('status')
             ->pluck('count', 'status');
 
         // Distribusi SP level
-        $spDistribution = AlphaAccumulation::select('sp_status', DB::raw('COUNT(*) as count'))
+        $spDistribution = $this->scopeDatasetToProdi(AlphaAccumulation::query(), $prodiId)
+            ->select('sp_status', DB::raw('COUNT(*) as count'))
             ->groupBy('sp_status')
             ->pluck('count', 'sp_status');
 
@@ -265,7 +309,10 @@ class AnalysisController extends Controller
             $startOfWeek = now()->subWeeks($i)->startOfWeek();
             $endOfWeek = now()->subWeeks($i)->endOfWeek();
 
-            $weekData = Attendance::whereBetween('tanggal', [$startOfWeek, $endOfWeek])
+            $weekData = $this->scopeDatasetToProdi(
+                Attendance::whereBetween('tanggal', [$startOfWeek, $endOfWeek]),
+                $prodiId
+            )
                 ->select(DB::raw("
                     COUNT(*) as total,
                     SUM(CASE WHEN status IN ('hadir', 'hadir_terlambat') THEN 1 ELSE 0 END) as hadir,
@@ -285,7 +332,8 @@ class AnalysisController extends Controller
         }
 
         // SP records count
-        $spRecordsCount = SpRecord::select('sp_level', DB::raw('COUNT(*) as count'))
+        $spRecordsCount = $this->scopeDatasetToProdi(SpRecord::query(), $prodiId)
+            ->select('sp_level', DB::raw('COUNT(*) as count'))
             ->groupBy('sp_level')
             ->pluck('count', 'sp_level');
 
@@ -302,9 +350,13 @@ class AnalysisController extends Controller
      */
     public function simultaneousTest(Request $request): JsonResponse
     {
+        $prodiId = $this->resolveAnalysisProdiId($request);
+
         // Data dari attendance_logs yang punya metadata concurrent_level
-        $logs = AttendanceLog::whereNotNull('metadata->concurrent_level')
-            ->get();
+        $logs = $this->scopeDatasetToProdi(
+            AttendanceLog::whereNotNull('metadata->concurrent_level'),
+            $prodiId
+        )->get();
 
         $perLevel = $logs->groupBy(fn ($l) => $l->metadata['concurrent_level'] ?? 0)
             ->map(function ($group) {
@@ -342,7 +394,10 @@ class AnalysisController extends Controller
             ->mapWithKeys(fn ($item) => [$item->key => json_decode($item->value, true)]);
 
         // Ambil data sistem
-        $query = Attendance::query();
+        $query = $this->scopeDatasetToProdi(
+            Attendance::query(),
+            $this->resolveAnalysisProdiId($request)
+        );
         if ($request->filled('mata_kuliah_id')) {
             $query->where('mata_kuliah_id', $request->mata_kuliah_id);
         }

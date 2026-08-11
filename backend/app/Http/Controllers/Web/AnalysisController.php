@@ -8,6 +8,7 @@ use App\Models\Attendance;
 use App\Models\AttendanceLog;
 use App\Models\Prodi;
 use App\Models\ProdiSetting;
+use App\Traits\ScopesAnalysisDataset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -20,35 +21,34 @@ use Inertia\Response;
  */
 class AnalysisController extends Controller
 {
+    use ScopesAnalysisDataset;
+
     public function index(Request $request): Response
     {
-        $prodiId = $request->integer('prodi_id') ?: null;
+        // R-04: `prodi_id` mempersempit dataset, bukan hanya memilih threshold.
+        $prodiId = $this->resolveAnalysisProdiId($request);
         $threshold = $request->filled('threshold')
             ? (float) $request->threshold
             : $this->resolveProdiThreshold($prodiId);
 
         // M-17: hanya ambil kolom yang dipakai, bukan seluruh model row.
-        $genuine = AttendanceLog::whereJsonContains('metadata->label', 'genuine')
-            ->whereNotNull('face_distance')
-            ->pluck('face_distance')->map(fn ($d) => (float) $d)->values();
-        $impostor = AttendanceLog::whereJsonContains('metadata->label', 'impostor')
-            ->whereNotNull('face_distance')
-            ->pluck('face_distance')->map(fn ($d) => (float) $d)->values();
+        $genuine = $this->labeledDistances('genuine', $prodiId);
+        $impostor = $this->labeledDistances('impostor', $prodiId);
 
         [$far, $frr] = $this->computeFarFrr($genuine, $impostor, $threshold);
         $sweep = $this->sweepFarFrr($genuine, $impostor);
 
         // M-17: statistik dan distribusi dihitung database, bukan memuat
         // seluruh kolom distance ke memory.
-        $verificationStats = $this->distanceAggregate();
+        $verificationStats = $this->distanceAggregate($prodiId);
 
         return Inertia::render('Analysis/Index', [
             'prodis' => Prodi::select('id', 'nama')->orderBy('nama')->get(),
             'filters' => ['prodi_id' => $prodiId, 'threshold' => $threshold],
-            'geofence' => $this->geofenceData(),
-            'latency' => $this->latencyData(),
-            'attendanceSp' => $this->attendanceSpData(),
-            'simultaneous' => $this->simultaneousData(),
+            'geofence' => $this->geofenceData($prodiId),
+            'latency' => $this->latencyData($prodiId),
+            'attendanceSp' => $this->attendanceSpData($prodiId),
+            'simultaneous' => $this->simultaneousData($prodiId),
             'verification' => [
 
                 'total' => $verificationStats['total'],
@@ -67,14 +67,32 @@ class AnalysisController extends Controller
     }
 
     /**
+     * R-04: dataset berlabel untuk FAR/FRR, dipersempit ke prodi subjek bila
+     * filter aktif sehingga distance dan threshold berasal dari prodi yang sama.
+     *
+     * @return Collection<int, float>
+     */
+    private function labeledDistances(string $label, ?int $prodiId): Collection
+    {
+        return $this->scopeDatasetToProdi(
+            AttendanceLog::whereJsonContains('metadata->label', $label)
+                ->whereNotNull('face_distance'),
+            $prodiId
+        )->pluck('face_distance')->map(fn ($d) => (float) $d)->values();
+    }
+
+    /**
      * M-17: total, statistik, dan bucket distribusi dihitung dalam satu query
      * agregat sehingga tidak memuat seluruh baris attendance ke memory.
      *
      * @return array{total: int, distance_stats: array<string, float|null>, distribution: array<string, int>}
      */
-    private function distanceAggregate(): array
+    private function distanceAggregate(?int $prodiId = null): array
     {
-        $row = Attendance::whereNotNull('checkin_face_distance')
+        $row = $this->scopeDatasetToProdi(
+            Attendance::whereNotNull('checkin_face_distance'),
+            $prodiId
+        )
             ->selectRaw('COUNT(*) as total')
             ->selectRaw('MIN(checkin_face_distance) as min_distance')
             ->selectRaw('MAX(checkin_face_distance) as max_distance')
@@ -167,15 +185,24 @@ class AnalysisController extends Controller
      * sebagai keberhasilan akan melebih-lebihkan angka. Distribusi jarak tetap
      * dihitung dari log geofence karena `distance_to_geofence` hanya tercatat
      * di sana.
+     *
+     * R-04: kedua agregat memakai scope prodi yang sama agar success rate dan
+     * distribusi jarak tidak dicampur antar prodi.
      */
-    private function geofenceData(): array
+    private function geofenceData(?int $prodiId = null): array
     {
-        $outcome = AttendanceLog::whereIn('action', ['checkin_success', 'checkin_failed'])
+        $outcome = $this->scopeDatasetToProdi(
+            AttendanceLog::whereIn('action', ['checkin_success', 'checkin_failed']),
+            $prodiId
+        )
             ->selectRaw('COUNT(*) as total')
             ->selectRaw("SUM(CASE WHEN action = 'checkin_success' THEN 1 ELSE 0 END) as success")
             ->first();
 
-        $distance = AttendanceLog::whereIn('action', ['geofence_valid', 'geofence_invalid'])
+        $distance = $this->scopeDatasetToProdi(
+            AttendanceLog::whereIn('action', ['geofence_valid', 'geofence_invalid']),
+            $prodiId
+        )
             ->selectRaw('MIN(distance_to_geofence) as min_distance')
             ->selectRaw('MAX(distance_to_geofence) as max_distance')
             ->selectRaw('AVG(distance_to_geofence) as avg_distance')
@@ -215,10 +242,18 @@ class AnalysisController extends Controller
      * M-17: statistik dasar dan agregasi per device dihitung database.
      * Percentile memerlukan nilai terurut, sehingga hanya satu kolom numerik
      * yang diambil (bukan seluruh model row) dan sudah diurutkan oleh SQL.
+     *
+     * R-04: seluruh percentile dan agregasi per device memakai scope prodi yang
+     * sama, termasuk query offset percentile.
      */
-    private function latencyData(): array
+    private function latencyData(?int $prodiId = null): array
     {
-        $stats = AttendanceLog::whereNotNull('inference_time_ms')
+        $latencyQuery = fn () => $this->scopeDatasetToProdi(
+            AttendanceLog::whereNotNull('inference_time_ms'),
+            $prodiId
+        );
+
+        $stats = $latencyQuery()
             ->selectRaw('COUNT(*) as total')
             ->selectRaw('MIN(inference_time_ms) as min_latency')
             ->selectRaw('MAX(inference_time_ms) as max_latency')
@@ -233,15 +268,15 @@ class AnalysisController extends Controller
             $p95Offset = max(0, (int) ceil($total * 0.95) - 1);
             $medianOffset = (int) floor($total / 2);
 
-            $p95 = AttendanceLog::whereNotNull('inference_time_ms')
+            $p95 = $latencyQuery()
                 ->orderBy('inference_time_ms')
                 ->offset($p95Offset)->limit(1)->value('inference_time_ms');
-            $median = AttendanceLog::whereNotNull('inference_time_ms')
+            $median = $latencyQuery()
                 ->orderBy('inference_time_ms')
                 ->offset($medianOffset)->limit(1)->value('inference_time_ms');
         }
 
-        $perDevice = AttendanceLog::whereNotNull('inference_time_ms')
+        $perDevice = $latencyQuery()
             ->selectRaw("COALESCE(device_model, 'unknown') as device")
             ->selectRaw('COUNT(*) as count')
             ->selectRaw('AVG(inference_time_ms) as avg_latency')
@@ -269,19 +304,28 @@ class AnalysisController extends Controller
         ];
     }
 
-    private function attendanceSpData(): array
+    /**
+     * R-04: distribusi status, distribusi SP, dan trend mingguan memakai scope
+     * prodi yang sama dengan dataset verifikasi.
+     */
+    private function attendanceSpData(?int $prodiId = null): array
     {
-        $statusDist = Attendance::select('status', DB::raw('COUNT(*) as count'))
+        $statusDist = $this->scopeDatasetToProdi(Attendance::query(), $prodiId)
+            ->select('status', DB::raw('COUNT(*) as count'))
             ->groupBy('status')->pluck('count', 'status');
 
-        $spDist = AlphaAccumulation::select('sp_status', DB::raw('COUNT(*) as count'))
+        $spDist = $this->scopeDatasetToProdi(AlphaAccumulation::query(), $prodiId)
+            ->select('sp_status', DB::raw('COUNT(*) as count'))
             ->groupBy('sp_status')->pluck('count', 'sp_status');
 
         $weeklyTrend = [];
         for ($i = 3; $i >= 0; $i--) {
             $start = now()->subWeeks($i)->startOfWeek();
             $end = now()->subWeeks($i)->endOfWeek();
-            $w = Attendance::whereBetween('tanggal', [$start, $end])
+            $w = $this->scopeDatasetToProdi(
+                Attendance::whereBetween('tanggal', [$start, $end]),
+                $prodiId
+            )
                 ->select(DB::raw("
                     COUNT(*) as total,
                     SUM(CASE WHEN status IN ('hadir','hadir_terlambat') THEN 1 ELSE 0 END) as hadir,
@@ -303,11 +347,14 @@ class AnalysisController extends Controller
         ];
     }
 
-    private function simultaneousData(): array
+    private function simultaneousData(?int $prodiId = null): array
     {
         // M-17: hanya kolom yang dipakai agregasi yang diambil.
-        $logs = AttendanceLog::whereNotNull('metadata->concurrent_level')
-            ->select('metadata', 'inference_time_ms')->get();
+        // R-04: uji simultan juga dipersempit ke prodi subjek bila filter aktif.
+        $logs = $this->scopeDatasetToProdi(
+            AttendanceLog::whereNotNull('metadata->concurrent_level'),
+            $prodiId
+        )->select('metadata', 'inference_time_ms')->get();
 
         $perLevel = $logs->groupBy(fn ($l) => $l->metadata['concurrent_level'] ?? 0)
             ->map(function ($group) {
