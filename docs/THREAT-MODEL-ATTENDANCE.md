@@ -46,8 +46,10 @@ Diverifikasi pada `AttendancePermitService`, `AttendancePolicyService`, `Api/Mah
 | Batas kualitas lokasi | Akurasi dan umur fix ditolak bila melewati policy prodi (baseline `gps_accuracy_minimum` 20 m) |
 | Comparator match | Ambang `face_distance <= face_threshold` konsisten mobile/backend/analisis (L-08/R-04); server menegakkan penolakan |
 | Transport | HTTPS wajib pada release; cleartext hanya loopback debug |
+| Abuse rate | Permit dan capture dibatasi `throttle:attendance` 10/menit per user; group API terautentikasi dibatasi `throttle:api` 60/menit per user (M-23). Keying per user, bukan per IP |
+| Scope pembaca | Endpoint analisis memakai scope aktor: role tingkat prodi tidak dapat membaca data prodi lain (M-24). Matriks lengkap di [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md) |
 
-> Catatan metrik penelitian: analisis success rate geofence dihitung dari `checkin_success` vs `checkin_failed`, bukan `geofence_valid` (R-01). Ini memperbaiki *validitas laporan*, bukan menutup residual C-04 di bawah.
+> Catatan metrik penelitian: analisis success rate geofence dihitung dari `checkin_success` vs `checkin_failed`, bukan `geofence_valid` (R-01), dan filter `prodi_id` mempersempit dataset dengan atribusi prodi subjek (R-04). Keduanya memperbaiki *validitas laporan*, bukan menutup residual C-04 di bawah.
 
 Konsekuensi: A2, A3, dan sebagian besar A4 sudah tertutup. Permit menutup absensi tanpa preauthorization, salah binding, dan replay. A1 dikontain di production dengan menonaktifkan mutation biometrik sampai trusted verifier tersedia; ini mencegah pemalsuan masuk ke data resmi tetapi membuat fitur attendance/enrollment production tidak tersedia.
 

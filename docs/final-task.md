@@ -10,6 +10,12 @@
 > terkontain fail-closed tetapi menunggu trusted verifier; H-16 menunggu physical
 > Android matrix; L-09 menunggu green remote CI/protected enforcement. iOS tidak
 > didukung dan FCM default release off.
+>
+> Sinkronisasi lanjutan 11 Agustus 2026: R-04 (filter dataset analisis per prodi),
+> MS-01 ([matriks role-permission-prodi](ROLE-PERMISSION-MATRIX.md)), M-23 (limiter
+> API terautentikasi), dan M-24 (scope aktor endpoint analisis) selesai. Sisa
+> milestone tanpa ID kini dilacak sebagai MS-02 (policy retention biometrik) dan
+> MS-03 (browser/device E2E).
 
 **Tanggal dibuat:** 20 Juni 2026
 **Konteks:** Hasil audit menyeluruh terhadap `task-master.md`, `task-backend.md`,
@@ -132,7 +138,7 @@ tetapi coverage per flow tetap mengikuti evidence dan gap di `temuan.md`.
 - [ ] Notification triggers test (penerima benar per skenario)
 - [ ] Dosen approve/reject/override test
 - [ ] Export Excel & PDF test (file valid)
-- [x] Jalankan `php artisan test` penuh: 189 test/666 assertion lulus (11 Agustus 2026; sebelumnya 182/653 pada 9 Agustus 2026)
+- [x] Jalankan `php artisan test` penuh: **206 test/735 assertion lulus** (11 Agustus 2026, setelah R-04/M-23/M-24; sebelumnya 198/711, 189/666, dan 182/653 pada 9 Agustus 2026). Angka current selalu di [temuan.md](temuan.md) — dokumen ini arsip.
 
 ---
 

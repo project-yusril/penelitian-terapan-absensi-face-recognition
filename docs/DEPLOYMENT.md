@@ -104,6 +104,12 @@ Analyzer warning maupun info menjadi CI failure (L-05). `android-release.yml` (m
 > environment `production`/`device-testing` protected, dan workflow manual terkait
 > berhasil. Sampai itu tersedia, L-09 tetap terbuka.
 
+Seluruh pekerjaan lokal sudah di-push ke `origin/main` pada 11 Agustus 2026
+(`5e49bfe`, `b271326`, `d46f0b1`, `13fc302`), sehingga workflow push/PR terpicu
+pada revision tersebut. **Push hanya memicu workflow, bukan membuktikan
+hasilnya** — status green tetap harus diperiksa langsung di GitHub karena
+GitHub CLI tidak tersedia di workspace pengembangan.
+
 ## Master Data Lifecycle dan Migration
 
 - Rekam akademik historis memakai FK `ON DELETE RESTRICT` (M-19). Hard delete master (user/jadwal/mata_kuliah/semester) akan ditolak database selama masih ada riwayat; gunakan arsip (soft delete) atau flag `status`.

@@ -66,6 +66,8 @@ Dokumen historis tidak boleh digunakan untuk membuat endpoint, credential, deplo
 ## Aturan Pemeliharaan
 
 - Perubahan route atau payload wajib memperbarui `CURRENT-API.md` dan contract test.
+- Perubahan route, guard role, atau aturan scope wajib memperbarui `ROLE-PERMISSION-MATRIX.md`. Regenerasi datanya dengan `php artisan route:list --json`, jangan menyuntingnya dari ingatan. Setiap route baru wajib menyebut lapis mana yang menjaganya (guard role, object policy, atau query scope) — M-24 lolos justru karena permukaan API lebih luas daripada permukaan web.
+- Perubahan limiter wajib memperbarui `PRD-08-non-functional.md`, `SECURITY.md`, dan tabel troubleshooting `SOP-R05-R07.md`, karena rencana load test R-07 bergantung pada angka tersebut.
 - Perubahan migration/domain state wajib memperbarui `CURRENT-ARCHITECTURE.md` atau PRD terkait.
 - Perubahan secret, signing, runtime, queue, scheduler, atau storage wajib memperbarui `DEPLOYMENT.md` dan `.env.example`.
 - Perubahan kontrol keamanan wajib memperbarui `SECURITY.md` dan evidence pada `temuan.md`.
@@ -76,6 +78,6 @@ Dokumen historis tidak boleh digunakan untuk membuat endpoint, credential, deplo
 ## CI
 
 - `backend-ci.yml` dan `frontend-ci.yml` dikonfigurasi untuk setiap push/PR. `android-release.yml` dan `android-device-tests.yml` manual. Detail lihat [DEPLOYMENT.md](DEPLOYMENT.md).
-- Seluruh pekerjaan lokal sudah di-push ke `origin/main` pada 11 Agustus 2026 (`5e49bfe`, `b271326`), sehingga workflow push/PR terpicu pada revision tersebut. **Push hanya memicu workflow, bukan membuktikan hasilnya.** Green remote run, protected environments, dan required checks tetap belum boleh diklaim sampai evidence L-09 tersedia — GitHub CLI tidak tersedia di workspace ini.
+- Seluruh pekerjaan lokal sudah di-push ke `origin/main` pada 11 Agustus 2026 (`5e49bfe`, `b271326`, `d46f0b1`, `13fc302`), sehingga workflow push/PR terpicu pada revision tersebut. **Push hanya memicu workflow, bukan membuktikan hasilnya.** Green remote run, protected environments, dan required checks tetap belum boleh diklaim sampai evidence L-09 tersedia — GitHub CLI tidak tersedia di workspace ini.
 
 **Pembaruan terakhir:** 11 Agustus 2026.

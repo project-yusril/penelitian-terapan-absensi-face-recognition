@@ -112,6 +112,17 @@ Super Admin (Owner/Peneliti)
 
 ### 2.2 Detail Hak Akses per Role
 
+> **Sumber kebenaran authorization:** tabel di bawah adalah *product intent*.
+> Hak akses yang benar-benar ditegakkan kode — guard per route, aturan scope
+> query, hierarki assignability, dan guard non-role — ada di
+> [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md) (MS-01). Bila keduanya
+> berbeda, matriks yang berlaku dan selisihnya harus dicatat sebagai temuan.
+>
+> Satu selisih yang sudah diketahui: `admin_jurusan` di bawah digambarkan
+> lintas prodi, tetapi schema belum memiliki entitas jurusan sehingga
+> implementasinya fail-closed ke satu prodi seperti `admin_prodi` (keputusan
+> C-02).
+
 #### Super Admin
 | Fitur | Create | Read | Update | Delete |
 |-------|--------|------|--------|--------|

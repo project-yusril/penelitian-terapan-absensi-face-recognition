@@ -90,6 +90,9 @@ Ambang ini adalah default `prodi_settings` dan sama dengan `AppConstants` mobile
 - Analisis geofence: success rate dari `checkin_success`/`checkin_failed`, bukan `geofence_valid` (R-01).
 - Lifecycle master historis: FK `ON DELETE RESTRICT` + arsip soft delete (M-19); invariant domain ditegakkan database (M-20).
 - Session cookie production fail-closed; throttle login/TOTP; revocation sesi lain saat ganti password (M-21).
+- Rate limit: group API terautentikasi memakai `throttle:api` 60/menit **per user**, `POST /auth/change-password` memakai `throttle:auth-sensitive` 5/menit per user. Keying per user, bukan per IP, agar NAT kampus tidak saling mengunci (M-23).
+- Authorization: matriks role/permission/prodi canonical ada di [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md); enforcement tiga lapis (guard role, object policy, query scope) dan filter request hanya boleh mempersempit scope (H-21/MS-01).
+- Dataset analisis penelitian: `prodi_id` mempersempit dataset — bukan hanya memilih threshold — dengan atribusi prodi subjek (`users.prodi_id`), dan endpoint analisis memakai scope aktor sehingga role tingkat prodi tidak dapat membaca prodi lain (R-04/M-24).
 - Attendance/enrollment production fail-closed sampai trusted verifier tersedia (C-04/H-04).
 - Platform mobile release Android-only; iOS tidak didukung (H-17).
 - FCM lifecycle tersedia sebagai explicit opt-in; default release off (L-02).

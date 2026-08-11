@@ -273,7 +273,9 @@ k6 run -e LEVEL=40 r07.js > result-40.txt
 | Gejala | Kemungkinan penyebab | Solusi |
 |--------|----------------------|--------|
 | `eer = null` di response analisis | < 1 sample genuine atau impostor | Tambah sample, cek query `whereJsonContains` di `Admin/AnalysisController` |
-| Semua check-in gagal saat load test | Rate limiter API (60 rpm/IP) | Naikkan limit di `app/Http/Kernel.php` `throttle:api` untuk durasi sesi |
+| `genuine_count`/`impostor_count` jauh lebih kecil dari jumlah sampel sesi | Filter `prodi_id` aktif dan sebagian peserta berasal dari prodi lain (R-04) | Cek prodi tiap peserta; jalankan per prodi, jangan gabungkan dataset yang ambangnya berbeda |
+| `403` saat membuka analisis | Aktor bukan `super_admin` sehingga scope dipaksa ke prodinya sendiri, atau aktor tingkat prodi tanpa `prodi_id` (M-24) | Jalankan sesi analisis sebagai `super_admin`, atau pastikan aktor punya `prodi_id` dan hanya meminta prodinya sendiri |
+| Semua check-in gagal saat load test | Rate limiter. `throttle:attendance` 10/menit **per user** membatasi check-in; `throttle:api` 60/menit per user membatasi endpoint terautentikasi lain (M-23) | Naikkan limit di `AppServiceProvider::configureRateLimiting()` untuk durasi sesi, lalu **kembalikan setelah sesi**. Karena keying per user, menambah akun uji lebih realistis daripada menaikkan limit. Jangan mencari `app/Http/Kernel.php` — file itu tidak ada pada Laravel 11+ |
 | `inference_time_ms = null` | Mobile tidak mengirim field | Pastikan FIX-LOG-003 R-06 sudah deploy ke device uji |
 | `concurrent_level` tidak ter-grouping | `metadata` JSON path salah | Verifikasi MySQL ≥ 5.7 mendukung `JSON_EXTRACT` |
 | Foto wajah enrollment kosong | Disk privat tidak writable | Cek izin folder `storage/app/face` |

@@ -25,6 +25,7 @@ oleh `Web\AnalysisController` dan `Api\Admin\AnalysisController`.
 | Prodi tidak dikenal | Ditolak `422`, bukan menghasilkan dataset kosong. Dataset kosong yang tidak disengaja mudah salah dibaca sebagai "tidak ada kesalahan verifikasi". |
 | Mahasiswa terarsip | Tetap dihitung (`withTrashed()`). M-19 menjadikan arsip sebagai cara resmi menonaktifkan master tanpa menghancurkan riwayat, sehingga hasil berfilter prodi tidak boleh kehilangan baris yang ikut terhitung saat filter dilepas. |
 | Tanpa filter | Seluruh prodi digabung. Angka gabungan **tidak boleh** dilaporkan sebagai hasil satu prodi. |
+| Scope aktor (M-24) | Halaman web dibatasi `super_admin`, tetapi endpoint `/api/admin/analysis/*` juga terbuka untuk `admin_jurusan`/`admin_prodi`. Role tingkat prodi dipaksa ke prodinya sendiri, meminta prodi lain menghasilkan `403`, dan aktor tanpa `prodi_id` fail-closed. Hanya `super_admin` yang dapat melihat gabungan. |
 
 > **Untuk laporan penelitian:** setiap angka FAR/FRR/EER wajib disertai prodi
 > asalnya dan θ yang dipakai. Comparator match canonical adalah

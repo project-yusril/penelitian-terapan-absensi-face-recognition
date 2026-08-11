@@ -86,7 +86,7 @@
 | Token Expiry | 24 jam (mobile), 8 jam (web) |
 | Password Policy | Min 8 karakter, huruf + angka |
 | Password Hashing | bcrypt (cost factor 12) |
-| Role-based Access | 8 role dengan permission granular |
+| Role-based Access | 8 role, enforcement tiga lapis (guard route, object policy, query scope) — matriks canonical di [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md) |
 | Session Management | Single active session per device |
 | Brute Force Protection | Max 5 login attempts, lock 15 menit |
 
@@ -144,13 +144,24 @@
 
 ## 3. API RATE LIMITING
 
-| Endpoint Group | Limit | Window |
-|---------------|-------|--------|
-| Auth (login) | 5 requests | per menit per IP |
-| Attendance (check-in/out) | 10 requests | per menit per user |
-| General API | 60 requests | per menit per user |
-| File Upload | 5 requests | per menit per user |
-| Export | 3 requests | per menit per user |
+Target di bawah kini **terimplementasi** (M-21 untuk `login`, M-23 untuk sisanya).
+Definisi ada di `AppServiceProvider::configureRateLimiting()`.
+
+| Endpoint Group | Limiter | Limit | Window | Status |
+|---------------|---------|-------|--------|--------|
+| Auth (login/forgot/reset) | `login` | 5 requests | per menit per IP+identitas, plus 30/menit per IP | ✅ M-21 |
+| Ganti password (login aktif) | `auth-sensitive` | 5 requests | per menit per user | ✅ M-23 |
+| Attendance (check-in/out, sync) | `attendance` | 10 requests | per menit per user | ✅ |
+| General API (group terautentikasi) | `api` | 60 requests | per menit per user | ✅ M-23 |
+| File Upload | `upload` | 5 requests | per menit per user | ✅ |
+| Export | `export` | 3 requests | per menit per user | ✅ |
+| Biometric probe | `biometric-probe` | Per user per menit/jam + per IP | sesuai `config/biometric.php` | ✅ M-14 |
+
+> **Keying per user, bukan per IP** (kecuali `login` dan batas IP
+> `biometric-probe`). Seluruh mahasiswa di belakang NAT kampus berbagi satu
+> alamat, sehingga kuota per IP akan membuat satu pengguna aktif mengunci yang
+> lain. Ini penting saat merencanakan load test R-07: menambah akun uji lebih
+> realistis daripada menaikkan limit.
 
 ---
 

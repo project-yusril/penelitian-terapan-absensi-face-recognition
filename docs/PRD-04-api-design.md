@@ -35,8 +35,15 @@
 - Header: `Authorization: Bearer {token}` (Laravel Sanctum).
 - Token mobile diberi nama `mobile-<device_name>`; login mobile hanya menghapus
   token `mobile-%` (sesi web/panel admin tidak terputus — lihat M-04).
-- Rate limit: grup `auth` memakai throttle `login`; check-in/out & sync memakai
-  throttle `attendance`; export laporan memakai throttle `export`.
+- Rate limit (current, M-23): seluruh group API terautentikasi memakai
+  `throttle:api` (60/menit **per user**). Di atasnya, limiter khusus berlaku
+  per domain: `login` untuk grup auth publik, `auth-sensitive` (5/menit) untuk
+  `POST /auth/change-password`, `attendance` untuk check-in/out & sync,
+  `upload`, `export` untuk export laporan, dan `biometric-probe` untuk
+  enrollment/duplicate probe. Keying per user, bukan per IP, agar pengguna di
+  belakang NAT kampus tidak saling mengunci. Definisinya ada di
+  `AppServiceProvider::configureRateLimiting()` — Laravel 11+ tidak lagi punya
+  `app/Http/Kernel.php`.
 
 ---
 
@@ -518,6 +525,24 @@ Dashboard per peran (bukan di `/reports/dashboard/*` lagi):
 | POST | `/admin/analysis/conventional-data` | Input data konvensional manual | ✅ |
 | ~~GET~~ | ~~`/analysis/far-frr`~~ | FAR/FRR terpisah | ❌ (dihitung dalam `face-verification` + `test-mode/summary`) |
 | ~~GET~~ | ~~`/analysis/documentation`~~ | Dokumentasi rumus | ❌ (tidak diimplementasikan sebagai endpoint) |
+
+**Parameter `prodi_id` dan scope aktor (current — R-04/M-24).** Seluruh endpoint
+di atas menerima `?prodi_id`, dan artinya berbeda dari desain awal:
+
+- `prodi_id` mempersempit **dataset**, bukan hanya memilih `face_threshold`.
+  Atribusinya memakai prodi subjek (`users.prodi_id`), sama dengan sumber ambang
+  runtime.
+- `prodi_id` tidak dikenal menghasilkan `422`, bukan dataset kosong.
+- Group route ini terbuka untuk `super_admin`, `admin_jurusan`, dan
+  `admin_prodi`, sehingga scope aktor diterapkan: role tingkat prodi dipaksa ke
+  prodinya sendiri, meminta prodi lain menghasilkan `403`, dan aktor tanpa
+  `prodi_id` fail-closed. Hanya `super_admin` yang dapat melihat gabungan
+  seluruh prodi.
+- Success rate geofence dihitung dari `checkin_success` vs `checkin_failed`,
+  bukan `geofence_valid` (R-01).
+
+Kontrak executable ada di [CURRENT-API.md](CURRENT-API.md); semantik untuk
+laporan penelitian ada di [PRD-07-analisis-evaluasi.md](PRD-07-analisis-evaluasi.md).
 
 ### Test Mode — `/admin/test-mode` (R-05)
 | Method | Endpoint | Deskripsi | Status |

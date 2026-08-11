@@ -16,6 +16,7 @@ Referensi utama:
 - [Arsitektur saat ini](docs/CURRENT-ARCHITECTURE.md)
 - [Kontrak API saat ini](docs/CURRENT-API.md)
 - [Keamanan dan residual risk](docs/SECURITY.md)
+- [Matriks role, permission, dan prodi](docs/ROLE-PERMISSION-MATRIX.md)
 - [Deployment dan release](docs/DEPLOYMENT.md)
 - [Audit dan backlog aktif](docs/temuan.md)
 - [Indeks kebutuhan produk](docs/PRD-INDEX.md)

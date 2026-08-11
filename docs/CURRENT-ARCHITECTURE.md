@@ -33,6 +33,11 @@ Sistem memiliki **8 role**. Sumber kebenaran adalah `backend/database/seeders/Ro
 
 Enam role pertama dapat masuk dashboard web. `mahasiswa` dan `orang_tua` bukan pengguna dashboard. Klaim "7 role" pada dokumen historis tidak berlaku.
 
+Tabel di atas hanya ringkasan cakupan. Matriks lengkap — guard per route, aturan
+scope query, hierarki assignability, guard non-role, dan checklist audit negative
+test — ada di [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md) dan itulah
+sumber kebenaran authorization (MS-01).
+
 ## Trust Boundary Attendance
 
 1. Client meminta attendance permit untuk user, jadwal, action, `client_uuid`, dan optional `attendance_id`.
