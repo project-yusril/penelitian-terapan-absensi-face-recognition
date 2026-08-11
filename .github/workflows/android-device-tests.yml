@@ -1,0 +1,61 @@
+name: Android Physical Device Tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-physical-device-tests
+  cancel-in-progress: false
+
+jobs:
+  camera-contract:
+    runs-on: ubuntu-latest
+    environment: device-testing
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.2'
+          cache: true
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_TEST_LAB_CREDENTIALS_JSON }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: flutter pub get --enforce-lockfile
+      - name: Build camera contract instrumentation APKs
+        run: |
+          flutter build apk --debug --dart-define=API_BASE_URL=https://device-test.invalid/api
+          cd android
+          ./gradlew app:assembleAndroidTest
+          ./gradlew app:assembleDebug -Ptarget=../integration_test/camera_contract_test.dart
+      - name: Run low, mid, and high physical device matrix
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          FIREBASE_ANDROID_DEVICE_LOW: ${{ vars.FIREBASE_ANDROID_DEVICE_LOW }}
+          FIREBASE_ANDROID_DEVICE_MID: ${{ vars.FIREBASE_ANDROID_DEVICE_MID }}
+          FIREBASE_ANDROID_DEVICE_HIGH: ${{ vars.FIREBASE_ANDROID_DEVICE_HIGH }}
+        run: |
+          test -n "$FIREBASE_PROJECT_ID"
+          test -n "$FIREBASE_ANDROID_DEVICE_LOW"
+          test -n "$FIREBASE_ANDROID_DEVICE_MID"
+          test -n "$FIREBASE_ANDROID_DEVICE_HIGH"
+          gcloud firebase test android run \
+            --project "$FIREBASE_PROJECT_ID" \
+            --type instrumentation \
+            --app build/app/outputs/apk/debug/app-debug.apk \
+            --test build/app/outputs/apk/androidTest/debug/app-debug-androidTest.apk \
+            --device "$FIREBASE_ANDROID_DEVICE_LOW" \
+            --device "$FIREBASE_ANDROID_DEVICE_MID" \
+            --device "$FIREBASE_ANDROID_DEVICE_HIGH" \
+            --timeout 15m \
+            --results-bucket "gs://${{ vars.FIREBASE_TEST_RESULTS_BUCKET }}"

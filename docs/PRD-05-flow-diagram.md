@@ -3,7 +3,9 @@
 > **Catatan current:** diagram attendance langsung di bawah adalah desain awal.
 > Flow authoritative selalu dimulai dengan attendance permit dan invariant server
 > pada [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md) dan
-> [CURRENT-API.md](CURRENT-API.md). Offline mode memerlukan permit valid.
+> [CURRENT-API.md](CURRENT-API.md). Offline mode memerlukan permit valid. Diagram
+> biometric flow hanya berlaku untuk compatibility/non-production; production
+> berhenti fail-closed sampai trusted verifier tersedia.
 
 ## 1. FLOW UTAMA: PROSES ABSENSI (CHECK-IN)
 

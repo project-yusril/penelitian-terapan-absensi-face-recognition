@@ -62,5 +62,25 @@ class NotificationTest extends TestCase
         $this->withHeaders($this->auth())
             ->postJson('/api/fcm-token', ['fcm_token' => 'test-fcm-token-123'])
             ->assertStatus(200);
+
+        $this->assertSame(
+            'test-fcm-token-123',
+            User::where('email', 'notif@test.com')->value('fcm_token'),
+        );
+    }
+
+    public function test_revoke_fcm_token_clears_stored_token(): void
+    {
+        User::where('email', 'notif@test.com')->update(['fcm_token' => 'stale-token']);
+
+        // L-02: mobile mengirim string kosong saat logout untuk mencabut target
+        // push agar backend berhenti mengirim ke perangkat ini.
+        $this->withHeaders($this->auth())
+            ->postJson('/api/fcm-token', ['fcm_token' => ''])
+            ->assertStatus(200);
+
+        $this->assertNull(
+            User::where('email', 'notif@test.com')->value('fcm_token'),
+        );
     }
 }

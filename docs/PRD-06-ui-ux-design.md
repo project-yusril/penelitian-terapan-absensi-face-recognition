@@ -2,7 +2,8 @@
 
 > **Status:** design intent. Tidak semua layar/platform telah diimplementasikan.
 > UI web current menggunakan Inertia/Vue di backend; Flutter current berfokus
-> pada mahasiswa. Gap aksesibilitas mengikuti L-07 di [temuan.md](temuan.md).
+> pada mahasiswa Android. Mobile Dosen dan iOS bukan release target. Gap dan
+> acceptance UI current mengikuti [temuan.md](temuan.md).
 
 ## 1. DESIGN SYSTEM
 

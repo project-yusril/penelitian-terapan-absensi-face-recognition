@@ -177,12 +177,12 @@ Route::middleware(['auth:sanctum', 'user.active'])->group(function () {
     Route::prefix('kaprodi')->middleware('role:kaprodi,super_admin')->group(function () {
         // Enrollment approval
         Route::get('/enrollments', [EnrollmentController::class, 'index']);
-        Route::put('/enrollments/{id}/approve', [EnrollmentController::class, 'approve']);
+        Route::put('/enrollments/{id}/approve', [EnrollmentController::class, 'approve'])->middleware('biometric.trusted');
         Route::put('/enrollments/{id}/reject', [EnrollmentController::class, 'reject']);
 
         // Re-enrollment
         Route::get('/re-enrollments', [ReEnrollmentController::class, 'index']);
-        Route::put('/re-enrollments/{id}/approve', [ReEnrollmentController::class, 'approve']);
+        Route::put('/re-enrollments/{id}/approve', [ReEnrollmentController::class, 'approve'])->middleware('biometric.trusted');
         Route::put('/re-enrollments/{id}/reject', [ReEnrollmentController::class, 'reject']);
 
         // SP Management
@@ -224,20 +224,20 @@ Route::middleware(['auth:sanctum', 'user.active'])->group(function () {
     // ==================== MAHASISWA ROUTES ====================
     Route::prefix('mahasiswa')->middleware('role:mahasiswa')->group(function () {
         // Face enrollment
-        Route::post('/enrollment', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'store'])->middleware('throttle:biometric-probe');
-        Route::post('/enrollment/check-duplicate', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'checkDuplicate'])->middleware('throttle:biometric-probe');
+        Route::post('/enrollment', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'store'])->middleware('throttle:biometric-probe', 'biometric.trusted');
+        Route::post('/enrollment/check-duplicate', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'checkDuplicate'])->middleware('throttle:biometric-probe', 'biometric.trusted');
         Route::get('/enrollment/status', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'status']);
 
-        Route::post('/re-enrollment', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'requestReEnrollment']);
-        Route::get('/enrollment/embedding', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'getMyEmbedding'])->middleware('enrollment.approved');
+        Route::post('/re-enrollment', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'requestReEnrollment'])->middleware('biometric.trusted');
+        Route::get('/enrollment/embedding', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'getMyEmbedding'])->middleware('enrollment.approved', 'biometric.trusted');
 
         // Attendance
-        Route::post('/attendance/permits', [AttendancePermitController::class, 'store'])->middleware('throttle:attendance', 'enrollment.approved');
-        Route::post('/attendance/check-in', [App\Http\Controllers\Api\Mahasiswa\AttendanceController::class, 'checkIn'])->middleware('throttle:attendance', 'enrollment.approved');
-        Route::post('/attendance/check-out', [App\Http\Controllers\Api\Mahasiswa\AttendanceController::class, 'checkOut'])->middleware('throttle:attendance', 'enrollment.approved');
+        Route::post('/attendance/permits', [AttendancePermitController::class, 'store'])->middleware('throttle:attendance', 'enrollment.approved', 'biometric.trusted');
+        Route::post('/attendance/check-in', [App\Http\Controllers\Api\Mahasiswa\AttendanceController::class, 'checkIn'])->middleware('throttle:attendance', 'enrollment.approved', 'biometric.trusted');
+        Route::post('/attendance/check-out', [App\Http\Controllers\Api\Mahasiswa\AttendanceController::class, 'checkOut'])->middleware('throttle:attendance', 'enrollment.approved', 'biometric.trusted');
         Route::get('/attendance/history', [App\Http\Controllers\Api\Mahasiswa\AttendanceController::class, 'history']);
         Route::get('/attendance/today', [App\Http\Controllers\Api\Mahasiswa\AttendanceController::class, 'today']);
-        Route::post('/attendance/sync-offline', [OfflineSyncController::class, 'sync'])->middleware('throttle:attendance', 'enrollment.approved');
+        Route::post('/attendance/sync-offline', [OfflineSyncController::class, 'sync'])->middleware('throttle:attendance', 'enrollment.approved', 'biometric.trusted');
 
         // Jadwal
         Route::get('/jadwal', [App\Http\Controllers\Api\Mahasiswa\JadwalController::class, 'index']);

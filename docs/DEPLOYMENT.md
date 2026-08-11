@@ -1,15 +1,17 @@
 # Deployment dan Release
 
-**Status:** maintained runbook  
-**Pembaruan:** 9 Agustus 2026
+**Status:** maintained runbook
+**Pembaruan:** 11 Agustus 2026
+**Release matrix:** web/backend + Android; iOS tidak didukung
 
 ## Baseline
 
 - PHP 8.3.30, sesuai Composer platform.
 - Laravel 13.x.
-- Node.js yang kompatibel dengan Vite 8 dan committed lockfile.
+- Node.js `22.21.1` dan npm `11.6.2` dengan committed lockfile.
 - MySQL production dengan database user least-privilege.
-- Flutter toolchain sesuai CI (`3.38.4`) sampai versi tersebut diubah bersama workflow.
+- Flutter `3.44.2` / Dart `3.12.2`, sesuai CI dan constraint `pubspec.yaml`.
+- JDK 17 untuk Android Gradle/Kotlin build; workflow memakai Temurin 17.
 - HTTPS wajib untuk web/API production.
 
 ## Backend Production
@@ -24,7 +26,7 @@
 7. Cache config/routes/views setelah seluruh env final.
 8. Beri permission hanya pada `storage/` dan `bootstrap/cache/` yang diperlukan runtime.
 9. Jalankan scheduler dan queue worker sebagai proses long-running yang dipantau. Pilih mekanisme sesuai OS host:
-   - **Linux (production)**: cron `* * * * * php artisan schedule:run` (atau `schedule:work` di bawah Supervisor/systemd), plus queue worker terkelola Supervisor/systemd.
+   - **Linux (production)**: install manifest `deploy/systemd/absensi-queue.service`, `absensi-schedule.service`, dan `absensi-schedule.timer`, lalu sesuaikan `/srv/absensi` serta `/etc/absensi/absensi.env` dengan host.
    - **Windows (dev/on-prem)**: `php artisan schedule:work` dijalankan oleh **Windows Task Scheduler**. Repo menyertakan `backend/schedule-worker.bat` (wrapper yang men-set path php + project lalu memanggil `schedule:work`); daftarkan sebagai task (mis. `AbsensiMahasiswaScheduler`) dengan trigger *At log on*, *restart on failure*, dan *execution time limit* unlimited agar scheduler hidup permanen tanpa perintah manual. Registrasi task memerlukan hak admin satu kali.
    Scheduler inilah yang memicu `attendance:auto-close` dan `attendance:mark-absent` (keduanya `everyMinute`), reminder, notification outbox, dan backup. Tanpa scheduler yang hidup, ALPHA dan auto-close tidak akan pernah tercatat.
 10. Gunakan `/api/health` sebagai public liveness. Batasi `/api/healthz` ke operator/internal network.
@@ -46,17 +48,20 @@ SESSION_HTTP_ONLY=true
 SESSION_SAME_SITE=lax
 DB_CONNECTION=mysql
 QUEUE_CONNECTION=database
+BIOMETRIC_ALLOW_CLIENT_CLAIMS=false
 ```
 
 Session cookie bersifat fail-closed di production (M-21): bila `SESSION_SECURE_COOKIE` tidak diset, aplikasi tetap memaksa cookie `Secure` + `HttpOnly` dan `SameSite` minimal `lax`. Jangan menyetel `SESSION_SECURE_COOKIE=false` di production; itu mematikan proteksi HTTPS-only cookie. `SameSite=none` hanya boleh dipakai bila memang lintas situs dan otomatis dipasangkan dengan `Secure`.
 
 Mail delivery adalah dependency keamanan untuk reset/activation. Verifikasi pengiriman sebelum provisioning user.
 
-`FIREBASE_PROJECT_ID` dan `FIREBASE_CREDENTIALS_PATH` bersifat opsional sampai L-02 ditutup. Jika FCM diaktifkan, credential JSON harus berada di private storage dengan permission minimum dan dikelola sebagai secret, bukan disimpan dalam repository.
+Lifecycle FCM mobile (register/refresh/revoke + handler) sudah diimplementasikan. Release default mematikan FCM melalui `ENABLE_FCM_PUSH=false`; aplikasi tidak mengklaim atau mencoba push tanpa konfigurasi. Untuk mengaktifkan push, inject `google-services.json` dari secret manager sebelum build, set protected variable `ENABLE_FCM_PUSH=true`, dan isi `FIREBASE_PROJECT_ID`/`FIREBASE_CREDENTIALS_PATH` pada backend. Workflow fail-closed bila FCM diaktifkan tanpa file konfigurasi. Service account JSON tetap private dan tidak boleh masuk repository.
+
+Attendance/enrollment berbasis client scalar dikontain fail-closed di production. `BIOMETRIC_ALLOW_CLIENT_CLAIMS` wajib `false`; endpoint permit, check-in/out, offline sync, enrollment/re-enrollment, dan approval biometrik mengembalikan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`. Nilai `true` hanya untuk local/testing compatibility dan tidak boleh dipakai sebagai production workaround. Aktivasi kembali memerlukan challenge-bound capture artifact, trusted verifier, dan platform attestation sesuai `THREAT-MODEL-ATTENDANCE.md`.
 
 ## Android Release
 
-Workflow `.github/workflows/android-release.yml` membutuhkan:
+Workflow manual `.github/workflows/android-release.yml` membutuhkan protected environment `production` dan konfigurasi berikut:
 
 | Name | Type |
 |---|---|
@@ -64,7 +69,9 @@ Workflow `.github/workflows/android-release.yml` membutuhkan:
 | `ANDROID_KEYSTORE_PASSWORD` | GitHub secret |
 | `ANDROID_KEY_ALIAS` | GitHub secret |
 | `ANDROID_KEY_PASSWORD` | GitHub secret |
+| `GOOGLE_SERVICES_JSON_BASE64` | GitHub secret; wajib hanya bila `ENABLE_FCM_PUSH=true` |
 | `API_BASE_URL` | Protected GitHub variable, HTTPS dan berakhiran `/api` |
+| `ENABLE_FCM_PUSH` | Protected GitHub variable; default `false`, `true` hanya setelah config di-inject |
 
 Gradle juga mendukung untracked `android/key.properties` untuk build operator lokal. Release tidak pernah fallback ke debug signing.
 
@@ -74,30 +81,28 @@ Build lokal:
 flutter build appbundle --release --dart-define=API_BASE_URL=https://api.example.ac.id/api
 ```
 
-Verifikasi certificate signer, app startup, login, permit, check-in, checkout, offline recovery, camera, dan GPS pada physical Android device sebelum distribusi.
+Verifikasi certificate signer, app startup, login, checkout navigation, offline recovery, camera, dan GPS pada physical Android device sebelum distribusi. Permit/check-in/out production tetap diblokir sampai trusted biometric verifier tersedia.
 
 ## iOS
 
-Info.plist, BGRA camera path, device metadata, dan Podfile telah tersedia. iOS belum masuk release matrix terverifikasi sampai langkah berikut lulus pada macOS:
-
-```bash
-flutter pub get
-cd ios && pod install --repo-update && cd ..
-flutter build ios --no-codesign --dart-define=API_BASE_URL=https://api.example.ac.id/api
-```
-
-Selanjutnya diperlukan signing/capability setup dan smoke test pada physical iPhone. Sampai itu selesai, dokumentasi produk harus menyebut Android sebagai platform release yang aktif.
+Keputusan release H-17: **iOS tidak didukung dan tidak termasuk release matrix**. Folder `frontend/ios` dipertahankan hanya sebagai scaffold pengembangan, bukan artifact yang boleh diterbitkan. Tidak ada workflow IPA/TestFlight, signing, capability, atau dukungan operasional iOS. Platform mobile produksi satu-satunya adalah Android. Membuka dukungan iOS di masa depan memerlukan keputusan release baru, Podfile lock, macOS CI build, signing/capability, Firebase/APNs bila push diaktifkan, serta physical-iPhone camera/GPS test.
 
 ## Continuous Integration
 
-Dua workflow berjalan pada setiap `push`/`pull_request`:
+Backend/frontend workflow dikonfigurasi pada setiap `push`/`pull_request`; release/device workflow dijalankan manual:
 
 | Workflow | Isi |
 |---|---|
 | `.github/workflows/backend-ci.yml` | MySQL service, `composer validate --strict`, `check-platform-reqs`, `composer audit`, `npm ci` + `npm run build`, `php artisan test` |
-| `.github/workflows/frontend-ci.yml` | `flutter pub get`, `flutter analyze --fatal-warnings --fatal-infos`, `flutter test` |
+| `.github/workflows/frontend-ci.yml` | Flutter `3.44.2`, enforced lockfile, analyzer strict, dan `flutter test` |
+| `.github/workflows/android-device-tests.yml` | Manual Firebase Test Lab physical low/mid/high matrix untuk camera converter contract |
 
-Analyzer warning maupun info menjadi CI failure (L-05). `android-release.yml` (manual `workflow_dispatch`) memakai gate analyzer strict yang sama sebelum membangun AAB.
+Analyzer warning maupun info menjadi CI failure (L-05). `android-release.yml` (manual `workflow_dispatch`) memakai gate analyzer strict yang sama sebelum membangun AAB. Device-test workflow memerlukan environment `device-testing`, secret `FIREBASE_TEST_LAB_CREDENTIALS_JSON`, serta variables `FIREBASE_PROJECT_ID`, `FIREBASE_TEST_RESULTS_BUCKET`, dan tiga device spec `FIREBASE_ANDROID_DEVICE_LOW/MID/HIGH` dalam format `model=...,version=...,locale=id,orientation=portrait`.
+
+> Definisi workflow bukan bukti enforcement. Sebelum release, buktikan latest Backend
+> CI dan Frontend CI green pada clean clone, branch `main` mewajibkan checks tersebut,
+> environment `production`/`device-testing` protected, dan workflow manual terkait
+> berhasil. Sampai itu tersedia, L-09 tetap terbuka.
 
 ## Master Data Lifecycle dan Migration
 
@@ -112,3 +117,7 @@ Analyzer warning maupun info menjadi CI failure (L-05). `android-release.yml` (m
 - Simpan key biometrik lama selama masih ada row dengan key ID tersebut.
 - Rollback application dan database harus mempertahankan kemampuan decrypt data. Migration purge biometrik tidak boleh di-rollback secara destruktif.
 - Pantau queue failure, scheduler, mail activation, auth rejection, dan attendance permit rejection setelah deploy.
+
+Deploy berdasarkan commit SHA/tag ke direktori release baru, lalu pindahkan symlink `/srv/absensi/current` secara atomik. Setelah symlink berubah: jalankan `php artisan migrate --force`, `php artisan optimize`, `php artisan queue:restart`, restart `absensi-queue`, dan cek `/api/health`. Rollback aplikasi dilakukan dengan mengembalikan symlink ke release sebelumnya lalu mengulangi restart/health check. Migration hanya boleh di-rollback bila migration release tersebut eksplisit reversible dan tidak menghapus data; jika tidak, pertahankan schema forward-compatible dan rollback aplikasi saja.
+
+Backup wajib mencakup database dan `storage/app/private`, `storage/app/face`, serta keyring biometrik di secret manager. Restore drill harus dilakukan ke host/database terisolasi dan membuktikan login, decrypt embedding, private file download berpolicy, queue, scheduler, dan health sebelum backup dianggap valid.

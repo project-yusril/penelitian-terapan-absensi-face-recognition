@@ -1,8 +1,8 @@
 # Threat Model Attendance
 
 **Status:** maintained
-**Pembaruan:** 9 Agustus 2026
-**Konteks:** dokumen ini memenuhi bagian "buat threat model" pada acceptance C-04 di [temuan.md](temuan.md). Dokumen ini **tidak menutup C-04**. Tujuannya adalah menyatakan secara eksplisit apa yang benar-benar diverifikasi server dan apa yang masih merupakan klaim client, agar keputusan akademik tidak dibuat di atas asumsi yang salah.
+**Pembaruan:** 11 Agustus 2026
+**Konteks:** dokumen ini memenuhi bagian "buat threat model" pada acceptance C-04 di [temuan.md](temuan.md). Dokumen ini **tidak menutup C-04/H-04**. Tujuannya adalah menyatakan apa yang diverifikasi server, apa yang masih merupakan klaim client, dan mengapa production saat ini fail-closed.
 
 ## Aset yang Dilindungi
 
@@ -25,7 +25,13 @@
 
 ## Kontrol yang Benar-benar Ditegakkan Server
 
-Diverifikasi pada `AttendancePermitService`, `AttendancePolicyService`, `Api/Mahasiswa/AttendanceController`, dan `OfflineSyncController`.
+Diverifikasi pada `AttendancePermitService`, `AttendancePolicyService`, `Api/Mahasiswa/AttendanceController`, `OfflineSyncController`, dan `RequireTrustedBiometricEvidence`.
+
+> **Containment production:** selama challenge-bound capture verifier belum tersedia,
+> endpoint permit, check-in/out, offline sync, enrollment/re-enrollment, reference
+> embedding, dan approval biometrik ditolak `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`.
+> Switch `BIOMETRIC_ALLOW_CLIENT_CLAIMS=true` hanya bekerja di environment
+> non-production untuk compatibility test; production selalu fail-closed.
 
 | Kontrol | Mekanisme |
 |---|---|
@@ -43,11 +49,11 @@ Diverifikasi pada `AttendancePermitService`, `AttendancePolicyService`, `Api/Mah
 
 > Catatan metrik penelitian: analisis success rate geofence dihitung dari `checkin_success` vs `checkin_failed`, bukan `geofence_valid` (R-01). Ini memperbaiki *validitas laporan*, bukan menutup residual C-04 di bawah.
 
-Konsekuensi: A2, A3, dan sebagian besar A4 sudah tertutup. Permit menutup absensi tanpa preauthorization, salah binding, dan replay.
+Konsekuensi: A2, A3, dan sebagian besar A4 sudah tertutup. Permit menutup absensi tanpa preauthorization, salah binding, dan replay. A1 dikontain di production dengan menonaktifkan mutation biometrik sampai trusted verifier tersedia; ini mencegah pemalsuan masuk ke data resmi tetapi membuat fitur attendance/enrollment production tidak tersedia.
 
 ## Residual: Klaim Client yang Belum Dapat Diverifikasi
 
-Ini inti C-04 yang masih terbuka.
+Ini inti C-04 yang masih terbuka pada implementasi legacy dan alasan fitur production dikontain.
 
 | Nilai | Sifat sekarang | Mengapa belum terverifikasi |
 |---|---|---|
@@ -63,15 +69,15 @@ Ini inti C-04 yang masih terbuka.
 Mahasiswa dengan sesi sah meminta permit yang benar, lalu mengirim koordinat pusat geofence, `liveness_passed=true`, `mock_location_detected=false`, dan `face_distance=0`. Seluruh kontrol server lolos karena semuanya konsisten dengan permit.
 
 Prasyarat: sesi sah dan kemampuan memodifikasi client atau memanggil API langsung.
-Status: **tidak termitigasi**. Permit hanya memastikan permintaan terotorisasi, bukan bahwa evidence-nya asli.
+Status legacy/test: **tidak termitigasi**. Permit hanya memastikan permintaan terotorisasi, bukan bahwa evidence-nya asli. Status production: **dikontain** karena endpoint terkait ditolak sebelum mutation.
 
 **S-2. Proxy attendance.**
 Mahasiswa A meminjamkan kredensial ke B yang berada di lokasi. Kontrol biometrik seharusnya menutup ini, tetapi karena hasil matching berasal dari client, B dapat mengirim `face_distance` rendah tanpa matching sungguhan.
-Status: **tidak termitigasi**.
+Status legacy/test: **tidak termitigasi**. Status production: **dikontain** melalui gate yang sama.
 
 **S-3. Presentation attack.**
 Foto atau video korban dipakai untuk melewati liveness. Liveness saat ini berbasis challenge landmark, bukan PAD penuh.
-Status: **tidak termitigasi dan belum diuji**. Jangan mengklaim perlindungan terhadap video replay atau deepfake.
+Status legacy/test: **tidak termitigasi dan belum diuji**. Production tidak boleh mengaktifkan flow ini; jangan mengklaim perlindungan terhadap video replay atau deepfake.
 
 ## Batas Klaim yang Boleh Dibuat
 
@@ -87,7 +93,7 @@ Tidak boleh diklaim:
 - Bahwa wajah yang diverifikasi adalah wajah asli pemilik akun.
 - Bahwa sistem tahan terhadap presentation attack.
 
-Untuk keputusan akademik yang berkonsekuensi (SP dan DO), perlakukan data ini sebagai **client-attested**, bukan bukti forensik. Sediakan jalur sanggah manual.
+Untuk data compatibility/non-production, perlakukan hasil sebagai **client-attested**, bukan bukti forensik. Production tidak boleh menghasilkan attendance/enrollment dari flow legacy. Setelah verifier tersedia pun, sediakan jalur sanggah manual untuk keputusan akademik berkonsekuensi seperti SP/DO.
 
 ## Arah Remediasi C-04
 

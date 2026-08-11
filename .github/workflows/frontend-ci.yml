@@ -4,6 +4,13 @@ on:
   pull_request:
   push:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 # L-05: analyzer warning (dan info) menjadi CI failure pada setiap push/PR,
 # bukan hanya saat release manual. `--fatal-warnings --fatal-infos` membuat
 # analyzer keluar non-zero bila ada temuan apa pun.
@@ -17,9 +24,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.38.4'
+          flutter-version: '3.44.2'
           cache: true
-      - run: flutter pub get
+      - run: flutter pub get --enforce-lockfile
       - name: Analyze (warnings and infos are fatal)
         run: flutter analyze --fatal-warnings --fatal-infos
       - run: flutter test

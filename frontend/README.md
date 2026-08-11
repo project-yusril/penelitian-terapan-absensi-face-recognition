@@ -1,6 +1,6 @@
 # Mobile Absensi Mahasiswa
 
-Aplikasi Flutter mahasiswa untuk enrollment biometrik, attendance permit, check-in/check-out, offline queue, riwayat, izin, dan status SP.
+Aplikasi Flutter Android mahasiswa untuk enrollment biometrik, attendance permit, check-in/check-out, offline queue, riwayat, izin, dan status SP. Production attendance/enrollment saat ini fail-closed sampai backend memiliki trusted biometric verifier.
 
 ## Konfigurasi API
 
@@ -17,11 +17,11 @@ Release/profile hanya menerima HTTPS. Debug HTTP hanya menerima loopback (`local
 | Platform | Status |
 |---|---|
 | Android | Platform release aktif |
-| iOS | Basic code path tersedia, tetapi build/signing/physical-device verification belum selesai |
+| iOS | Tidak didukung; folder platform hanya scaffold pengembangan dan bukan release target |
 
 ## Attendance Flow
 
-1. Aplikasi meminta permit dari server.
+1. Aplikasi meminta permit dari server. Production saat ini mengembalikan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` sampai trusted verifier tersedia.
 2. Server memeriksa academic-resource invariant dan attendance window.
 3. Aplikasi memvalidasi lokasi, liveness, dan wajah.
 4. Evidence dikirim bersama permit sekali pakai.
@@ -40,12 +40,14 @@ Checkout dapat dibuka dari jadwal yang sudah check-in dan belum checkout.
 ## Development
 
 ```powershell
-flutter pub get
+flutter pub get --enforce-lockfile
 flutter test
-flutter analyze
+flutter analyze --fatal-warnings --fatal-infos
 ```
 
 Physical-device verification tetap diperlukan untuk camera format, GPS/mock-location behavior, check-in/check-out, dan offline restart.
+
+FCM adalah explicit release opt-in. Default `ENABLE_FCM_PUSH=false`; build release hanya boleh memakai `true` bila Firebase configuration diinjeksi oleh secret manager. Detail ada di [deployment runbook](../docs/DEPLOYMENT.md).
 
 ## Release
 

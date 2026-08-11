@@ -12,6 +12,7 @@ import '../../../../core/offline/offline_queue_service.dart';
 import '../../../../core/network/connectivity_service.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/security/session_coordinator.dart';
+import '../../../../core/notifications/push_messaging_service.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final Login _login;
@@ -22,6 +23,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final OfflineQueueService _offlineQueueService;
   final ConnectivityService _connectivityService;
   final SessionCoordinator _sessionCoordinator;
+  final PushMessagingService? _pushMessaging;
   late final StreamSubscription<SessionInvalidation> _invalidationSubscription;
   Future<void> _sessionOperation = Future.value();
   int _authGeneration = 0;
@@ -35,6 +37,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     required OfflineQueueService offlineQueueService,
     required ConnectivityService connectivityService,
     required SessionCoordinator sessionCoordinator,
+    PushMessagingService? pushMessaging,
   }) : _login = login,
        _logout = logout,
        _getCurrentUser = getCurrentUser,
@@ -43,6 +46,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
        _offlineQueueService = offlineQueueService,
        _connectivityService = connectivityService,
        _sessionCoordinator = sessionCoordinator,
+       _pushMessaging = pushMessaging,
        super(AuthInitial()) {
     on<LoginRequested>(_onLoginRequested);
     on<LogoutRequested>(_onLogoutRequested);
@@ -71,6 +75,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       ) async {
         await _offlineQueueService.activate(user.id);
         _connectivityService.resume();
+        await _registerPushToken();
         emit(Authenticated(user));
       });
     });
@@ -84,6 +89,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     await _serializeSession(() async {
       emit(AuthLoading());
       final owner = _offlineQueueService.activeOwnerUserId;
+      // Cabut FCM token selagi sesi masih valid agar backend benar-benar
+      // mengosongkan target push milik akun ini (perangkat bersama, C-06).
+      await _revokePushToken();
       await _connectivityService.pauseAndWait();
       await _logout();
       if (owner != null) await _offlineQueueService.purgeForLogout(owner);
@@ -115,6 +123,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         (user) async {
           await _offlineQueueService.activate(user.id);
           _connectivityService.resume();
+          await _registerPushToken();
           emit(Authenticated(user));
         },
       );
@@ -171,6 +180,33 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     );
   }
 
+  /// Daftarkan FCM token milik user aktif ke backend. No-op bila push tidak
+  /// dikonfigurasi. Kegagalan tidak menggagalkan auth — service sudah menelan
+  /// error internal, tetapi guard tambahan menjaga alur auth tetap kokoh.
+  Future<void> _registerPushToken() async {
+    final push = _pushMessaging;
+    if (push == null) return;
+    try {
+      await push.registerForUser(
+        (token) => _authRepository.updateFcmToken(token ?? ''),
+      );
+    } catch (_) {
+      // Registrasi push tidak boleh memblokir login.
+    }
+  }
+
+  /// Cabut FCM token dari perangkat dan backend. No-op bila push tidak
+  /// dikonfigurasi.
+  Future<void> _revokePushToken() async {
+    final push = _pushMessaging;
+    if (push == null) return;
+    try {
+      await push.revokeForUser();
+    } catch (_) {
+      // Kegagalan revoke tidak boleh memblokir logout/invalidation.
+    }
+  }
+
   Future<void> _serializeSession(Future<void> Function() operation) {
     final result = _sessionOperation.then((_) => operation());
     _sessionOperation = result.then<void>((_) {}, onError: (_, _) {});
@@ -186,6 +222,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       if (_sessionCoordinator.snapshot.hasToken) return;
       final owner = _offlineQueueService.activeOwnerUserId;
       if (state is Unauthenticated && owner == null) return;
+      await _revokePushToken();
       await _connectivityService.pauseAndWait();
       if (owner != null && _offlineQueueService.activeOwnerUserId == owner) {
         await _offlineQueueService.purgeForLogout(owner);

@@ -1,8 +1,8 @@
 # TASK MASTER
 
 > **ARSIP HISTORIS: original implementation plan.** Checklist ini tidak
-> menyatakan production readiness. Gunakan [final-task.md](final-task.md),
-> [temuan.md](temuan.md), dan [README.md](README.md) untuk status current.
+> menyatakan production readiness. Gunakan [temuan.md](temuan.md) dan
+> [README.md](README.md) untuk status current; `final-task.md` juga arsip snapshot.
 # Sistem Absensi Mahasiswa - Master Timeline & Milestone
 
 ---

@@ -1,14 +1,15 @@
 # FINAL TASK — Sisa Pekerjaan Sistem Absensi Mahasiswa
 
-> **Status 9 Agustus 2026:** ringkasan release-readiness. Backlog dan acceptance
-> authoritative berada di [temuan.md](temuan.md); deployment authoritative ada
-> di [DEPLOYMENT.md](DEPLOYMENT.md); keputusan canonical (comparator, GPS, lifecycle,
-> session) ada di [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md). Klaim phase
-> selesai di bawah adalah histori delivery fitur, bukan pernyataan production-ready.
+> **ARSIP SNAPSHOT, bukan tracker aktif.** Backlog dan acceptance authoritative
+> berada di [temuan.md](temuan.md), status terpadu di [README.md](README.md), dan
+> deployment authoritative di [DEPLOYMENT.md](DEPLOYMENT.md). Checkbox/angka di
+> bawah merekam perencanaan pada saat dokumen dibuat dan tidak boleh dipakai untuk
+> keputusan release tanpa memeriksa dokumen current.
 >
-> Update backlog terbaru: M-19/M-20/M-21 ditutup, R-01 dan L-05..L-08 ditutup.
-> Sisa terbuka utama tetap C-04/H-04 (trust model), H-13/H-16/H-17 (device/iOS),
-> L-02 (FCM), L-09 (repo/CI infra), dan R-02..R-05 (penelitian lapangan).
+> Sinkronisasi 11 Agustus 2026: H-13, H-17, dan L-02 selesai. C-04/H-04
+> terkontain fail-closed tetapi menunggu trusted verifier; H-16 menunggu physical
+> Android matrix; L-09 menunggu green remote CI/protected enforcement. iOS tidak
+> didukung dan FCM default release off.
 
 **Tanggal dibuat:** 20 Juni 2026
 **Konteks:** Hasil audit menyeluruh terhadap `task-master.md`, `task-backend.md`,
@@ -73,13 +74,14 @@ Prioritas utama. Sebagian hardening build/release sudah dikerjakan, tetapi deplo
 - [ ] Pasang SSL (Let's Encrypt / Certbot) + auto-renew
 - [ ] Paksa HTTPS redirect + HSTS header
 - [ ] Generate VAPID production (`php artisan webpush:vapid --write`) & set subject email institusi
-- [ ] Putuskan dan implementasikan FCM end-to-end sesuai L-02 sebelum mengklaim mobile push
+- [x] Tetapkan FCM sebagai explicit opt-in: default release off dan workflow fail-closed bila opt-in tanpa secret/config
+- [ ] Jika operator mengaktifkan FCM, sediakan Firebase project/credential dan verifikasi push runtime di perangkat
 - [ ] Review CORS (`config/cors.php`) untuk origin produksi
 - [ ] Pastikan `.env`, file kredensial, backup tidak ter-expose ke publik
 
 ### A.4 Final Testing di Produksi
 - [ ] Smoke test login 6 role di domain produksi
-- [ ] Uji alur absensi end-to-end (mobile → API produksi)
+- [ ] Setelah trusted verifier tersedia, uji alur absensi end-to-end (mobile → API produksi); flow production saat ini sengaja diblokir
 - [ ] Uji Web Push & FCM di produksi (HTTPS)
 - [ ] Uji export Excel/PDF + generate SP di produksi
 - [ ] Verifikasi scheduler & queue berjalan (cek log); pastikan ALPHA tercatat otomatis beberapa menit setelah jadwal selesai dan attendance yang lupa checkout ter-auto-close
@@ -110,7 +112,7 @@ Butuh device/emulator + backend berjalan. Dari `task-mobile.md`.
 - [ ] Check-out: alur sama → durasi terhitung
 - [ ] History: lihat riwayat absensi
 - [ ] Leave request: ajukan izin → admin approve → alpha terupdate
-- [ ] Notifikasi: terima push, mark read
+- [ ] Bila FCM diaktifkan untuk release: terima push dan mark read
 - [ ] SP status: lihat akumulasi alpha & SP records
 - [ ] Logout → login lagi → data persisten
 
@@ -130,7 +132,7 @@ tetapi coverage per flow tetap mengikuti evidence dan gap di `temuan.md`.
 - [ ] Notification triggers test (penerima benar per skenario)
 - [ ] Dosen approve/reject/override test
 - [ ] Export Excel & PDF test (file valid)
-- [x] Jalankan `php artisan test` penuh: 182 test/653 assertion lulus (9 Agustus 2026; sebelumnya 92/239)
+- [x] Jalankan `php artisan test` penuh: 189 test/666 assertion lulus (11 Agustus 2026; sebelumnya 182/653 pada 9 Agustus 2026)
 
 ---
 

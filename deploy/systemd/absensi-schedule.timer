@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Absensi Mahasiswa scheduler every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+AccuracySec=1s
+Unit=absensi-schedule.service
+
+[Install]
+WantedBy=timers.target

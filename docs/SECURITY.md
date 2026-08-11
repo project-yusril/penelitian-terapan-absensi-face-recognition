@@ -1,7 +1,8 @@
 # Model Keamanan
 
-**Pembaruan:** 9 Agustus 2026  
+**Pembaruan:** 11 Agustus 2026
 **Backlog risiko:** [`temuan.md`](temuan.md)
+**Threat model attendance:** [`THREAT-MODEL-ATTENDANCE.md`](THREAT-MODEL-ATTENDANCE.md)
 
 ## Kontrol Aktif
 
@@ -12,6 +13,7 @@
 - Tidak ada password universal. Import/provisioning menggunakan random placeholder dan one-time activation.
 - Attendance permit sekali pakai, short-lived, dan bound ke resource/action/UUID.
 - Queue offline terenkripsi dan terisolasi per user dengan stale lease recovery.
+- FCM token dicabut (device `deleteToken` + backend `POST /fcm-token` kosong) saat logout dan sesi invalid, sehingga perangkat bersama tidak menerima push milik akun sebelumnya (L-02/C-06).
 - Face embedding terenkripsi menggunakan key biometrik terpisah.
 - Biometric/medical files private dan diakses melalui authenticated signed route.
 - Android release fail-closed tanpa release signing secrets.
@@ -21,14 +23,17 @@
 - Rekam akademik historis dilindungi FK `ON DELETE RESTRICT`; hard delete master ditolak database selama ada riwayat, arsip via soft delete (M-19).
 - Invariant domain ditegakkan database via CHECK/UNIQUE/composite index sebagai lapisan terakhir terhadap import/race/script (M-20).
 - CI gate: `flutter analyze --fatal-warnings --fatal-infos` + `flutter test` (Frontend CI) dan backend test/validate/audit (Backend CI) berjalan pada setiap push/PR.
+- Production biometric containment menolak seluruh mutation/reference/approval yang bergantung pada scalar client sampai trusted verifier tersedia.
 
 ## Residual Risk Utama
 
-- Server masih menerima koordinat, face distance, dan liveness result sebagai klaim client. Permit mencegah replay/binding abuse, tetapi modified client dengan sesi sah masih dapat memalsukan scalar evidence. Lihat C-04.
-- Enrollment liveness belum memiliki artifact/challenge proof yang diverifikasi server. Lihat H-04.
-- iOS belum memiliki build/device/release evidence. Lihat H-17.
+- Legacy implementation masih menghitung koordinat, face distance, liveness, dan embedding dari client, sehingga production memblokir endpoint terkait dengan `TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` sampai trusted verifier tersedia. Lihat C-04/H-04.
+- iOS tidak didukung dan tidak termasuk release matrix. Lihat H-17.
 - Readiness detail `/healthz` harus dibatasi. Lihat M-15.
-- FCM mobile belum boleh diklaim end-to-end sampai token lifecycle dan handler lengkap. Lihat L-02.
+- FCM mobile memiliki token lifecycle dan handler lengkap, tetapi release default `ENABLE_FCM_PUSH=false`; opt-in mewajibkan konfigurasi Firebase yang diinjeksi secret manager. Lihat L-02.
+- `BIOMETRIC_ALLOW_CLIENT_CLAIMS=true` hanya untuk local/testing compatibility dan dilarang di production.
+- Camera physical-device matrix Android low/mid/high belum memiliki run evidence; lihat H-16.
+- Remote CI green run, protected environment, dan required-check enforcement belum terbukti; lihat L-09.
 
 ## Secret Management
 
@@ -39,6 +44,7 @@ Secret berikut wajib berada di secret manager/deployment environment dan tidak b
 - database/mail credentials
 - VAPID private key
 - Android keystore dan passwords
+- Firebase service account dan `GOOGLE_SERVICES_JSON_BASE64`
 - reset token, Sanctum token, dan real biometric vectors
 
 Jika `.env`, key, atau credential pernah dibagikan dalam archive/repository, anggap bocor dan rotasi.
@@ -63,3 +69,14 @@ Dokumentasi dan materi penelitian harus membedakan:
 - server authorization/replay protection.
 
 Jangan menyatakan sistem mencegah fake GPS, deepfake, atau replay secara absolut tanpa evidence terhadap threat model dan device matrix yang relevan.
+
+## Security Release Decision
+
+| Keputusan | Konsekuensi |
+|---|---|
+| Android-only | iOS tidak menerima signing, artifact, support, atau security claim |
+| Biometrik production fail-closed | Tidak ada attendance/enrollment production sampai verifier tepercaya tersedia |
+| FCM default off | Push hanya aktif bila release opt-in dan seluruh credential/config tersedia |
+| Private storage | Enrollment/re-enrollment/izin tidak boleh dilayani melalui public symlink |
+
+Konfigurasi dan rollback operasional berada di [DEPLOYMENT.md](DEPLOYMENT.md); status acceptance berada di [temuan.md](temuan.md).

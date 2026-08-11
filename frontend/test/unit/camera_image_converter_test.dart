@@ -29,6 +29,56 @@ void main() {
     expect(converted.getPixel(0, 0).r, closeTo(128, 1));
   });
 
+  test('converts one-plane BGRA reading BGRA byte order', () {
+    // Satu piksel merah penuh: B=0, G=0, R=255, A=255.
+    final image = CameraImage.fromPlatformInterface(
+      CameraImageData(
+        format: const CameraImageFormat(ImageFormatGroup.bgra8888, raw: 1),
+        planes: [
+          CameraImagePlane(
+            bytes: Uint8List.fromList([0, 0, 255, 255]),
+            bytesPerRow: 4,
+            bytesPerPixel: 4,
+          ),
+        ],
+        height: 1,
+        width: 1,
+      ),
+    );
+
+    final converted = CameraImageConverter.convert(image);
+
+    expect(converted.width, 1);
+    expect(converted.height, 1);
+    final pixel = converted.getPixel(0, 0);
+    expect(pixel.r, 255);
+    expect(pixel.g, 0);
+    expect(pixel.b, 0);
+  });
+
+  test('throws UnsupportedError for unknown format/plane combination', () {
+    // YUV420 dengan hanya satu plane bukan kombinasi yang didukung; harus
+    // gagal eksplisit (fail-closed), bukan mengakses plane yang tidak ada.
+    final image = CameraImage.fromPlatformInterface(
+      CameraImageData(
+        format: const CameraImageFormat(ImageFormatGroup.yuv420, raw: 35),
+        planes: [
+          CameraImagePlane(
+            bytes: Uint8List.fromList([128, 128, 128, 128]),
+            bytesPerRow: 2,
+          ),
+        ],
+        height: 2,
+        width: 2,
+      ),
+    );
+
+    expect(
+      () => CameraImageConverter.convert(image),
+      throwsA(isA<UnsupportedError>()),
+    );
+  });
+
   test('converts three-plane YUV420 with independent strides', () {
     final image = CameraImage.fromPlatformInterface(
       CameraImageData(

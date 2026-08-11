@@ -4,7 +4,9 @@
 > akun, eligibility attendance, permit/window, dan offline semantics mengikuti
 > [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md), [CURRENT-API.md](CURRENT-API.md),
 > dan [SECURITY.md](SECURITY.md). NIM/NIDN atau password universal tidak pernah
-> menjadi credential awal.
+> menjadi credential awal. Mobile release hanya untuk mahasiswa Android; fungsi
+> Dosen berjalan di dashboard web. Attendance/enrollment production sedang
+> fail-closed sampai trusted verifier tersedia.
 
 ## 1. MODUL AUTENTIKASI & USER MANAGEMENT
 

@@ -1,8 +1,11 @@
 # PRD-02B: FUNCTIONAL REQUIREMENTS (Lanjutan)
 
 > **Interpretasi current:** fitur dan penerima notifikasi harus diverifikasi
-> terhadap implementation/tests dan [temuan.md](temuan.md). FCM mobile belum
-> dianggap selesai; Web Push VAPID adalah capability terpisah.
+> terhadap implementation/tests dan [temuan.md](temuan.md). Lifecycle FCM mobile
+> selesai sebagai explicit opt-in: default release off, sedangkan opt-in
+> mewajibkan Firebase secret/config dan smoke test runtime. Web Push VAPID adalah
+> capability terpisah. Mobile Dosen pada requirement lama tidak termasuk release
+> matrix; fungsi Dosen current ada di dashboard web.
 
 ## 7. MODUL EARLY WARNING & SURAT PERINGATAN (SP)
 

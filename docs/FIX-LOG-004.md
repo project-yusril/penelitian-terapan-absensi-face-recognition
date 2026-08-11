@@ -1,5 +1,9 @@
 # FIX-LOG-004 — Remediasi 26 Juli 2026
 
+> **ARSIP HISTORIS.** Status pada dokumen ini berlaku untuk batch 26 Juli 2026.
+> Status current dan acceptance authoritative ada di [temuan.md](temuan.md);
+> beberapa item pada bagian "Batas" telah selesai atau dikontain setelah tanggal ini.
+
 Dokumen ini memetakan setiap temuan yang dikerjakan pada tanggal ini ke file yang diubah dan regression test-nya, agar perubahan yang landing sebagai satu batch besar tetap dapat direview per temuan. Backlog dan acceptance authoritative tetap di [temuan.md](temuan.md).
 
 ## Cara Review Per Temuan
@@ -51,4 +55,4 @@ Ditemukan saat review lima-axis terhadap perubahan di atas:
 
 ## Batas
 
-C-04, H-04, H-13, H-16, H-17, M-21 (secure session cookie production), L-02, L-06, L-09, dan R-01–R-05 tetap terbuka. Sebagian besar memerlukan perubahan arsitektur, perangkat fisik, atau infrastruktur, bukan patch kode. Lihat [temuan.md](temuan.md) untuk status masing-masing.
+Pada 26 Juli 2026, C-04, H-04, H-13, H-16, H-17, M-21, L-02, L-06, L-09, dan R-01–R-05 masih terbuka. Daftar ini adalah snapshot historis, bukan status current. Lihat [temuan.md](temuan.md) untuk status masing-masing.

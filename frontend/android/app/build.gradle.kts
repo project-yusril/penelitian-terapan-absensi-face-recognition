@@ -7,6 +7,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// L-02: aktifkan Google Services (FCM) hanya bila google-services.json ada.
+// Tanpa file ini, plugin akan menggagalkan build; menerapkannya bersyarat
+// membuat build lokal/CI tetap jalan sampai Firebase project disediakan.
+if (rootProject.file("app/google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.yusrilekamahendra.absensi_mahasiswa"
     compileSdk = flutter.compileSdkVersion
@@ -28,6 +35,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     val signingProperties = Properties().apply {
@@ -59,6 +67,11 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
     }
+}
+
+dependencies {
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
 }
 
 flutter {

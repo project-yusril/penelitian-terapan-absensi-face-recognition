@@ -11,8 +11,8 @@ REM    - restart otomatis bila proses mati
 REM  sehingga scheduler efektif "hidup selamanya" tanpa perintah manual.
 REM ===================================================================
 
-set "PHP_BIN=C:\Users\yusri\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe"
-set "PROJECT_DIR=C:\Users\yusri\OneDrive\Documents\project-yusril\absensi_mahasiswa\backend"
+if not defined PHP_BIN set "PHP_BIN=php"
+set "PROJECT_DIR=%~dp0"
 
 cd /d "%PROJECT_DIR%"
 "%PHP_BIN%" artisan schedule:work

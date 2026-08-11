@@ -4,6 +4,13 @@ on:
   pull_request:
   push:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -40,6 +47,8 @@ jobs:
       - run: composer check-platform-reqs
       - run: composer audit
       - run: npm ci --ignore-scripts
+      - run: npm audit --package-lock-only --omit=dev --audit-level=high
+      - run: npm audit --package-lock-only --audit-level=high
       - run: npm run build
       - name: Run migrations and tests
         env:

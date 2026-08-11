@@ -69,6 +69,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
   flutter_lints: ^6.0.0
   # Dipakai langsung oleh camera converter tests untuk membangun CameraImageData.
   camera_platform_interface: ^2.13.0

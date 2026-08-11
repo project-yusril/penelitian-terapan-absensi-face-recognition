@@ -1,0 +1,22 @@
+[Unit]
+Description=Absensi Mahasiswa Laravel queue worker
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/srv/absensi/current/backend
+EnvironmentFile=/etc/absensi/absensi.env
+ExecStart=/usr/bin/php artisan queue:work --sleep=3 --tries=3 --timeout=120
+ExecReload=/usr/bin/php artisan queue:restart
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=130
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/srv/absensi/shared/storage /srv/absensi/current/backend/bootstrap/cache
+
+[Install]
+WantedBy=multi-user.target

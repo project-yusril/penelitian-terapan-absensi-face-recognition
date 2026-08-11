@@ -76,6 +76,7 @@ class AuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
+        $request->user()->update(['fcm_token' => null]);
         $request->user()->currentAccessToken()->delete();
 
         return $this->success(message: 'Logout berhasil');
@@ -174,14 +175,21 @@ class AuthController extends Controller
      */
     public function updateFcmToken(Request $request): JsonResponse
     {
-        $request->validate([
-            'fcm_token' => 'required|string',
+        // L-02: string kosong berarti revoke (dikirim mobile saat logout/sesi
+        // invalid) sehingga backend tidak lagi mengirim push ke perangkat ini.
+        $validated = $request->validate([
+            'fcm_token' => 'present|nullable|string|max:512',
         ]);
+
+        $token = $validated['fcm_token'] ?? null;
+        if ($token === '') {
+            $token = null;
+        }
 
         $request->user()->update([
-            'fcm_token' => $request->fcm_token,
+            'fcm_token' => $token,
         ]);
 
-        return $this->success(message: 'FCM token updated');
+        return $this->success(message: $token === null ? 'FCM token cleared' : 'FCM token updated');
     }
 }

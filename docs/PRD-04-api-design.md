@@ -6,6 +6,9 @@
 > `backend/routes/api.php`. Contoh reset token, private photo, attendance direct,
 > dan offline payload lama di bawah tidak boleh digunakan bila bertentangan
 > dengan dokumen current.
+> Endpoint attendance/enrollment yang tercantum dapat tersedia sebagai route,
+> tetapi production saat ini mengembalikan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`
+> sampai trusted verifier tersedia.
 
 > **D-01 & D-02 (disinkronkan 16 Juni 2026):** Dokumen ini telah diselaraskan
 > dengan implementasi nyata di `backend/routes/api.php`. Base URL, prefix, method,

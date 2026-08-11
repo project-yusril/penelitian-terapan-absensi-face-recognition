@@ -1,0 +1,40 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.keystore
+firebase-credentials*.json
+google-services.json
+GoogleService-Info.plist
+firebase_options.dart
+
+# IDE and operating system
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Dependencies and generated output
+**/node_modules/
+**/vendor/
+**/.dart_tool/
+**/.gradle/
+**/build/
+**/dist/
+**/coverage/
+**/Pods/
+**/DerivedData/
+*.log
+*.sql
+*.sql.gz
+
+# Mutable local archives and test output
+docs.zip
+backend/tests/Load/load_test_results.json

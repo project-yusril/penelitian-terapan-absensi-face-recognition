@@ -6,7 +6,7 @@
 ---
 
 **Versi**: 1.1
-**Tanggal**: 27 Mei 2026 (indeks); catatan canonical diperbarui 9 Agustus 2026
+**Tanggal**: 27 Mei 2026 (indeks); catatan canonical diperbarui 11 Agustus 2026
 **Author**: Yusril Eka Mahendra, M.TI
 **Status**: Maintained requirements index; detail runtime lihat `docs/README.md`
 
@@ -45,7 +45,7 @@
 ## RINGKASAN SISTEM
 
 ### Platform
-- **Mobile App** (Flutter): Alur mahasiswa; Android release aktif, iOS belum terverifikasi
+- **Mobile App** (Flutter): Alur mahasiswa; hanya Android yang termasuk release matrix, iOS tidak didukung
 - **Web Dashboard** (Laravel Inertia 3 + Vue 3 + Vite): Untuk role dashboard
 - **Backend/API** (Laravel 13): REST API, web session, queue, dan scheduler dalam satu aplikasi
 - **Database** (MySQL 8): Penyimpanan data
@@ -61,9 +61,9 @@
 8. Orang Tua
 
 ### Fitur Utama
-1. Absensi berbasis Face Verification (MobileFaceNet) + Geofencing
-2. Active Liveness Detection (anti-spoofing)
-3. Deteksi Mock Location (anti fake GPS)
+1. Target produk: absensi berbasis Face Verification (MobileFaceNet) + Geofencing
+2. Target produk: Active Liveness Detection; belum boleh diklaim tahan presentation attack
+3. Target produk: Deteksi Mock Location; belum boleh diklaim mencegah fake GPS absolut
 4. Akumulasi alpha berbasis menit (presisi tinggi)
 5. Early Warning System SP (SP1/SP2/SP3/DO) otomatis
 6. Generate dokumen SP dengan tanda tangan digital (Kaprodi + Kajur)
@@ -73,7 +73,7 @@
 10. Menu Analisis & Evaluasi Sistem (khusus penelitian)
 11. Mode Pengujian FAR/FRR
 12. Export Excel/PDF
-13. Web Push (VAPID); FCM mobile masih backlog L-02
+13. Web Push (VAPID); lifecycle FCM mobile tersedia sebagai explicit release opt-in (`ENABLE_FCM_PUSH=true` + Firebase config)
 
 ### Aturan SP (Akumulasi Jam Alpha per Semester)
 - AMAN: 0 - 15 jam
@@ -84,18 +84,23 @@
 
 Ambang ini adalah default `prodi_settings` dan sama dengan `AppConstants` mobile. Detail runtime lain lihat [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md).
 
-### Keputusan Canonical Terkini (9 Agustus 2026)
+### Keputusan Canonical Terkini (11 Agustus 2026)
 - Face match: `face_distance <= face_threshold` di mobile, backend, dan analisis (L-08/R-04).
 - Baseline GPS accuracy minimum: 20 m (`prodi_settings.gps_accuracy_minimum`, seeder, `AppConstants`).
 - Analisis geofence: success rate dari `checkin_success`/`checkin_failed`, bukan `geofence_valid` (R-01).
 - Lifecycle master historis: FK `ON DELETE RESTRICT` + arsip soft delete (M-19); invariant domain ditegakkan database (M-20).
 - Session cookie production fail-closed; throttle login/TOTP; revocation sesi lain saat ganti password (M-21).
-- CI gate aktif: Backend CI dan Frontend CI (`flutter analyze --fatal-warnings --fatal-infos`).
+- Attendance/enrollment production fail-closed sampai trusted verifier tersedia (C-04/H-04).
+- Platform mobile release Android-only; iOS tidak didukung (H-17).
+- FCM lifecycle tersedia sebagai explicit opt-in; default release off (L-02).
+- Workflow Backend/Frontend CI sudah didefinisikan; remote enforcement/evidence masih mengikuti L-09.
 
 ### Flow Absensi
 ```
 Permit server → Geofence → Liveness challenge → Face Match → Submit evidence → Consume permit
 ```
+
+Flow tersebut hanya compatibility/non-production sampai trusted verifier tersedia. Production saat ini berhenti di gate `TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`.
 
 ### Timeline
 - Total estimasi: ~22 minggu (5.5 bulan)

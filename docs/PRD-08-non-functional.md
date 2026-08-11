@@ -3,7 +3,9 @@
 > **Status:** target NFR, bukan klaim seluruh kontrol telah diverifikasi. Baseline
 > runtime/deployment current ada di [DEPLOYMENT.md](DEPLOYMENT.md), kontrol dan
 > residual risk ada di [SECURITY.md](SECURITY.md), acceptance ada di
-> [temuan.md](temuan.md).
+> [temuan.md](temuan.md). Auto-deploy, iOS, anti-spoofing, dan angka performa di
+> bawah adalah target, bukan capability current; release current Android-only,
+> biometrik production fail-closed, dan deployment tetap memerlukan gate manual.
 
 ---
 

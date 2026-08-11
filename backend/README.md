@@ -14,7 +14,7 @@ Laravel 13 application yang menyediakan REST API mobile, dashboard Inertia/Vue, 
 
 - PHP 8.3.30 baseline
 - Composer dengan committed `composer.lock`
-- Node.js kompatibel dengan Vite 8
+- Node.js `22.21.1` dan npm `11.6.2` sesuai `.nvmrc`/`package.json`
 - MySQL untuk target production
 
 ## Setup Lokal
@@ -24,11 +24,13 @@ composer install
 Copy-Item .env.example .env
 php artisan key:generate
 php artisan migrate
-npm install
+npm ci
 composer dev
 ```
 
 Isi biometric encryption key, database, dan mail sebelum menguji enrollment/activation. Jangan menggunakan key atau `.env` production di local environment.
+
+`BIOMETRIC_ALLOW_CLIENT_CLAIMS=true` hanya untuk local/testing compatibility. Production selalu menolak permit, attendance, offline sync, enrollment, reference embedding, dan approval biometrik sampai trusted verifier tersedia. Jangan memakai switch tersebut sebagai production workaround.
 
 ## Commands
 
@@ -50,3 +52,4 @@ Scheduler harus hidup permanen agar ALPHA dan auto-close tercatat otomatis. Di W
 - Production tidak menjalankan `UserSeeder`.
 - Biometric key harus terpisah dari `APP_KEY` dan dikelola sebagai secret.
 - Enrollment/leave files private; jangan mengekspos storage path sebagai public URL.
+- Logout, invalidasi sesi, dan deactivation membersihkan FCM token agar perangkat bersama tidak menerima push akun lama.

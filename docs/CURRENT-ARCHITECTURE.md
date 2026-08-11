@@ -1,7 +1,8 @@
 # Arsitektur Saat Ini
 
-**Status:** maintained  
-**Pembaruan:** 9 Agustus 2026
+**Status:** maintained
+**Pembaruan:** 11 Agustus 2026
+**Authority:** executable truth; backlog dan evidence mengikuti [temuan.md](temuan.md)
 
 ## Komponen
 
@@ -37,12 +38,12 @@ Enam role pertama dapat masuk dashboard web. `mahasiswa` dan `orang_tua` bukan p
 1. Client meminta attendance permit untuk user, jadwal, action, `client_uuid`, dan optional `attendance_id`.
 2. Server memeriksa akun/enrollment, enrollment mata kuliah, prodi, jadwal, mata kuliah, geofence, semester, tahun ajaran, hari, tanggal akademik, dan time window.
 3. Permit menyimpan hash token dan terikat ke occurrence/action/resource. Permit memiliki `not_before`, capture expiry, dan sync expiry.
-4. Client melakukan geolocation, liveness, dan face matching, lalu mengirim evidence dengan permit.
+4. Pada compatibility mode non-production, client melakukan geolocation, liveness, dan face matching, lalu mengirim evidence dengan permit.
 5. Server memvalidasi binding dan mengonsumsi permit atomik sebelum membuat/mengubah attendance.
 
-Permit mencegah request tanpa preauthorization, wrong binding, dan replay. Permit belum membuat koordinat, face distance, atau liveness result menjadi bukti yang diverifikasi independen oleh server. Residual risk tersebut tetap tercatat sebagai C-04 di `temuan.md`, dengan analisis lengkap di [THREAT-MODEL-ATTENDANCE.md](THREAT-MODEL-ATTENDANCE.md).
+Permit mencegah request tanpa preauthorization, wrong binding, dan replay. Permit belum membuat koordinat, face distance, atau liveness result menjadi bukti yang diverifikasi independen oleh server. Karena itu production memasang `RequireTrustedBiometricEvidence` dan menolak permit, attendance online/offline, enrollment/re-enrollment, reference embedding, serta approval biometrik dengan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`. Compatibility switch hanya berlaku di environment non-production.
 
-Data attendance bersifat **client-attested**, bukan bukti forensik. Untuk keputusan akademik berkonsekuensi seperti SP dan DO, sediakan jalur sanggah manual.
+Data legacy/test bersifat **client-attested**, bukan bukti forensik. Production tidak menerima data tersebut sampai trusted verifier tersedia. C-04/H-04 dan batas klaim lengkap ada di [THREAT-MODEL-ATTENDANCE.md](THREAT-MODEL-ATTENDANCE.md) dan [temuan.md](temuan.md).
 
 ## Attendance Window
 
@@ -95,6 +96,16 @@ Selain validasi aplikasi, database menegakkan invariant berikut sebagai lapisan 
 - Ambang SP (16/32/38/46 jam) sama antara `prodi_settings` dan `AppConstants` mobile.
 - Analisis geofence menghitung success rate dari `checkin_success` vs `checkin_failed`, bukan `geofence_valid` (R-01). Distribusi jarak tetap dari log geofence.
 
+## Push Notification Lifecycle (FCM)
+
+Lifecycle FCM mobile diimplementasikan di `frontend/lib/core/notifications/push_messaging_service.dart` dan diwire ke `AuthBloc` (L-02).
+
+- Inisialisasi Firebase + handler `onMessage`/`onBackgroundMessage`/`onMessageOpenedApp`, `requestPermission`, `getToken`, dan `onTokenRefresh` (selalu didorong ulang ke backend).
+- Register token setelah login/`CheckAuthStatus` sukses; revoke (`deleteToken` + `POST /fcm-token` kosong) saat logout dan `SessionInvalidated`. Revoke pada perangkat bersama mencegah push milik akun sebelumnya (C-06).
+- **Explicit opt-in:** release default memakai `ENABLE_FCM_PUSH=false`, sehingga tidak mencoba atau mengklaim push. Bila diaktifkan, workflow mewajibkan dan menginjeksi `google-services.json` dari protected secret; konfigurasi hilang membuat build gagal.
+- Backend siap: `POST /fcm-token` (set/clear), `FcmService` (HTTP v1), dan `NotificationService::pushFcm`. Pengiriman push nyata butuh Firebase project + `FIREBASE_CREDENTIALS_PATH`.
+- Lifecycle dan kontrak release L-02 selesai; smoke test push nyata tetap menjadi release checklist environment-specific, bukan alasan aplikasi mengklaim FCM aktif tanpa konfigurasi.
+
 ## Biometrik dan Private Files
 
 - Face embedding dienkripsi AES-256-GCM dengan biometric key terpisah dari `APP_KEY`.
@@ -107,7 +118,15 @@ Selain validasi aplikasi, database menegakkan invariant berikut sebagai lapisan 
 | Platform | Status |
 |---|---|
 | Android | Target release aktif; signing release melalui CI/secret manager |
-| iOS | Code path dasar tersedia, termasuk permission, BGRA, device metadata, dan Podfile; build macOS/signing/device matrix belum terverifikasi |
+| iOS | Tidak didukung dan dikeluarkan dari release matrix; folder platform hanya scaffold pengembangan |
 | Web dashboard | Target aktif melalui backend Inertia |
 
-Jangan menyatakan iOS production-ready sampai H-17 ditutup dengan build dan physical-device evidence.
+Jangan menerbitkan artifact iOS. Membuka dukungan iOS memerlukan release decision, macOS CI/signing, capability, dan physical-iPhone evidence baru.
+
+## Release Readiness
+
+- Workflow backend/frontend CI sudah didefinisikan, tetapi remote green run, branch protection, required checks, dan protected environment belum terbukti; lihat L-09.
+- Checkout navigation H-13 selesai.
+- Camera converter harness tersedia, tetapi H-16 menunggu Firebase Test Lab physical Android low/mid/high evidence.
+- FCM L-02 selesai sebagai explicit opt-in; default release tetap off.
+- Sistem belum production-ready selama C-04/H-04 dan evidence release L-09/H-16 masih terbuka.

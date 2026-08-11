@@ -128,11 +128,11 @@ Route::middleware(['auth', 'user.active', 'web.role:super_admin,ketua_jurusan,ad
         Route::middleware('web.role:super_admin,kaprodi')
             ->group(function () {
                 Route::get('/enrollments', [ApprovalController::class, 'enrollments'])->name('enrollments.index');
-                Route::put('/enrollments/{user}/approve', [ApprovalController::class, 'approveEnrollment'])->name('enrollments.approve');
+                Route::put('/enrollments/{user}/approve', [ApprovalController::class, 'approveEnrollment'])->middleware('biometric.trusted')->name('enrollments.approve');
                 Route::put('/enrollments/{user}/reject', [ApprovalController::class, 'rejectEnrollment'])->name('enrollments.reject');
 
                 Route::get('/re-enrollments', [ApprovalController::class, 'reEnrollments'])->name('re-enrollments.index');
-                Route::put('/re-enrollments/{reEnrollment}/approve', [ApprovalController::class, 'approveReEnrollment'])->name('re-enrollments.approve');
+                Route::put('/re-enrollments/{reEnrollment}/approve', [ApprovalController::class, 'approveReEnrollment'])->middleware('biometric.trusted')->name('re-enrollments.approve');
                 Route::put('/re-enrollments/{reEnrollment}/reject', [ApprovalController::class, 'rejectReEnrollment'])->name('re-enrollments.reject');
 
                 Route::get('/leave-requests', [ApprovalController::class, 'leaveRequests'])->name('leave-requests.index');

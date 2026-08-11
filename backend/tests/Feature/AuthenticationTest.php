@@ -115,6 +115,7 @@ class AuthenticationTest extends TestCase
             'password' => Hash::make('password123'),
             'status' => 'aktif',
             'enrollment_status' => 'belum',
+            'fcm_token' => 'device-token-to-revoke',
         ]);
         $user->roles()->attach(Role::where('name', 'mahasiswa')->first()->id);
         $token = $user->createToken('test')->plainTextToken;
@@ -122,6 +123,7 @@ class AuthenticationTest extends TestCase
         $response = $this->withHeader('Authorization', "Bearer {$token}")
             ->postJson('/api/auth/logout');
         $response->assertStatus(200);
+        $this->assertNull($user->fresh()->fcm_token);
     }
 
     public function test_change_password(): void

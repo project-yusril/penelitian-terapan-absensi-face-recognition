@@ -17,6 +17,7 @@ class UserSessionService
 
     public function revoke(User $user): void
     {
+        $user->forceFill(['fcm_token' => null])->save();
         $user->tokens()->delete();
         DB::table('sessions')->where('user_id', $user->id)->delete();
     }

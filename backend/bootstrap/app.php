@@ -7,6 +7,7 @@ use App\Http\Middleware\EnsureEnrollmentApproved;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\EnsureUserRole;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RequireTrustedBiometricEvidence;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
@@ -42,6 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'web.role' => EnsureUserRole::class,
             'enrollment.approved' => EnsureEnrollmentApproved::class,
             'user.active' => EnsureUserIsActive::class,
+            'biometric.trusted' => RequireTrustedBiometricEvidence::class,
             '2fa' => EnforceTwoFactor::class,
         ]);
 

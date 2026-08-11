@@ -1,6 +1,11 @@
 {
     "$schema": "https://www.schemastore.org/package.json",
     "private": true,
+    "packageManager": "npm@11.6.2",
+    "engines": {
+        "node": ">=22 <23",
+        "npm": ">=10 <12"
+    },
     "type": "module",
     "scripts": {
         "build": "vite build",

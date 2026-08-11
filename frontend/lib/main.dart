@@ -22,6 +22,7 @@ import 'core/offline/queue_key_store.dart';
 import 'core/config/app_config.dart';
 import 'core/security/secure_session_store.dart';
 import 'core/security/session_coordinator.dart';
+import 'core/notifications/push_messaging_service.dart';
 import 'core/time/server_time_anchor.dart';
 import 'features/attendance/data/services/geolocator_attendance_position_provider.dart';
 import 'features/attendance/domain/services/attendance_location_service.dart';
@@ -57,6 +58,25 @@ import 'features/history/presentation/pages/history_page.dart';
 import 'features/shell/presentation/pages/main_shell.dart';
 
 final AppLogger _bootLog = AppLogger.tag('Boot');
+
+/// Bangun [AttendancePage] dari sebuah jadwal, memetakan argumen route ke
+/// mode check-in/check-out yang benar.
+///
+/// H-13: diekstrak agar kontrak navigasi (mode checkout + `attendanceId`) dapat
+/// diuji tanpa membangun seluruh state halaman yang butuh kamera/GPS.
+/// `isCheckout` true bila jadwal sudah check-in namun belum check-out.
+AttendancePage buildAttendancePageFor(JadwalHariIni jadwal) {
+  return AttendancePage(
+    jadwalId: jadwal.jadwalId,
+    mataKuliahId: jadwal.mataKuliahId,
+    mataKuliahName: jadwal.mataKuliah,
+    geofenceLat: jadwal.geofenceLat,
+    geofenceLon: jadwal.geofenceLon,
+    geofenceRadius: jadwal.geofenceRadius,
+    attendanceId: jadwal.attendanceId,
+    isCheckout: jadwal.isCheckedIn && !jadwal.isCheckedOut,
+  );
+}
 
 /// Pasang penangkap error tingkat aplikasi.
 ///
@@ -156,6 +176,15 @@ void main() {
         captureCleanupRegistry.retryCleanup,
       );
 
+      // L-02: lifecycle FCM. initialize() fail-safe — bila Firebase belum
+      // dikonfigurasi (google-services.json / firebase_options.dart belum ada),
+      // push menjadi no-op dan aplikasi tetap boot normal.
+      final pushMessaging = PushMessagingService();
+      await _bootLog.timed(
+        'PushMessagingService.initialize',
+        pushMessaging.initialize,
+      );
+
       _bootLog.info('inisialisasi selesai, menjalankan UI');
 
       runApp(
@@ -166,6 +195,7 @@ void main() {
           secureSession: secureSession,
           sessionCoordinator: sessionCoordinator,
           captureCleanupRegistry: captureCleanupRegistry,
+          pushMessaging: pushMessaging,
         ),
       );
     },
@@ -186,6 +216,7 @@ class MyApp extends StatefulWidget {
   final SecureSessionStore secureSession;
   final SessionCoordinator sessionCoordinator;
   final TemporaryCaptureCleanupRegistry captureCleanupRegistry;
+  final PushMessagingService pushMessaging;
 
   const MyApp({
     super.key,
@@ -195,6 +226,7 @@ class MyApp extends StatefulWidget {
     required this.secureSession,
     required this.sessionCoordinator,
     required this.captureCleanupRegistry,
+    required this.pushMessaging,
   });
 
   @override
@@ -304,6 +336,7 @@ class _MyAppState extends State<MyApp> {
               offlineQueueService: widget.offlineQueueService,
               connectivityService: connectivityService,
               sessionCoordinator: widget.sessionCoordinator,
+              pushMessaging: widget.pushMessaging,
             )..add(CheckAuthStatus()),
           ),
           BlocProvider<HomeBloc>(create: (_) => HomeBloc(homeRepository)),
@@ -350,16 +383,7 @@ class _MyAppState extends State<MyApp> {
                 final jadwal = settings.arguments as JadwalHariIni;
                 return MaterialPageRoute(
                   builder: (_) => _ProtectedRoute(
-                    child: AttendancePage(
-                      jadwalId: jadwal.jadwalId,
-                      mataKuliahId: jadwal.mataKuliahId,
-                      mataKuliahName: jadwal.mataKuliah,
-                      geofenceLat: jadwal.geofenceLat,
-                      geofenceLon: jadwal.geofenceLon,
-                      geofenceRadius: jadwal.geofenceRadius,
-                      attendanceId: jadwal.attendanceId,
-                      isCheckout: jadwal.isCheckedIn && !jadwal.isCheckedOut,
-                    ),
+                    child: buildAttendancePageFor(jadwal),
                   ),
                 );
               }
