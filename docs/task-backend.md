@@ -297,11 +297,11 @@
 
 ### Task 4.5: Alpha Penuh (Tidak Hadir) Scheduler
 - [x] ✅ Buat command: `php artisan attendance:mark-absent`
-- [x] ✅ Logic: di akhir hari, cari mahasiswa yang terdaftar di MK tapi tidak punya attendance record
+- [x] ✅ Logic: begitu jadwal selesai (jam_selesai + toleransi_pulang lewat), cari mahasiswa yang terdaftar di MK tapi tidak punya attendance record
 - [x] ✅ Exclude yang punya leave_request approved
 - [x] ✅ Create attendance record: status = ALPHA, alpha_menit = durasi MK
-- [x] ✅ Register scheduler (setiap hari jam 22:00)
-- [x] ✅ Test: simulasi mark absent
+- [x] ✅ Register di `routes/console.php` (setiap menit; hanya jadwal yang windownya sudah lewat) — sebelumnya harian 22:00, diubah agar ALPHA muncul segera setelah kelas selesai
+- [x] ✅ Test: simulasi mark absent (idempotent, aman dijalankan berulang)
 
 ### Task 4.6: Alpha Accumulation Service
 - [x] ✅ Buat `AlphaAccumulationService`

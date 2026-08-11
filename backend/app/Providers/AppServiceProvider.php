@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Listeners\SendNotificationListener;
+use App\Models\User;
+use App\Observers\UserObserver;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
@@ -63,6 +65,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Event::subscribe(SendNotificationListener::class);
+        User::observe(UserObserver::class);
         $this->configureRateLimiting();
     }
 

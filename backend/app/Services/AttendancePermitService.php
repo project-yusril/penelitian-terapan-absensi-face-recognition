@@ -22,12 +22,14 @@ class AttendancePermitService
         $jadwal = Jadwal::with(['mataKuliah.semester.tahunAjaran', 'geofence'])->findOrFail($jadwalId);
         $today = Carbon::today();
         $setting = $this->assertEligible($user, $jadwal, $today, false);
-        abort_unless($jadwal->hari === Carbon::now()->locale('id')->isoFormat('dddd'), 422);
+        abort_unless($jadwal->hari === Carbon::now()->locale('id')->isoFormat('dddd'), 422,
+            "Jadwal ini hari {$jadwal->hari}, bukan hari ini.");
 
         $windows = $this->policy->windows($jadwal, $today, $setting);
         $notBefore = $windows['not_before'];
         $captureExpires = $windows['expires_at'];
-        abort_unless(now()->between($notBefore, $captureExpires), 422);
+        abort_unless(now()->between($notBefore, $captureExpires), 422,
+            'Belum masuk waktu absensi. Absensi dibuka '.$notBefore->format('H:i').' sampai '.$captureExpires->format('H:i').'.');
 
         [$permit, $token] = DB::transaction(function () use ($user, $jadwal, $today, $action, $clientUuid, $attendanceId, $notBefore, $captureExpires, $setting): array {
             User::whereKey($user->id)->lockForUpdate()->firstOrFail();
@@ -102,22 +104,33 @@ class AttendancePermitService
     {
         $permit = AttendancePermit::where('token_hash', hash('sha256', $token))->first();
         abort_unless($permit, 422, 'Permit absensi tidak valid');
+        // Pesan sengaja tetap umum: ketidakcocokan pengikatan permit adalah
+        // sinyal penyalahgunaan, jadi tidak perlu memberi tahu bagian mana
+        // yang tidak cocok.
         abort_unless($permit->user_id === $user->id && $permit->action === $action
             && $permit->client_uuid === $clientUuid && $permit->jadwal_id === $jadwalId
-            && $permit->attendance_id === $attendanceId, 403);
+            && $permit->attendance_id === $attendanceId, 403,
+            'Permit absensi tidak cocok dengan permintaan ini.');
 
         if ($permit->consumed_at) {
             return $permit;
         }
 
-        abort_unless($capturedAt->between($permit->not_before, $permit->capture_expires_at), 422);
-        abort_if($capturedAt->gt(now()->addMinutes(2)), 422);
-        abort_if($offline && now()->gt($permit->sync_expires_at), 422);
+        abort_unless($capturedAt->between($permit->not_before, $permit->capture_expires_at), 422,
+            'Foto diambil di luar rentang waktu permit ('
+            .$permit->not_before->format('H:i').' – '.$permit->capture_expires_at->format('H:i').').');
+        abort_if($capturedAt->gt(now()->addMinutes(2)), 422,
+            'Waktu pengambilan foto lebih maju dari waktu server. Periksa jam perangkat Anda.');
+        abort_if($offline && now()->gt($permit->sync_expires_at), 422,
+            'Batas waktu sinkronisasi absensi offline sudah lewat ('
+            .$permit->sync_expires_at->format('d/m/Y H:i').').');
 
         $jadwal = Jadwal::with(['mataKuliah.semester.tahunAjaran', 'geofence'])->findOrFail($permit->jadwal_id);
         $this->assertEligible($user, $jadwal, $capturedAt, $offline);
-        abort_unless($permit->occurrence_date->isSameDay($capturedAt), 422);
-        abort_unless($jadwal->hari === $capturedAt->locale('id')->isoFormat('dddd'), 422);
+        abort_unless($permit->occurrence_date->isSameDay($capturedAt), 422,
+            'Permit absensi diterbitkan untuk tanggal '.$permit->occurrence_date->format('d/m/Y').'.');
+        abort_unless($jadwal->hari === $capturedAt->locale('id')->isoFormat('dddd'), 422,
+            "Jadwal ini hari {$jadwal->hari}, bukan hari pengambilan foto.");
 
         return $permit;
     }
@@ -151,22 +164,53 @@ class AttendancePermitService
             ->first();
     }
 
+    /**
+     * Setiap penolakan di sini WAJIB membawa pesan.
+     *
+     * Sebelumnya semua cek memakai `abort_unless(..., 422)` tanpa argumen
+     * ketiga, sehingga Laravel mengirim 422 dengan `message` kosong. Akibatnya
+     * enam sebab yang sangat berbeda — semester kedaluwarsa, geofence
+     * dimatikan, mata kuliah nonaktif, jadwal beda hari, di luar jam — tampil
+     * identik di aplikasi sebagai "(HTTP 422)" tanpa keterangan apa pun.
+     * Mahasiswa tidak tahu harus berbuat apa, dan admin tidak tahu apa yang
+     * perlu dibetulkan.
+     *
+     * Pesan sengaja menyebut tanggal/jam konkret supaya bisa langsung
+     * ditindaklanjuti tanpa membuka database.
+     */
     private function assertEligible(User $user, Jadwal $jadwal, Carbon $occurrence, bool $offline): ?ProdiSetting
     {
-        abort_unless($user->status === 'aktif' && $user->enrollment_status === 'approved', 403);
+        abort_unless($user->status === 'aktif' && $user->enrollment_status === 'approved', 403,
+            'Akun belum aktif atau enrollment wajah belum disetujui.');
         abort_unless($jadwal->status === 'aktif' && $jadwal->mataKuliah?->status === 'aktif'
-            && $jadwal->geofence?->status === 'aktif', 422);
-        abort_unless($jadwal->mataKuliah->prodi_id === $user->prodi_id, 403);
-        abort_unless($user->mataKuliahs()->where('mata_kuliah_id', $jadwal->mata_kuliah_id)->exists(), 403);
+            && $jadwal->geofence?->status === 'aktif', 422,
+            'Jadwal, mata kuliah, atau lokasi geofence sedang nonaktif.');
+        abort_unless($jadwal->mataKuliah->prodi_id === $user->prodi_id, 403,
+            'Mata kuliah ini bukan milik program studi Anda.');
+        abort_unless($user->mataKuliahs()->where('mata_kuliah_id', $jadwal->mata_kuliah_id)->exists(), 403,
+            'Mata kuliah ini tidak ada di KRS Anda.');
+
         $semester = $jadwal->mataKuliah->semester;
         $tahunAjaran = $semester?->tahunAjaran;
-        abort_unless($semester?->status === 'aktif'
-            && $occurrence->betweenIncluded($semester->tanggal_mulai->startOfDay(), $semester->tanggal_selesai->endOfDay()), 422);
-        abort_unless($tahunAjaran?->status === 'aktif'
-            && $occurrence->betweenIncluded($tahunAjaran->tanggal_mulai->startOfDay(), $tahunAjaran->tanggal_selesai->endOfDay()), 422);
+
+        abort_unless($semester !== null, 422, 'Mata kuliah ini belum terhubung ke semester mana pun.');
+        abort_unless($semester->status === 'aktif', 422,
+            "Semester {$semester->nama} berstatus {$semester->status}, bukan aktif.");
+        abort_unless($occurrence->betweenIncluded($semester->tanggal_mulai->startOfDay(), $semester->tanggal_selesai->endOfDay()), 422,
+            "Tanggal {$occurrence->format('d/m/Y')} di luar periode semester {$semester->nama} "
+            ."({$semester->tanggal_mulai->format('d/m/Y')} – {$semester->tanggal_selesai->format('d/m/Y')}).");
+
+        abort_unless($tahunAjaran !== null, 422, 'Semester ini belum terhubung ke tahun ajaran mana pun.');
+        abort_unless($tahunAjaran->status === 'aktif', 422,
+            "Tahun ajaran {$tahunAjaran->nama} berstatus {$tahunAjaran->status}, bukan aktif.");
+        abort_unless($occurrence->betweenIncluded($tahunAjaran->tanggal_mulai->startOfDay(), $tahunAjaran->tanggal_selesai->endOfDay()), 422,
+            "Tanggal {$occurrence->format('d/m/Y')} di luar periode tahun ajaran {$tahunAjaran->nama} "
+            ."({$tahunAjaran->tanggal_mulai->format('d/m/Y')} – {$tahunAjaran->tanggal_selesai->format('d/m/Y')}).");
+
         $setting = ProdiSetting::where('prodi_id', $user->prodi_id)->first();
         if ($offline) {
-            abort_unless((bool) ($setting?->allow_offline_attendance ?? false), 403);
+            abort_unless((bool) ($setting?->allow_offline_attendance ?? false), 403,
+                'Absensi offline tidak diizinkan untuk program studi Anda.');
         }
 
         return $setting;

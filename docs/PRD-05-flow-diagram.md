@@ -210,12 +210,14 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│    SCHEDULER: Setiap hari setelah semua jadwal selesai (misal 22:00) │
+│  SCHEDULER: Setiap menit, hanya proses jadwal yang jam_selesai +     │
+│             toleransi_pulang sudah lewat (ALPHA muncul segera        │
+│             setelah kelas selesai, bukan menunggu akhir hari)        │
 └─────────────────────┬───────────────────────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│ Query: Semua mahasiswa yang terdaftar di MK hari ini                 │
+│ Query: Semua mahasiswa yang terdaftar di MK pada jadwal tsb          │
 │        TAPI tidak punya record attendance untuk hari ini             │
 │        DAN tidak punya leave_request approved untuk hari ini         │
 └─────────────────────┬───────────────────────────────────────────────┘

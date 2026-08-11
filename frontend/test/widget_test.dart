@@ -44,4 +44,88 @@ void main() {
     expect(schedule.canOpenAttendance, isTrue);
     expect(schedule.attendanceId, 30);
   });
+
+  group('status jadwal', () {
+    /// Jadwal 08:00–12:30 dilihat pada pukul 14:30 — jamnya sudah lewat.
+    JadwalHariIni buildLewat({String? status}) => JadwalHariIni(
+      jadwalId: 4,
+      mataKuliahId: 1,
+      mataKuliah: 'Pemrograman Mobile',
+      dosen: 'Dosen',
+      hari: 'Selasa',
+      jamMulai: '08:00',
+      jamSelesai: '12:30',
+      ruangan: 'Lab Komputer 4',
+      geofenceLat: 0,
+      geofenceLon: 0,
+      geofenceRadius: 100,
+      attendanceStatus: status,
+      notBefore: DateTime.utc(2026, 8, 11, 7, 45),
+      expiresAt: DateTime.utc(2026, 8, 11, 12, 45),
+      hasTimeAnchor: true,
+      anchoredNow: () => DateTime.utc(2026, 8, 11, 14, 30),
+    );
+
+    test('jadwal yang jamnya lewat ditandai terlewat, bukan belum dimulai', () {
+      final jadwal = buildLewat();
+
+      expect(jadwal.hasEnded, isTrue);
+      expect(jadwal.isOngoing, isFalse);
+      expect(jadwal.isMissed, isTrue);
+      expect(jadwal.isCheckedIn, isFalse);
+    });
+
+    test('status alpha tidak dianggap check-in', () {
+      // Regresi: isCheckedIn dulu bernilai true untuk SEMUA status selain
+      // 'belum', sehingga jadwal yang bolos tampil sebagai "Check-in".
+      final jadwal = buildLewat(status: 'alpha');
+
+      expect(jadwal.isCheckedIn, isFalse);
+      expect(jadwal.isMissed, isTrue);
+      expect(jadwal.canOpenAttendance, isFalse);
+    });
+
+    test('izin dan sakit bukan check-in dan bukan alpha', () {
+      for (final status in ['izin', 'sakit']) {
+        final jadwal = buildLewat(status: status);
+        expect(jadwal.isCheckedIn, isFalse, reason: status);
+        expect(jadwal.isExcused, isTrue, reason: status);
+        expect(jadwal.isMissed, isFalse, reason: status);
+      }
+    });
+
+    test('hadir_terlambat dan pending tetap dihitung check-in', () {
+      for (final status in ['hadir', 'hadir_terlambat', 'pending']) {
+        expect(
+          buildLewat(status: status).isCheckedIn,
+          isTrue,
+          reason: status,
+        );
+      }
+    });
+
+    test('jadwal yang belum masuk jendela tidak ditandai terlewat', () {
+      final jadwal = JadwalHariIni(
+        jadwalId: 5,
+        mataKuliahId: 1,
+        mataKuliah: 'Pemrograman Mobile',
+        dosen: 'Dosen',
+        hari: 'Selasa',
+        jamMulai: '16:00',
+        jamSelesai: '18:00',
+        ruangan: 'Lab',
+        geofenceLat: 0,
+        geofenceLon: 0,
+        geofenceRadius: 100,
+        notBefore: DateTime.utc(2026, 8, 11, 15, 45),
+        expiresAt: DateTime.utc(2026, 8, 11, 18, 15),
+        hasTimeAnchor: true,
+        anchoredNow: () => DateTime.utc(2026, 8, 11, 14, 30),
+      );
+
+      expect(jadwal.hasEnded, isFalse);
+      expect(jadwal.isMissed, isFalse);
+      expect(jadwal.isOngoing, isFalse);
+    });
+  });
 }

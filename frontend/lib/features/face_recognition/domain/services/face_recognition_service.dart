@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
+import '../../../../core/logging/app_logger.dart';
 import 'camera_image_converter.dart';
 import 'camera_frame_snapshot.dart';
 
@@ -20,19 +21,59 @@ class FaceRecognitionService {
   Interpreter? _interpreter;
   bool _isInitialized = false;
 
+  static final AppLogger _log = AppLogger.tag('FaceService');
+
   /// MobileFaceNet menghasilkan embedding 192-dimensi (PRD-01).
   static const int embeddingSize = 192;
   static const int inputSize = 112;
 
+  static const String modelAsset = 'assets/mobile_face_net.tflite';
+
   Future<void> initialize() async {
-    if (_isInitialized) return;
+    if (_isInitialized) {
+      _log.trace('initialize dilewati, interpreter sudah siap');
+      return;
+    }
     try {
-      _interpreter = await Interpreter.fromAsset(
-        'assets/mobile_face_net.tflite',
-      );
+      _log.info('memuat model TFLite', data: {'asset': modelAsset});
+      final interpreter = await Interpreter.fromAsset(modelAsset);
+      _interpreter = interpreter;
       _isInitialized = true;
-    } catch (e) {
-      debugPrint('Failed to load MobileFaceNet model: $e');
+
+      // Bentuk tensor dicatat karena inilah yang membedakan "model gagal
+      // dimuat" dari "model termuat tapi bukan MobileFaceNet yang benar".
+      // Ketidakcocokan di sini muncul belakangan sebagai crash saat run().
+      final inputTensor = interpreter.getInputTensor(0);
+      final outputTensor = interpreter.getOutputTensor(0);
+      _log.info(
+        'model TFLite siap',
+        data: {
+          'inputShape': inputTensor.shape.toString(),
+          'inputType': inputTensor.type.toString(),
+          'outputShape': outputTensor.shape.toString(),
+          'outputType': outputTensor.type.toString(),
+          'diharapkanInput': '[1, $inputSize, $inputSize, 3]',
+          'diharapkanOutput': '[1, $embeddingSize]',
+        },
+      );
+      if (outputTensor.shape.last != embeddingSize) {
+        _log.warn(
+          'dimensi output model tidak sama dengan embeddingSize — '
+          'embedding akan ditolak backend (validasi size:192)',
+          data: {
+            'outputTerakhir': outputTensor.shape.last,
+            'embeddingSize': embeddingSize,
+          },
+        );
+      }
+    } catch (e, stack) {
+      _log.error(
+        'gagal memuat model MobileFaceNet — periksa asset terdaftar di '
+        'pubspec.yaml dan nama filenya tepat',
+        data: {'asset': modelAsset},
+        error: e,
+        stackTrace: stack,
+      );
       rethrow;
     }
   }
@@ -46,8 +87,20 @@ class FaceRecognitionService {
 
     final decoded = img.decodeImage(imageBytes);
     if (decoded == null) {
+      _log.error(
+        'gagal decode bytes gambar — bukan JPEG/PNG valid atau file kosong',
+        data: {'bytes': imageBytes.length},
+      );
       throw Exception('Failed to decode image bytes');
     }
+    _log.debug(
+      'bytes gambar ter-decode',
+      data: {
+        'bytes': imageBytes.length,
+        'lebar': decoded.width,
+        'tinggi': decoded.height,
+      },
+    );
     return _runInference(decoded, face);
   }
 
@@ -74,25 +127,74 @@ class FaceRecognitionService {
   }
 
   List<double> _runInference(img.Image image, Face face) {
+    final stopwatch = Stopwatch()..start();
     final box = face.boundingBox;
     final x = box.left.toInt().clamp(0, image.width - 1);
     final y = box.top.toInt().clamp(0, image.height - 1);
     final w = box.width.toInt().clamp(1, image.width - x);
     final h = box.height.toInt().clamp(1, image.height - y);
 
-    final cropped = img.copyCrop(image, x: x, y: y, width: w, height: h);
-    final resized = img.copyResize(
-      cropped,
-      width: inputSize,
-      height: inputSize,
+    // Kotak wajah dicatat karena clamp di atas bisa diam-diam mengecilkan crop
+    // sampai beberapa piksel kalau koordinat ML Kit tidak sejajar dengan
+    // orientasi gambar — embedding tetap terbentuk tapi isinya sampah.
+    _log.trace(
+      'crop wajah',
+      data: {
+        'gambar': '${image.width}x${image.height}',
+        'boxAsli':
+            '${box.left.toInt()},${box.top.toInt()} '
+            '${box.width.toInt()}x${box.height.toInt()}',
+        'cropDipakai': '$x,$y ${w}x$h',
+      },
     );
+    if (w < 24 || h < 24) {
+      _log.warn(
+        'area crop wajah sangat kecil — embedding kemungkinan tidak andal',
+        data: {'lebar': w, 'tinggi': h},
+      );
+    }
 
-    final input = _imageToFloatList(resized);
-    final output = List.filled(embeddingSize, 0.0).reshape([1, embeddingSize]);
-    _interpreter!.run(input.reshape([1, inputSize, inputSize, 3]), output);
-    // M-07: L2-normalize agar euclidean distance berada di rentang wajar (~0..2)
-    // dan konsisten dengan threshold yang dipakai backend/evaluasi.
-    return _l2Normalize(output[0].cast<double>());
+    try {
+      final cropped = img.copyCrop(image, x: x, y: y, width: w, height: h);
+      final resized = img.copyResize(
+        cropped,
+        width: inputSize,
+        height: inputSize,
+      );
+
+      final input = _imageToFloatList(resized);
+      final output = List.filled(
+        embeddingSize,
+        0.0,
+      ).reshape([1, embeddingSize]);
+      _interpreter!.run(input.reshape([1, inputSize, inputSize, 3]), output);
+      // M-07: L2-normalize agar euclidean distance berada di rentang wajar (~0..2)
+      // dan konsisten dengan threshold yang dipakai backend/evaluasi.
+      final embedding = _l2Normalize(output[0].cast<double>());
+      stopwatch.stop();
+      _log.debug(
+        'embedding terbentuk',
+        data: {
+          'ms': stopwatch.elapsedMilliseconds,
+          // describeVector meringkas: panjang + statistik, bukan nilainya.
+          'embedding': describeVector(embedding),
+        },
+      );
+      return embedding;
+    } catch (e, stack) {
+      stopwatch.stop();
+      _log.error(
+        'inferensi TFLite gagal',
+        data: {
+          'ms': stopwatch.elapsedMilliseconds,
+          'sudahInisialisasi': _isInitialized,
+          'adaInterpreter': _interpreter != null,
+        },
+        error: e,
+        stackTrace: stack,
+      );
+      rethrow;
+    }
   }
 
   /// M-07: normalisasi L2 sehingga ||v|| = 1.

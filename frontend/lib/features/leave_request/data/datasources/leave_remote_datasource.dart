@@ -3,8 +3,17 @@ import '../../../../core/constants/api_constants.dart';
 import '../../../../core/network/api_client.dart';
 import '../models/leave_model.dart';
 
+/// Mata kuliah yang diikuti mahasiswa, untuk pilihan saat mengajukan izin.
+class EnrolledCourse {
+  final int id;
+  final String nama;
+
+  const EnrolledCourse({required this.id, required this.nama});
+}
+
 abstract class LeaveRemoteDataSource {
   Future<List<LeaveRequestModel>> getMyLeaves();
+  Future<List<EnrolledCourse>> getEnrolledCourses();
   Future<LeaveRequestModel> submitLeave({
     required String jenis,
     required int? mataKuliahId,
@@ -30,6 +39,37 @@ class LeaveRemoteDataSourceImpl implements LeaveRemoteDataSource {
             (json) => LeaveRequestModel.fromJson(json as Map<String, dynamic>),
           )
           .toList();
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<EnrolledCourse>> getEnrolledCourses() async {
+    try {
+      // GET /mahasiswa/jadwal → { data: { "Senin": [ {mata_kuliah:{id,nama}}, ... ], ... } }
+      // Kumpulkan mata kuliah unik dari seluruh jadwal yang diikuti mahasiswa.
+      final response = await _apiClient.get(ApiConstants.jadwalEndpoint);
+      final data = response.data['data'];
+      final byId = <int, EnrolledCourse>{};
+      if (data is Map) {
+        for (final entry in data.values) {
+          if (entry is! List) continue;
+          for (final jadwal in entry) {
+            final mk = (jadwal as Map)['mata_kuliah'];
+            if (mk is! Map) continue;
+            final id = mk['id'];
+            if (id is! int) continue;
+            byId[id] = EnrolledCourse(
+              id: id,
+              nama: mk['nama']?.toString() ?? 'MK $id',
+            );
+          }
+        }
+      }
+      final list = byId.values.toList()
+        ..sort((a, b) => a.nama.compareTo(b.nama));
+      return list;
     } catch (e) {
       rethrow;
     }

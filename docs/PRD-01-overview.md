@@ -343,7 +343,7 @@ Super Admin (Owner/Peneliti)
 - MySQL: same server atau managed database
 - SSL: Let's Encrypt (auto-renew)
 - Queue Worker: Supervisor
-- Cron: Laravel Scheduler (setiap menit)
+- Cron: Laravel Scheduler (setiap menit) — Linux via `schedule:run`; Windows dev/on-prem via Windows Task Scheduler yang menjalankan `schedule:work` (lihat DEPLOYMENT.md)
 
 ### 5.3 Domain Structure
 - API: `api.absensi.domain.com`

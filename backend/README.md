@@ -39,6 +39,9 @@ Isi biometric encryption key, database, dan mail sebelum menguji enrollment/acti
 | `npm run build` | Build asset Inertia/Vue production |
 | `php artisan migrate` | Menjalankan migration authoritative |
 | `php artisan schedule:list` | Memeriksa scheduled tasks |
+| `php artisan schedule:work` | Menjalankan scheduler long-running (memicu `attendance:auto-close` & `attendance:mark-absent` tiap menit, reminder, outbox, backup) |
+
+Scheduler harus hidup permanen agar ALPHA dan auto-close tercatat otomatis. Di Windows dev/on-prem, `schedule:work` dijalankan lewat Windows Task Scheduler menggunakan wrapper `schedule-worker.bat` (lihat `docs/DEPLOYMENT.md`). Di Linux gunakan cron `schedule:run` atau `schedule:work` di bawah Supervisor/systemd.
 
 ## Security Notes
 

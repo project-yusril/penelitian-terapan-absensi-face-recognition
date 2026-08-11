@@ -1,10 +1,11 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import '../constants/api_constants.dart';
 import '../config/app_config.dart';
+import '../logging/app_logger.dart';
 import '../security/session_coordinator.dart';
 import '../errors/exceptions.dart';
 import 'interceptors/auth_interceptor.dart';
+import 'interceptors/logging_interceptor.dart';
 
 class ApiClient {
   late final Dio _dio;
@@ -31,17 +32,20 @@ class ApiClient {
 
     _dio.interceptors.add(AuthInterceptor(_session, _config.apiBaseUri));
     // Request/response bodies and headers may contain credentials or biometrics.
-    _dio.interceptors.add(
-      LogInterceptor(
-        request: kDebugMode,
-        requestHeader: false,
-        requestBody: false,
-        responseHeader: false,
-        responseBody: false,
-        logPrint: (obj) => debugPrint('[API] $obj'),
-      ),
+    // LoggingInterceptor mencetak metode/status/durasi selalu, dan isi respons
+    // hanya saat error — setelah dilewatkan redaksi field sensitif.
+    _dio.interceptors.add(LoggingInterceptor());
+
+    _log.info(
+      'ApiClient siap',
+      data: {
+        'baseUrl': _config.apiBaseUri.toString(),
+        'connectTimeoutMs': ApiConstants.connectTimeoutMs,
+      },
     );
   }
+
+  static final AppLogger _log = AppLogger.tag('ApiClient');
 
   Dio get dio => _dio;
 
@@ -93,6 +97,14 @@ class ApiClient {
   }
 
   Exception _handleError(DioException e) {
+    _log.warn(
+      'memetakan DioException → exception domain',
+      data: {
+        'tipeDio': e.type.name,
+        'status': e.response?.statusCode,
+        'path': e.requestOptions.path,
+      },
+    );
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
@@ -115,20 +127,47 @@ class ApiClient {
         : null;
     final message = data?['message'] ?? 'Terjadi kesalahan';
 
+    _log.error(
+      'respons error dari backend',
+      data: {
+        'status': response.statusCode,
+        'path': response.requestOptions.path,
+        'pesanBackend': message,
+        'kode': data?['code'],
+        // `errors` berisi detail per-field dari validasi Laravel; inilah yang
+        // menjelaskan 422 (mis. "embedding must contain 192 items").
+        'errors': data?['errors'],
+      },
+    );
+
+    // Backend sudah menulis pesan yang spesifik dan layak dibaca user, mis.
+    // "Enrollment wajah belum disetujui." Sebelumnya pesan itu dibuang dan
+    // diganti kalimat generik, sehingga semua 403 terlihat sama persis dan
+    // user tidak tahu harus berbuat apa. Pakai pesan backend bila ada, dan
+    // sediakan kalimat umum hanya sebagai cadangan.
+    final backendMessage = data?['message'] is String &&
+            (data!['message'] as String).trim().isNotEmpty
+        ? (data['message'] as String).trim()
+        : null;
+
     switch (response.statusCode) {
       case 401:
+        // Dibiarkan generik: pesan ini memicu alur login ulang, jadi harus
+        // konsisten apa pun penyebab spesifik di server.
         return AuthException(
           message: 'Sesi Anda telah berakhir. Silakan login kembali.',
         );
       case 403:
         return ServerException(
-          message: 'Anda tidak memiliki akses.',
+          message: backendMessage ?? 'Anda tidak memiliki akses.',
           statusCode: 403,
+          code: data?['code'] as String?,
         );
       case 404:
         return ServerException(
-          message: 'Data tidak ditemukan.',
+          message: backendMessage ?? 'Data tidak ditemukan.',
           statusCode: 404,
+          code: data?['code'] as String?,
         );
       case 422:
         return ServerException(

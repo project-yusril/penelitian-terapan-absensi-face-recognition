@@ -315,7 +315,7 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 
 ### [M-01] Approval izin tidak membuat attendance lengkap dan alpha dapat tetap penuh
 
-- Bukti API: `Api/Kaprodi/LeaveRequestController.php:48-56`; web: `Web/ApprovalController.php:166-201`; job melewati approved leave di `MarkAbsentAttendance.php:50-60`.
+- Bukti API: `Api/Kaprodi/LeaveRequestController.php:48-56`; web: `Web/ApprovalController.php:166-201`; job melewati approved leave di `MarkAbsentAttendance.php:58-68`.
 - Dampak: izin approved tetap menambah alpha atau tidak muncul dalam denominator laporan; rentang multi-hari hanya memproses tanggal mulai/record pertama.
 - Task: [X] **M-01 Satukan service approval izin yang membuat/update semua sesi dan recalculation alpha.**
 - Status 18 Juli 2026: selesai. `LeaveApprovalService` memproses seluruh tanggal dan jadwal dalam rentang izin secara transaksional, membuat atau memperbarui attendance menjadi `izin`/`sakit` dengan alpha nol, mencatat log/audit, dan mengevaluasi ulang SP pada semester mata kuliah. Job alpha juga mematerialisasi approved leave legacy, bukan melewatinya.

@@ -33,6 +33,41 @@ void main() {
     maxAgeSeconds: 10,
   );
 
+  final serverBase = DateTime.utc(2026, 7, 18, 1);
+
+  /// Bangun service dengan jam perangkat yang sengaja meleset dari jam server.
+  ///
+  /// Jam perangkat WAJIB disuntikkan di test: kalau tidak, service memakai
+  /// `DateTime.now()` sungguhan dan fixture waktu palsu akan tampak berumur
+  /// berbulan-bulan.
+  ///
+  /// [deviceSkew] positif berarti jam HP lebih cepat dari server.
+  AttendanceLocationService buildService(
+    _Provider provider, {
+    Duration deviceSkew = Duration.zero,
+    Duration Function()? ticks,
+  }) {
+    final readTicks = ticks ?? () => Duration.zero;
+    return AttendanceLocationService(
+      provider,
+      ticks: readTicks,
+      authoritativeNow: () => serverBase.add(readTicks()),
+      deviceNow: () => serverBase.add(readTicks()).add(deviceSkew),
+    );
+  }
+
+  AttendancePosition positionAt(DateTime? timestamp) => AttendancePosition(
+    latitude: -0.0263,
+    longitude: 109.3425,
+    accuracy: 5,
+    isMocked: false,
+    timestamp: timestamp,
+  );
+
+  Matcher throwsCode(String code) => throwsA(
+    isA<AttendanceLocationException>().having((e) => e.code, 'code', code),
+  );
+
   test('policy boundaries are inclusive and reject non-finite values', () {
     expect(policy.accepts(accuracy: 20, ageMs: 10000), isTrue);
     expect(policy.accepts(accuracy: 20.001, ageMs: 10000), isFalse);
@@ -43,11 +78,7 @@ void main() {
   test('service uses injectable provider and monotonic age', () async {
     var ticks = Duration.zero;
     final provider = _Provider();
-    final service = AttendanceLocationService(
-      provider,
-      ticks: () => ticks,
-      authoritativeNow: () => DateTime.utc(2026, 7, 18, 1).add(ticks),
-    );
+    final service = buildService(provider, ticks: () => ticks);
 
     final fix = await service.acquire(
       policy: policy,
@@ -63,11 +94,7 @@ void main() {
 
   test('combines position and device mock signals', () async {
     final provider = _Provider()..deviceMock = true;
-    final service = AttendanceLocationService(
-      provider,
-      ticks: () => Duration.zero,
-      authoritativeNow: () => DateTime.utc(2026, 7, 18, 1),
-    );
+    final service = buildService(provider);
 
     expect(
       () => service.acquire(
@@ -80,27 +107,16 @@ void main() {
     );
   });
 
-  test('rejects cached, future, and null source timestamps', () async {
-    var ticks = Duration.zero;
+  test('rejects null and future source timestamps', () async {
     final provider = _Provider();
-    final service = AttendanceLocationService(
-      provider,
-      ticks: () => ticks,
-      authoritativeNow: () => DateTime.utc(2026, 7, 18, 1).add(ticks),
-    );
+    final service = buildService(provider);
 
     for (final timestamp in <DateTime?>[
-      DateTime.utc(2026, 7, 18, 0, 59, 59),
-      DateTime.utc(2026, 7, 18, 1, 0, 1),
       null,
+      // Jauh di depan jam perangkat, di luar toleransi drift.
+      DateTime.utc(2026, 7, 18, 1, 0, 30),
     ]) {
-      provider.position = AttendancePosition(
-        latitude: -0.0263,
-        longitude: 109.3425,
-        accuracy: 5,
-        isMocked: false,
-        timestamp: timestamp,
-      );
+      provider.position = positionAt(timestamp);
       await expectLater(
         service.acquire(
           policy: policy,
@@ -108,25 +124,72 @@ void main() {
           geofenceLon: 109.3425,
           geofenceRadius: 100,
         ),
-        throwsA(
-          isA<AttendanceLocationException>().having(
-            (error) => error.code,
-            'code',
-            'location_timestamp_rejected',
-          ),
-        ),
+        throwsCode('location_timestamp_rejected'),
       );
     }
+  });
+
+  // Regresi: jam perangkat yang meleset beberapa detik dari server dulu
+  // membuat SETIAP fix yang sah ditolak, karena stempel jam perangkat
+  // dibandingkan dengan batas jam server.
+  test('accepts a valid fix even when the device clock is skewed', () async {
+    for (final skew in [
+      const Duration(seconds: 3), // HP lebih cepat — kasus nyata di perangkat uji
+      const Duration(seconds: -3), // HP lebih lambat
+    ]) {
+      final provider = _Provider()
+        ..position = positionAt(DateTime.utc(2026, 7, 18, 1).add(skew));
+      final service = buildService(provider, deviceSkew: skew);
+
+      final fix = await service.acquire(
+        policy: policy,
+        geofenceLat: -0.0263,
+        geofenceLon: 109.3425,
+        geofenceRadius: 100,
+      );
+
+      expect(fix.ageMs(Duration.zero), 0, reason: 'skew $skew');
+    }
+  });
+
+  test('accepts a slightly stale fix within the age policy', () async {
+    // Android lazim menyajikan fix beberapa detik lampau; itu sah selama
+    // masih di dalam maxAgeSeconds.
+    final provider = _Provider()
+      ..position = positionAt(DateTime.utc(2026, 7, 18, 0, 59, 56));
+    final service = buildService(provider);
+
+    final fix = await service.acquire(
+      policy: policy,
+      geofenceLat: -0.0263,
+      geofenceLon: 109.3425,
+      geofenceRadius: 100,
+    );
+
+    expect(fix.ageMs(Duration.zero), 4000);
+  });
+
+  test('rejects a fix older than the age policy', () async {
+    // Kesegaran tetap ditegakkan — sekarang oleh aturan yang memang untuk itu.
+    final provider = _Provider()
+      ..position = positionAt(DateTime.utc(2026, 7, 18, 0, 59, 45));
+    final service = buildService(provider);
+
+    await expectLater(
+      service.acquire(
+        policy: policy,
+        geofenceLat: -0.0263,
+        geofenceLon: 109.3425,
+        geofenceRadius: 100,
+      ),
+      throwsCode('location_policy_rejected'),
+    );
   });
 
   test('times out a position request', () async {
     final provider = _Provider()
       ..response = (_) => Completer<AttendancePosition>().future;
-    final service = AttendanceLocationService(
-      provider,
-      ticks: () => Duration.zero,
-      authoritativeNow: () => DateTime.utc(2026, 7, 18, 1),
-    );
+    final service = buildService(provider);
 
     await expectLater(
       service.acquire(

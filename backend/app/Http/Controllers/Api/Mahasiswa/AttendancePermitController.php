@@ -17,7 +17,8 @@ class AttendancePermitController extends Controller
             'client_uuid' => ['required', 'uuid'],
             'attendance_id' => ['nullable', 'integer', 'exists:attendances,id'],
         ]);
-        abort_if($data['action'] === 'check_out' && empty($data['attendance_id']), 422);
+        abort_if($data['action'] === 'check_out' && empty($data['attendance_id']), 422,
+            'Check-out membutuhkan attendance_id dari check-in sebelumnya.');
 
         return $this->created($permits->issue($request->user(), $data['jadwal_id'], $data['action'], $data['client_uuid'], $data['attendance_id'] ?? null), 'Permit absensi diterbitkan');
     }

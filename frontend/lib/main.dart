@@ -1,12 +1,18 @@
 import 'dart:async';
+import 'dart:ui' show PlatformDispatcher;
 
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
+import 'core/logging/app_bloc_observer.dart';
+import 'core/logging/app_logger.dart';
+import 'core/logging/logging_navigator_observer.dart';
 import 'core/network/api_client.dart';
 import 'core/network/network_info.dart';
 import 'core/network/connectivity_service.dart';
@@ -50,36 +56,126 @@ import 'features/face_recognition/presentation/pages/enrollment_page.dart';
 import 'features/history/presentation/pages/history_page.dart';
 import 'features/shell/presentation/pages/main_shell.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+final AppLogger _bootLog = AppLogger.tag('Boot');
 
-  await Hive.initFlutter();
+/// Pasang penangkap error tingkat aplikasi.
+///
+/// Tiga jalur berbeda harus dipasang terpisah, karena masing-masing menangkap
+/// hal yang berbeda dan tidak saling menggantikan:
+/// * [FlutterError.onError] → error dari framework (build/layout/paint).
+///   Inilah yang mencetak "RenderFlex overflowed".
+/// * [PlatformDispatcher.instance.onError] → error async yang lolos ke engine.
+/// * `runZonedGuarded` → sisanya, mis. Future tanpa `await` yang gagal.
+void _installGlobalErrorHandlers() {
+  final flutterLog = AppLogger.tag('FlutterError');
+  final previousOnError = FlutterError.onError;
+  FlutterError.onError = (FlutterErrorDetails details) {
+    flutterLog.error(
+      details.summary.toString(),
+      data: {
+        'library': details.library,
+        if (details.context != null) 'konteks': details.context.toString(),
+      },
+      error: details.exception,
+      stackTrace: details.stack,
+    );
+    // Tetap teruskan ke handler bawaan agar overlay merah di debug tidak hilang.
+    previousOnError?.call(details);
+  };
 
-  final sharedPreferences = await SharedPreferences.getInstance();
-  const secureStorage = FlutterSecureStorage();
-  final secureSession = SecureSessionStore(secureStorage, sharedPreferences);
-  await secureSession.initialize();
-  final sessionCoordinator = SessionCoordinator(secureSession);
-  final appConfig = AppConfig.fromEnvironment();
+  final platformLog = AppLogger.tag('PlatformDispatcher');
+  PlatformDispatcher.instance.onError = (error, stack) {
+    platformLog.error(
+      'error async tidak tertangani',
+      error: error,
+      stackTrace: stack,
+    );
+    return true;
+  };
+}
 
-  final offlineQueueService = OfflineQueueService(
-    const SecureQueueKeyStore(secureStorage),
-  );
-  await offlineQueueService.init();
-  final captureCleanupRegistry = TemporaryCaptureCleanupRegistry(
-    sharedPreferences,
-  );
-  await captureCleanupRegistry.retryCleanup();
+void main() {
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      _installGlobalErrorHandlers();
 
-  runApp(
-    MyApp(
-      sharedPreferences: sharedPreferences,
-      offlineQueueService: offlineQueueService,
-      appConfig: appConfig,
-      secureSession: secureSession,
-      sessionCoordinator: sessionCoordinator,
-      captureCleanupRegistry: captureCleanupRegistry,
-    ),
+      // Satu baris ini memberi log ke SELURUH bloc/cubit aplikasi sekaligus.
+      Bloc.observer = AppBlocObserver();
+
+      _bootLog.info('aplikasi mulai', data: {'mode': kReleaseMode ? 'release' : 'debug'});
+
+      // Formatters memakai DateFormat dengan locale 'id_ID' (mis. nama bulan
+      // pada `formatDate`). Tanpa inisialisasi ini, pemanggilnya melempar
+      // LocaleDataException — bug laten yang belum terlihat hanya karena
+      // formatter tanggal belum dipakai di layar mana pun.
+      await _bootLog.timed(
+        'initializeDateFormatting(id_ID)',
+        () => initializeDateFormatting('id_ID'),
+      );
+
+      await _bootLog.timed('Hive.initFlutter', Hive.initFlutter);
+
+      final sharedPreferences = await _bootLog.timed(
+        'SharedPreferences.getInstance',
+        SharedPreferences.getInstance,
+      );
+      const secureStorage = FlutterSecureStorage();
+      final secureSession = SecureSessionStore(secureStorage, sharedPreferences);
+      await _bootLog.timed('SecureSessionStore.initialize', secureSession.initialize);
+      final sessionCoordinator = SessionCoordinator(secureSession);
+
+      // AppConfig melempar StateError kalau API_BASE_URL kosong/bukan HTTPS
+      // maupun loopback. Tanpa log ini, kegagalannya hanya tampak sebagai
+      // layar putih tanpa penjelasan apa pun.
+      late final AppConfig appConfig;
+      try {
+        appConfig = AppConfig.fromEnvironment();
+        _bootLog.info(
+          'AppConfig terbaca',
+          data: {'apiBaseUri': appConfig.apiBaseUri.toString()},
+        );
+      } catch (error, stack) {
+        _bootLog.error(
+          'AppConfig gagal dibaca — pastikan --dart-define=API_BASE_URL diisi',
+          error: error,
+          stackTrace: stack,
+        );
+        rethrow;
+      }
+
+      final offlineQueueService = OfflineQueueService(
+        const SecureQueueKeyStore(secureStorage),
+      );
+      await _bootLog.timed('OfflineQueueService.init', offlineQueueService.init);
+      final captureCleanupRegistry = TemporaryCaptureCleanupRegistry(
+        sharedPreferences,
+      );
+      await _bootLog.timed(
+        'TemporaryCaptureCleanupRegistry.retryCleanup',
+        captureCleanupRegistry.retryCleanup,
+      );
+
+      _bootLog.info('inisialisasi selesai, menjalankan UI');
+
+      runApp(
+        MyApp(
+          sharedPreferences: sharedPreferences,
+          offlineQueueService: offlineQueueService,
+          appConfig: appConfig,
+          secureSession: secureSession,
+          sessionCoordinator: sessionCoordinator,
+          captureCleanupRegistry: captureCleanupRegistry,
+        ),
+      );
+    },
+    (error, stack) {
+      AppLogger.tag('Zone').error(
+        'error tidak tertangkap di zona aplikasi',
+        error: error,
+        stackTrace: stack,
+      );
+    },
   );
 }
 
@@ -173,6 +269,12 @@ class _MyAppState extends State<MyApp> {
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider<ApiClient>.value(value: apiClient),
+        // Dibutuhkan halaman profil: foto enrollment dilayani lewat route yang
+        // memakai auth:sanctum DAN signed, jadi Image.network harus ikut
+        // mengirim bearer token — Dio tidak terlibat saat memuat gambar.
+        RepositoryProvider<SessionCoordinator>.value(
+          value: widget.sessionCoordinator,
+        ),
         RepositoryProvider<AuthRepository>.value(value: authRepository),
         RepositoryProvider<HomeRepository>.value(value: homeRepository),
         RepositoryProvider<NetworkInfo>.value(value: networkInfo),
@@ -218,6 +320,7 @@ class _MyAppState extends State<MyApp> {
           },
           child: MaterialApp(
             navigatorKey: navigatorKey,
+            navigatorObservers: [LoggingNavigatorObserver()],
             title: 'Absensi Mahasiswa',
             theme: AppTheme.lightTheme,
             debugShowCheckedModeBanner: false,

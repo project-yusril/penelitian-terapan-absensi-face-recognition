@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Attendance;
 use App\Models\Jadwal;
 use App\Models\LeaveRequest;
+use App\Models\ProdiSetting;
 use App\Models\User;
 use App\Services\LeaveApprovalService;
 use App\Services\SpDetectionService;
@@ -16,11 +17,12 @@ class MarkAbsentAttendance extends Command
 {
     protected $signature = 'attendance:mark-absent';
 
-    protected $description = 'Tandai mahasiswa yang tidak hadir sebagai ALPHA di akhir hari';
+    protected $description = 'Tandai mahasiswa yang tidak hadir sebagai ALPHA segera setelah jadwal selesai';
 
     public function handle(): int
     {
-        $hariIni = Carbon::now()->locale('id')->isoFormat('dddd');
+        $now = Carbon::now();
+        $hariIni = $now->locale('id')->isoFormat('dddd');
         $tanggalHariIni = today();
 
         // Cari semua jadwal hari ini yang aktif
@@ -34,6 +36,17 @@ class MarkAbsentAttendance extends Command
         foreach ($jadwals as $jadwal) {
             $mataKuliah = $jadwal->mataKuliah;
             if (! $mataKuliah) {
+                continue;
+            }
+
+            // Hanya proses jadwal yang jam selesainya (plus toleransi pulang)
+            // sudah terlewat. Ini membuat command aman dijalankan tiap menit
+            // dan ALPHA muncul segera setelah kelas berakhir, bukan nunggu malam.
+            $jamSelesai = Carbon::parse($tanggalHariIni->format('Y-m-d').' '.$jadwal->jam_selesai);
+            $tolerance = (int) (ProdiSetting::where('prodi_id', $mataKuliah->prodi_id)
+                ->value('toleransi_pulang_menit') ?? 15);
+            $batasAlpha = $jamSelesai->copy()->addMinutes($tolerance);
+            if ($now->lt($batasAlpha)) {
                 continue;
             }
 

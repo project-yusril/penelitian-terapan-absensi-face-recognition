@@ -11,6 +11,7 @@ import '../../../auth/presentation/bloc/auth_state.dart';
 import '../bloc/home_bloc.dart';
 import '../bloc/home_event.dart';
 import '../bloc/home_state.dart';
+import '../widgets/jadwal_card.dart';
 import '../../domain/entities/home_entities.dart';
 
 class HomePage extends StatefulWidget {
@@ -274,97 +275,12 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildJadwalCard(JadwalHariIni jadwal) {
-    final statusColor = jadwal.isCheckedIn
-        ? (jadwal.isCheckedOut ? AppColors.textMuted : AppColors.success)
-        : (jadwal.isOngoing ? AppColors.warning : AppColors.textMuted);
-    final statusText = jadwal.isCheckedIn
-        ? (jadwal.isCheckedOut
-              ? 'Sudah Check-out'
-              : 'Sudah Check-in (${jadwal.checkinTime})')
-        : (jadwal.isOngoing ? 'Sedang Berlangsung' : 'Belum Dimulai');
-
-    return Semantics(
-      button: jadwal.canOpenAttendance,
-      label: jadwal.canCheckOut
-          ? 'Check-out ${jadwal.mataKuliah}'
-          : 'Check-in ${jadwal.mataKuliah}',
-      child: GestureDetector(
-        key: ValueKey('attendance-action-${jadwal.jadwalId}'),
-        onTap: () {
-          if (jadwal.canOpenAttendance) {
-            Navigator.pushNamed(context, '/attendance', arguments: jadwal);
-          }
-        },
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: jadwal.canOpenAttendance
-                  ? AppColors.primary
-                  : AppColors.border,
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 4,
-                height: 50,
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      jadwal.mataKuliah,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${jadwal.jamMulai} - ${jadwal.jamSelesai} | ${jadwal.ruangan}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      jadwal.dosen,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  statusText,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: statusColor,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: JadwalCard(
+        jadwal: jadwal,
+        onTap: () =>
+            Navigator.pushNamed(context, '/attendance', arguments: jadwal),
       ),
     );
   }

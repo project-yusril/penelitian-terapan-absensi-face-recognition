@@ -41,7 +41,7 @@
   - Setiap check-in/check-out baru
   - Setiap approval/rejection oleh dosen
   - Setiap approval izin/sakit
-  - Scheduler harian (untuk auto-close dan alpha penuh bagi yang tidak hadir)
+  - Scheduler tiap menit (auto-close dan alpha penuh dieksekusi segera setelah tiap jadwal selesai, bukan menunggu akhir hari)
 
 #### FR-SP-002: Deteksi Status SP Otomatis
 - **Deskripsi**: Sistem otomatis mendeteksi mahasiswa yang masuk kategori SP

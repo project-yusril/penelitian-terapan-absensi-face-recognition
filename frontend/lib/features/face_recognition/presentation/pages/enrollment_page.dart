@@ -9,6 +9,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/errors/exceptions.dart';
+import '../../../../core/logging/app_logger.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
 import '../bloc/face_bloc.dart';
@@ -32,6 +33,8 @@ class EnrollmentPage extends StatefulWidget {
 
 class _EnrollmentPageState extends State<EnrollmentPage>
     with WidgetsBindingObserver {
+  static final AppLogger _log = AppLogger.tag('Enrollment');
+
   CameraController? _cameraController;
   final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(
@@ -74,22 +77,44 @@ class _EnrollmentPageState extends State<EnrollmentPage>
   @override
   void initState() {
     super.initState();
+    _log.info('halaman enrollment dibuka');
     WidgetsBinding.instance.addObserver(this);
     _framePipeline = SingleInflightFramePipeline(_analyzeFrame);
     _captures = TemporaryCaptureProcessor(
       registry: context.read<TemporaryCaptureCleanupRegistry>(),
     );
     _attemptId = _attempts.begin();
-    _initCamera();
-    _faceService.initialize();
+    unawaited(_initCamera());
+
+    // Model TFLite dimuat tanpa ditunggu supaya kamera bisa tampil lebih dulu.
+    // Sebelumnya kegagalannya tidak tertangani sama sekali: model gagal muat
+    // baru terasa jauh kemudian sebagai "Pemeriksaan biometrik gagal" saat
+    // generateEmbedding dipanggil, tanpa jejak penyebab aslinya.
+    unawaited(
+      _faceService.initialize().catchError((Object error, StackTrace stack) {
+        _log.error(
+          'inisialisasi model wajah gagal — pembuatan embedding akan gagal',
+          error: error,
+          stackTrace: stack,
+        );
+        if (mounted) {
+          setState(() {
+            _statusMessage =
+                'Model pengenalan wajah gagal dimuat. Tutup dan buka ulang aplikasi.';
+          });
+        }
+      }),
+    );
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _log.debug('siklus hidup berubah', data: {'state': state.name});
     if (state == AppLifecycleState.resumed) {
       _lifecycleActive = true;
       unawaited(_captures.retryCleanup());
       _resetAttempt();
+      _restoreStepMachineAfterResume();
       if (_cameraController?.value.isInitialized ?? false) {
         _startFaceDetection();
       }
@@ -102,31 +127,132 @@ class _EnrollmentPageState extends State<EnrollmentPage>
     unawaited(_stopImageStream());
   }
 
+  /// Kembalikan mesin langkah ke tahap deteksi setelah aplikasi dibuka lagi.
+  ///
+  /// `_resetAttempt()` hanya membatalkan attempt dan mereset layanan liveness;
+  /// flag UI (`_step`, `_countdownStarted`, `_checkingDuplicate`) tidak ikut
+  /// dibersihkan. Akibatnya, kalau aplikasi ter-background tepat saat hitung
+  /// mundur berjalan, saat kembali `_step` masih 2 dan `_countdownStarted`
+  /// masih true — sementara `_analyzeFrame` hanya menangani `_step` 0 dan 1.
+  /// Tidak ada cabang yang cocok lagi, jadi halaman tampak hidup (border wajah
+  /// tetap jalan) tapi tidak akan pernah maju sampai user keluar-masuk halaman.
+  ///
+  /// Hal yang sama terjadi bila cek duplikat ter-interupsi di tengah jalan:
+  /// `_checkingDuplicate` tersangkut `true` selamanya dan cek tidak pernah
+  /// dijalankan ulang.
+  ///
+  /// `_duplicateChecked` dan `_isKnownFace` sengaja dipertahankan: wajahnya
+  /// sudah diperiksa, dan mengulang panggilan API di setiap resume bisa
+  /// menabrak throttle `biometric-probe` di backend.
+  void _restoreStepMachineAfterResume() {
+    if (_step == 0 && !_checkingDuplicate && !_countdownStarted) return;
+    _log.warn(
+      'mesin langkah dipulihkan setelah resume',
+      data: {
+        'tahapSebelumnya': _step,
+        'sedangCekDuplikat': _checkingDuplicate,
+        'countdownBerjalan': _countdownStarted,
+      },
+    );
+    if (!mounted) return;
+    setState(() {
+      _step = 0;
+      _countdownStarted = false;
+      _checkingDuplicate = false;
+      _livenessPassed = false;
+      _livenessProgress = 0;
+      _isCapturing = false;
+      _statusMessage = _isKnownFace
+          ? 'Data biometrik tidak dapat digunakan untuk pendaftaran.'
+          : 'Posisikan wajah Anda di dalam frame';
+    });
+  }
+
   Future<void> _initCamera() async {
-    final cameras = await availableCameras();
-    final frontCamera = cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.front,
-      orElse: () => cameras.first,
-    );
-    _activeCamera = frontCamera;
+    // Seluruh blok ini sebelumnya tanpa try/catch. Izin kamera yang ditolak
+    // atau daftar kamera kosong melempar di sini, dan error-nya hanya hilang
+    // ke dalam Future yang tidak ditunggu — layar berhenti di
+    // "Menginisialisasi kamera..." selamanya tanpa petunjuk apa pun.
+    try {
+      final cameras = await _log.timed(
+        'availableCameras',
+        availableCameras,
+        describeResult: (list) => list.length,
+      );
+      if (cameras.isEmpty) {
+        throw CameraException('no_cameras', 'Perangkat tidak punya kamera');
+      }
+      _log.debug(
+        'kamera tersedia',
+        data: {
+          'daftar': cameras
+              .map((c) => '${c.name}:${c.lensDirection.name}')
+              .join(', '),
+        },
+      );
 
-    _cameraController = CameraController(
-      frontCamera,
-      ResolutionPreset.high,
-      enableAudio: false,
-      // ML Kit Android hanya menerima NV21 untuk image stream.
-      imageFormatGroup: Platform.isIOS
-          ? ImageFormatGroup.bgra8888
-          : ImageFormatGroup.nv21,
-    );
+      final frontCamera = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+      _activeCamera = frontCamera;
+      if (frontCamera.lensDirection != CameraLensDirection.front) {
+        _log.warn(
+          'kamera depan tidak ditemukan, memakai kamera pertama',
+          data: {'dipakai': frontCamera.name},
+        );
+      }
 
-    await _cameraCommands.run(() => _cameraController!.initialize());
-    if (mounted && _lifecycleActive) {
-      setState(() {
-        _isCameraInitialized = true;
-        _statusMessage = 'Posisikan wajah Anda di dalam frame';
-      });
-      _startFaceDetection();
+      _cameraController = CameraController(
+        frontCamera,
+        ResolutionPreset.high,
+        enableAudio: false,
+        // ML Kit Android hanya menerima NV21 untuk image stream.
+        imageFormatGroup: Platform.isIOS
+            ? ImageFormatGroup.bgra8888
+            : ImageFormatGroup.nv21,
+      );
+
+      await _log.timed(
+        'CameraController.initialize',
+        () => _cameraCommands.run(() => _cameraController!.initialize()),
+      );
+      _log.info(
+        'kamera siap',
+        data: {
+          'kamera': frontCamera.name,
+          'arah': frontCamera.lensDirection.name,
+          'resolusi': _cameraController?.value.previewSize?.toString(),
+          'format': Platform.isIOS ? 'bgra8888' : 'nv21',
+        },
+      );
+
+      if (mounted && _lifecycleActive) {
+        setState(() {
+          _isCameraInitialized = true;
+          _statusMessage = 'Posisikan wajah Anda di dalam frame';
+        });
+        _startFaceDetection();
+      }
+    } on CameraException catch (e, stack) {
+      _log.error(
+        'kamera gagal diinisialisasi',
+        data: {'kode': e.code, 'deskripsi': e.description},
+        error: e,
+        stackTrace: stack,
+      );
+      if (mounted) {
+        setState(() {
+          _statusMessage = e.code.contains('Permission')
+              ? 'Izin kamera ditolak. Aktifkan lewat Pengaturan aplikasi.'
+              : 'Kamera gagal dibuka (${e.code}).';
+        });
+      }
+    } catch (e, stack) {
+      _log.error('kamera gagal disiapkan', error: e, stackTrace: stack);
+      if (mounted) {
+        setState(() => _statusMessage = 'Kamera gagal disiapkan.');
+      }
     }
   }
 
@@ -235,6 +361,10 @@ class _EnrollmentPageState extends State<EnrollmentPage>
             _livenessProgress = 0;
             _statusMessage = _livenessInstruction(_challenge);
           });
+          _log.info(
+            'tahap 1 → 2: liveness dimulai',
+            data: {'tantangan': _challenge, 'attemptId': snapshot.attemptId},
+          );
         }
 
         if (_step == 1) {
@@ -251,8 +381,15 @@ class _EnrollmentPageState extends State<EnrollmentPage>
             });
           }
           if (passed && !_countdownStarted) {
-            final livenessEmbedding = await _faceService
-                .generateEmbeddingFromSnapshot(snapshot, face);
+            _log.info(
+              'tantangan liveness lolos',
+              data: {'tantangan': _challenge},
+            );
+            final livenessEmbedding = await _log.timed(
+              'generateEmbeddingFromSnapshot (pengikat identitas)',
+              () => _faceService.generateEmbeddingFromSnapshot(snapshot, face),
+              describeResult: (vector) => describeVector(vector),
+            );
             if (!_isCurrent(snapshot.attemptId)) return;
             _identityContinuity.bind(
               attemptId: snapshot.attemptId,
@@ -268,9 +405,33 @@ class _EnrollmentPageState extends State<EnrollmentPage>
           }
         }
       }
-    } catch (e) {
-      debugPrint('Face detection error: $e');
+    } catch (e, stack) {
+      _logFrameError(e, stack);
     }
+  }
+
+  // Analisis frame berjalan pada laju kamera (~30 fps). Mencatat setiap
+  // kegagalan akan membanjiri logcat dan justru mengubur baris penting, jadi
+  // error yang identik dan berurutan hanya dicatat sekali beserta jumlahnya.
+  String? _lastFrameErrorSignature;
+  int _repeatedFrameErrors = 0;
+
+  void _logFrameError(Object error, StackTrace stack) {
+    final signature = '${error.runtimeType}:$error';
+    if (signature == _lastFrameErrorSignature) {
+      _repeatedFrameErrors++;
+      // Laporkan berkala supaya kegagalan terus-menerus tetap terlihat.
+      if (_repeatedFrameErrors % 30 == 0) {
+        _log.warn(
+          'analisis frame masih gagal berulang',
+          data: {'berulang': _repeatedFrameErrors, 'error': signature},
+        );
+      }
+      return;
+    }
+    _lastFrameErrorSignature = signature;
+    _repeatedFrameErrors = 1;
+    _log.error('analisis frame gagal', error: error, stackTrace: stack);
   }
 
   /// TAHAP 1 (DETEKSI): ambil 1 foto, generate embedding, lalu tanya backend
@@ -287,25 +448,44 @@ class _EnrollmentPageState extends State<EnrollmentPage>
       setState(() => _statusMessage = 'Memverifikasi wajah...');
     }
 
+    _log.info('cek duplikat: mulai', data: {'attemptId': attemptId});
+
     // Hentikan stream agar takePicture tidak bentrok dengan image stream.
     try {
       await _stopImageStream();
-    } catch (_) {}
+    } catch (e, stack) {
+      // Sebelumnya `catch (_) {}`. Kegagalan menghentikan stream membuat
+      // takePicture berikutnya gagal, jadi ini perlu terlihat walau alurnya
+      // sengaja tetap diteruskan.
+      _log.warn('gagal menghentikan image stream', error: e, stackTrace: stack);
+    }
 
     try {
-      final photo = await _takePicture();
+      final photo = await _log.timed('takePicture', _takePicture);
       final captureId = ++_captureId;
       await _captures.process(
         path: photo.path,
         attemptId: attemptId,
         captureId: captureId,
         operation: (capture) async {
-          final photoFaces = await _faceDetector.processImage(
-            InputImage.fromFilePath(capture.path),
+          _log.debug(
+            'cek duplikat: foto siap diproses',
+            data: {'captureId': capture.captureId, 'bytes': capture.bytes.length},
+          );
+          final photoFaces = await _log.timed(
+            'deteksi wajah pada foto',
+            () => _faceDetector.processImage(
+              InputImage.fromFilePath(capture.path),
+            ),
+            describeResult: (faces) => '${faces.length} wajah',
           );
           if (!_isCurrent(capture.attemptId)) return;
 
           if (photoFaces.length != 1) {
+            _log.warn(
+              'cek duplikat dibatalkan: jumlah wajah pada foto bukan 1',
+              data: {'jumlahWajah': photoFaces.length},
+            );
             // Wajah tidak tertangkap di foto → ulangi deteksi.
             if (mounted) {
               setState(() {
@@ -320,11 +500,19 @@ class _EnrollmentPageState extends State<EnrollmentPage>
             return;
           }
 
-          final embedding = await _faceService.generateEmbedding(
-            capture.bytes,
-            photoFaces.single,
+          final embedding = await _log.timed(
+            'generateEmbedding (cek duplikat)',
+            () => _faceService.generateEmbedding(
+              capture.bytes,
+              photoFaces.single,
+            ),
+            describeResult: (vector) => describeVector(vector),
           );
-          final dup = await faceBloc.checkDuplicate(embedding);
+          final dup = await _log.timed(
+            'API checkDuplicate',
+            () => faceBloc.checkDuplicate(embedding),
+            describeResult: (result) => 'isDuplicate=${result.isDuplicate}',
+          );
           if (!_isCurrent(capture.attemptId)) return;
 
           if (dup.isDuplicate) {
@@ -351,28 +539,77 @@ class _EnrollmentPageState extends State<EnrollmentPage>
           }
         },
       );
-    } catch (e) {
+    } catch (e, stack) {
+      // Inilah sumber pesan "Pemeriksaan biometrik gagal". Sebelumnya
+      // exception-nya dibuang tanpa dicatat, sehingga empat penyebab yang
+      // sangat berbeda — kamera, ML Kit, TFLite, dan jaringan — tampil
+      // sebagai satu pesan yang sama dan mustahil dibedakan.
+      _log.error(
+        'cek duplikat gagal',
+        data: {
+          'attemptId': attemptId,
+          'jenis': e.runtimeType.toString(),
+          if (e is ServerException) 'status': e.statusCode,
+          if (e is ServerException) 'kode': e.code,
+          if (e is ServerException) 'pesanBackend': e.message,
+          if (e is ServerException) 'errors': e.errors,
+        },
+        error: e,
+        stackTrace: stack,
+      );
       if (mounted) {
         setState(() {
           _checkingDuplicate = false;
           _duplicateChecked = false;
-          _statusMessage = e is ServerException && e.statusCode == 429
-              ? 'Terlalu banyak percobaan. Tunggu sebelum mencoba kembali.'
-              : 'Pemeriksaan biometrik gagal. Coba lagi.';
+          _statusMessage = _describeCheckFailure(e);
         });
       }
       _startFaceDetection();
     }
   }
 
+  /// Terjemahkan kegagalan cek duplikat jadi pesan yang menunjuk penyebab.
+  ///
+  /// User tidak bisa memperbaiki keadaan kalau setiap kegagalan berbunyi sama;
+  /// "izin kamera ditolak" dan "server tidak terjangkau" butuh tindakan yang
+  /// berbeda.
+  String _describeCheckFailure(Object error) {
+    if (error is ServerException) {
+      if (error.statusCode == 429) {
+        return 'Terlalu banyak percobaan. Tunggu sebelum mencoba kembali.';
+      }
+      if (error.statusCode == 422) {
+        return 'Data wajah ditolak server. Coba ulangi dengan pencahayaan lebih baik.';
+      }
+      return 'Server menolak pemeriksaan (HTTP ${error.statusCode}). Coba lagi.';
+    }
+    if (error is AuthException) {
+      return 'Sesi berakhir. Silakan login ulang.';
+    }
+    if (error is NetworkException) {
+      return 'Tidak dapat terhubung ke server. Periksa koneksi Anda.';
+    }
+    if (error is CameraException) {
+      return 'Kamera bermasalah (${error.code}). Coba lagi.';
+    }
+    return 'Pemeriksaan biometrik gagal. Coba lagi.';
+  }
+
   /// Setelah liveness lolos: hentikan deteksi, beri jeda 3 detik (minta user
   /// kembali hadap lurus & netral) sambil hitung mundur, baru ambil foto.
   /// Ini mencegah foto enrollment ter-capture saat kepala masih menoleh/nunduk.
   Future<void> _startCaptureCountdown(int attemptId) async {
+    _log.info('liveness lolos, mulai hitung mundur', data: {'attemptId': attemptId});
     // Hentikan stream agar tidak ada deteksi lagi selama jeda.
     try {
       await _stopImageStream();
-    } catch (_) {}
+    } catch (e, stack) {
+      _log.warn(
+        'gagal menghentikan image stream sebelum countdown',
+        error: e,
+        stackTrace: stack,
+      );
+    }
 
     // Beri pesan agar user siap & tahan posisi sebelum foto diambil.
     if (mounted) {
@@ -418,8 +655,20 @@ class _EnrollmentPageState extends State<EnrollmentPage>
         operation: (capture) async {
           // Final JPEG is a distinct, explicit capture. Detection, crop,
           // duplicate check, and submitted bytes all bind to this capture ID.
-          final photoFaces = await _faceDetector.processImage(
-            InputImage.fromFilePath(capture.path),
+          _log.info(
+            'capture final diambil',
+            data: {
+              'captureId': capture.captureId,
+              'bytes': capture.bytes.length,
+              'attemptId': capture.attemptId,
+            },
+          );
+          final photoFaces = await _log.timed(
+            'deteksi wajah pada capture final',
+            () => _faceDetector.processImage(
+              InputImage.fromFilePath(capture.path),
+            ),
+            describeResult: (faces) => '${faces.length} wajah',
           );
           if (!_isCurrent(capture.attemptId)) return;
 
@@ -442,15 +691,24 @@ class _EnrollmentPageState extends State<EnrollmentPage>
               'Wajah akhir harus menghadap lurus dengan mata terbuka. Ulangi liveness.',
             );
           }
-          final embedding = await _faceService.generateEmbedding(
-            capture.bytes,
-            finalFace,
+          final embedding = await _log.timed(
+            'generateEmbedding (capture final)',
+            () => _faceService.generateEmbedding(capture.bytes, finalFace),
+            describeResult: (vector) => describeVector(vector),
           );
-          if (!_identityContinuity.matches(
+          final identityMatches = _identityContinuity.matches(
             attemptId: capture.attemptId,
             candidate: embedding,
             threshold: FaceBloc.strictFaceThreshold,
-          )) {
+          );
+          _log.info(
+            'pemeriksaan kontinuitas identitas',
+            data: {
+              'cocok': identityMatches,
+              'threshold': FaceBloc.strictFaceThreshold,
+            },
+          );
+          if (!identityMatches) {
             throw const _EnrollmentCaptureException(
               'Identitas wajah berubah atau sesi liveness kedaluwarsa. Ulangi liveness.',
             );
@@ -462,7 +720,11 @@ class _EnrollmentPageState extends State<EnrollmentPage>
           if (_isCurrent(capture.attemptId)) {
             setState(() => _statusMessage = 'Memeriksa data wajah...');
           }
-          final dup = await faceBloc.checkDuplicate(embedding);
+          final dup = await _log.timed(
+            'API checkDuplicate (sebelum submit)',
+            () => faceBloc.checkDuplicate(embedding),
+            describeResult: (result) => 'isDuplicate=${result.isDuplicate}',
+          );
           if (!_isCurrent(capture.attemptId)) return;
 
           if (dup.isDuplicate) {
@@ -493,7 +755,28 @@ class _EnrollmentPageState extends State<EnrollmentPage>
           }
         },
       );
-    } catch (e) {
+    } catch (e, stack) {
+      // _EnrollmentCaptureException adalah penolakan yang disengaja (wajah
+      // tidak terdeteksi, identitas berubah, dst.) — dicatat sebagai warn.
+      // Selain itu berarti kegagalan tak terduga dan perlu stack trace.
+      if (e is _EnrollmentCaptureException) {
+        _log.warn(
+          'capture enrollment ditolak',
+          data: {'alasan': e.message, 'attemptId': attemptId},
+        );
+      } else {
+        _log.error(
+          'capture enrollment gagal',
+          data: {
+            'attemptId': attemptId,
+            'jenis': e.runtimeType.toString(),
+            if (e is ServerException) 'status': e.statusCode,
+            if (e is ServerException) 'errors': e.errors,
+          },
+          error: e,
+          stackTrace: stack,
+        );
+      }
       if (mounted) {
         final msg = e is _EnrollmentCaptureException
             ? e.message
@@ -536,6 +819,7 @@ class _EnrollmentPageState extends State<EnrollmentPage>
 
   @override
   void dispose() {
+    _log.info('halaman enrollment ditutup', data: {'tahapTerakhir': _step});
     WidgetsBinding.instance.removeObserver(this);
     _lifecycleActive = false;
     _attempts.cancel();
@@ -673,52 +957,57 @@ class _EnrollmentPageState extends State<EnrollmentPage>
                         ),
                       ),
 
-                      // Teks instruksi bold + progress, diberi jarak ~40px
-                      // dari tepi bawah frame wajah (150 setengah-tinggi + 40).
-                      Align(
-                        alignment: Alignment.center,
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 380),
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 24),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.6),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  _statusMessage,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                      // Instruksi ditempel ke tepi bawah panggung kamera.
+                      //
+                      // Sebelumnya dipasang sebagai Align + Padding(top: 380),
+                      // yaitu offset tetap dari titik tengah. Di layar yang
+                      // lebih pendek dari asumsinya, kotak instruksi terdorong
+                      // melewati tinggi yang tersedia dan memicu
+                      // "RenderFlex overflowed by 9.1 pixels on the bottom".
+                      // Menambatkannya ke bawah membuat posisinya benar di
+                      // semua tinggi layar tanpa angka ajaib.
+                      Positioned(
+                        left: 16,
+                        right: 16,
+                        bottom: 16,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _statusMessage,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              // Progress bar liveness saat step 1
+                              if (_step == 1) ...[
+                                const SizedBox(height: 10),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: _livenessProgress,
+                                    minHeight: 6,
+                                    backgroundColor: Colors.white24,
+                                    valueColor:
+                                        const AlwaysStoppedAnimation<Color>(
+                                          AppColors.success,
+                                        ),
                                   ),
                                 ),
-                                // Progress bar liveness saat step 1
-                                if (_step == 1) ...[
-                                  const SizedBox(height: 10),
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: LinearProgressIndicator(
-                                      value: _livenessProgress,
-                                      minHeight: 6,
-                                      backgroundColor: Colors.white24,
-                                      valueColor:
-                                          const AlwaysStoppedAnimation<Color>(
-                                            AppColors.success,
-                                          ),
-                                    ),
-                                  ),
-                                ],
                               ],
-                            ),
+                            ],
                           ),
                         ),
                       ),

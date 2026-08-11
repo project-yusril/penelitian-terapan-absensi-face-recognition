@@ -1,9 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:absensi_mahasiswa/core/utils/location_utils.dart';
 import 'package:absensi_mahasiswa/core/utils/validators.dart';
 import 'package:absensi_mahasiswa/core/utils/formatters.dart';
 
 void main() {
+  // formatDateFromIso memakai locale id_ID; aplikasi memuatnya saat boot,
+  // jadi test harus melakukan hal yang sama.
+  setUpAll(() => initializeDateFormatting('id_ID'));
+
   group('LocationUtils', () {
     group('haversineDistance', () {
       test('should return 0 for same point', () {
@@ -141,6 +147,53 @@ void main() {
       test('should return error for null value', () {
         expect(Validators.validateRequired(null, 'Field'), isNotNull);
       });
+    });
+  });
+
+  group('Formatters waktu tampilan', () {
+    test('formatClockFromIso mengubah UTC backend jadi jam lokal', () {
+      // Backend mengirim UTC; user harus melihat jam setempat.
+      final waktu = DateTime.utc(2026, 8, 11, 6, 58, 7);
+      final harapan = DateFormat('HH:mm').format(waktu.toLocal());
+
+      expect(Formatters.formatClockFromIso(waktu.toIso8601String()), harapan);
+      // Jam UTC mentah tidak boleh bocor ke tampilan.
+      expect(Formatters.formatClockFromIso(waktu.toIso8601String()), isNot(contains('T')));
+      expect(Formatters.formatClockFromIso(waktu.toIso8601String()).length, 5);
+    });
+
+    test('formatClockFromIso tidak pernah membocorkan string mentah', () {
+      // Regresi: timestamp ISO mentah pernah tampil di kartu jadwal dan
+      // merusak tata letaknya sampai judul pecah per huruf.
+      for (final buruk in [null, '', '   ', 'bukan-tanggal']) {
+        expect(Formatters.formatClockFromIso(buruk), '-');
+      }
+      expect(
+        Formatters.formatClockFromIso(null, fallback: '—'),
+        '—',
+      );
+    });
+
+    test('trimSeconds memangkas detik dari jam jadwal', () {
+      expect(Formatters.trimSeconds('13:00:00'), '13:00');
+      expect(Formatters.trimSeconds('08:30'), '08:30');
+      expect(Formatters.trimSeconds('9:5:00'), '09:05');
+    });
+
+    test('trimSeconds aman untuk nilai kosong', () {
+      expect(Formatters.trimSeconds(null), '-');
+      expect(Formatters.trimSeconds(''), '-');
+    });
+
+    test('formatDateFromIso memakai nama bulan Indonesia', () {
+      // Butuh locale id_ID; test ini sekaligus memastikan data locale
+      // tersedia lewat initializeDateFormatting di setUpAll.
+      expect(
+        Formatters.formatDateFromIso('2026-08-11T00:00:00.000000Z'),
+        contains('2026'),
+      );
+      expect(Formatters.formatDateFromIso(null), '-');
+      expect(Formatters.formatDateFromIso('bukan-tanggal'), '-');
     });
   });
 

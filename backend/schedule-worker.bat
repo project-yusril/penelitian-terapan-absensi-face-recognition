@@ -1,0 +1,18 @@
+@echo off
+REM ===================================================================
+REM  Laravel scheduler worker - dijalankan oleh Windows Task Scheduler.
+REM  Menjalankan `php artisan schedule:work` yang akan memicu semua
+REM  scheduled command (attendance:mark-absent, auto-close, dll) sesuai
+REM  jadwal di routes/console.php. Proses ini berjalan terus-menerus.
+REM
+REM  Task Scheduler dikonfigurasi untuk:
+REM    - start otomatis saat login
+REM    - restart otomatis bila proses mati
+REM  sehingga scheduler efektif "hidup selamanya" tanpa perintah manual.
+REM ===================================================================
+
+set "PHP_BIN=C:\Users\yusri\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe\php.exe"
+set "PROJECT_DIR=C:\Users\yusri\OneDrive\Documents\project-yusril\absensi_mahasiswa\backend"
+
+cd /d "%PROJECT_DIR%"
+"%PHP_BIN%" artisan schedule:work

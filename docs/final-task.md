@@ -64,7 +64,9 @@ Prioritas utama. Sebagian hardening build/release sudah dikerjakan, tetapi deplo
 - [ ] `php artisan config:cache route:cache view:cache`
 - [ ] Verifikasi private biometric/document disks; jangan gunakan `storage:link` sebagai akses enrollment/izin
 - [ ] Set permission `storage/` & `bootstrap/cache/`
-- [ ] Setup scheduler cron: `* * * * * php artisan schedule:run` (auto-close, mark-absent, reminder, backup)
+- [ ] Setup scheduler agar hidup permanen (auto-close, mark-absent, reminder, backup — semua `everyMinute`):
+  - Linux: cron `* * * * * php artisan schedule:run`
+  - Windows: Windows Task Scheduler menjalankan `backend/schedule-worker.bat` (`php artisan schedule:work`), trigger *At log on* + *restart on failure* (task `AbsensiMahasiswaScheduler`)
 - [ ] Setup queue worker via Supervisor (`queue:work`) untuk notifikasi/push
 
 ### A.3 SSL & Keamanan Produksi
@@ -80,7 +82,7 @@ Prioritas utama. Sebagian hardening build/release sudah dikerjakan, tetapi deplo
 - [ ] Uji alur absensi end-to-end (mobile → API produksi)
 - [ ] Uji Web Push & FCM di produksi (HTTPS)
 - [ ] Uji export Excel/PDF + generate SP di produksi
-- [ ] Verifikasi scheduler & queue berjalan (cek log)
+- [ ] Verifikasi scheduler & queue berjalan (cek log); pastikan ALPHA tercatat otomatis beberapa menit setelah jadwal selesai dan attendance yang lupa checkout ter-auto-close
 
 ### A.5 Build & Distribusi APK
 - [x] Gunakan `API_BASE_URL` protected variable dan HTTPS fail-closed

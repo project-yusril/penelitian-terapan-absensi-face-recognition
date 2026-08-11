@@ -11,8 +11,10 @@ Artisan::command('inspire', function () {
 // Scheduler: Auto-close attendance setiap menit (cek jadwal yang sudah lewat)
 Schedule::command('attendance:auto-close')->everyMinute()->withoutOverlapping()->onOneServer();
 
-// Scheduler: Mark absent setiap hari jam 22:00
-Schedule::command('attendance:mark-absent')->dailyAt('22:00')->withoutOverlapping()->onOneServer();
+// Scheduler: Mark absent setiap menit. Command hanya memproses jadwal yang
+// jam selesainya (plus toleransi pulang) sudah lewat, sehingga ALPHA muncul
+// segera setelah kelas berakhir tanpa menunggu akhir hari.
+Schedule::command('attendance:mark-absent')->everyMinute()->withoutOverlapping()->onOneServer();
 
 // Scheduler: Reminder absen 15 menit sebelum kelas (cek setiap 5 menit)
 Schedule::command('attendance:send-reminder')->everyFiveMinutes();

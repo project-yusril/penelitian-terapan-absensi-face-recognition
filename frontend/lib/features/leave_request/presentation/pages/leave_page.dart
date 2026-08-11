@@ -244,10 +244,42 @@ class _SubmitLeaveSheetState extends State<_SubmitLeaveSheet> {
   final _keteranganController = TextEditingController();
 
   String _jenis = 'izin';
+  int? _mataKuliahId;
   DateTime? _tanggalMulai;
   DateTime? _tanggalSelesai;
   String? _fileName;
   String? _filePath;
+
+  List<EnrolledCourse> _courses = const [];
+  bool _loadingCourses = true;
+  String? _coursesError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCourses();
+  }
+
+  Future<void> _loadCourses() async {
+    final apiClient = context.read<ApiClient>();
+    final dataSource = LeaveRemoteDataSourceImpl(apiClient);
+    try {
+      final courses = await dataSource.getEnrolledCourses();
+      if (!mounted) return;
+      setState(() {
+        _courses = courses;
+        _loadingCourses = false;
+        // Kalau hanya satu mata kuliah, pilih otomatis agar user tak perlu memilih.
+        if (courses.length == 1) _mataKuliahId = courses.first.id;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingCourses = false;
+        _coursesError = 'Gagal memuat daftar mata kuliah';
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -305,6 +337,8 @@ class _SubmitLeaveSheetState extends State<_SubmitLeaveSheet> {
                   if (value != null) setState(() => _jenis = value);
                 },
               ),
+              const SizedBox(height: 12),
+              _buildMataKuliahField(),
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -408,6 +442,75 @@ class _SubmitLeaveSheetState extends State<_SubmitLeaveSheet> {
     );
   }
 
+  Widget _buildMataKuliahField() {
+    if (_loadingCourses) {
+      return const InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Mata Kuliah',
+          border: OutlineInputBorder(),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 10),
+            Text('Memuat mata kuliah...'),
+          ],
+        ),
+      );
+    }
+    if (_coursesError != null) {
+      return InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Mata Kuliah',
+          border: OutlineInputBorder(),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _coursesError!,
+                style: const TextStyle(color: AppColors.danger),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _loadingCourses = true;
+                  _coursesError = null;
+                });
+                _loadCourses();
+              },
+              child: const Text('Coba lagi'),
+            ),
+          ],
+        ),
+      );
+    }
+    return DropdownButtonFormField<int>(
+      initialValue: _mataKuliahId,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'Mata Kuliah',
+        border: OutlineInputBorder(),
+      ),
+      items: _courses
+          .map(
+            (c) => DropdownMenuItem<int>(
+              value: c.id,
+              child: Text(c.nama, overflow: TextOverflow.ellipsis),
+            ),
+          )
+          .toList(),
+      onChanged: (value) => setState(() => _mataKuliahId = value),
+      validator: (value) =>
+          value == null ? 'Pilih mata kuliah yang tidak dihadiri' : null,
+    );
+  }
+
   Future<void> _pickDate({required bool isStart}) async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -463,6 +566,7 @@ class _SubmitLeaveSheetState extends State<_SubmitLeaveSheet> {
     context.read<LeaveBloc>().add(
       SubmitLeave(
         jenis: _jenis,
+        mataKuliahId: _mataKuliahId,
         tanggalMulai: mulai,
         tanggalSelesai: selesai,
         keterangan: _keteranganController.text.trim(),

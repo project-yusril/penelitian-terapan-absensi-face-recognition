@@ -34,6 +34,7 @@ class ApiConstants {
       'mahasiswa/attendance/sync-offline';
 
   // Mahasiswa - Jadwal routes
+  static const String jadwalEndpoint = 'mahasiswa/jadwal';
   static const String jadwalTodayEndpoint = 'mahasiswa/jadwal/today';
   static const String jadwalActiveEndpoint = 'mahasiswa/jadwal/active';
 

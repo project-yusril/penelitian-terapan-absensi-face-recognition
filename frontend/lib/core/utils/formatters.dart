@@ -13,6 +13,46 @@ class Formatters {
     return DateFormat('HH:mm', 'id_ID').format(date);
   }
 
+  /// Jam lokal `HH:mm` dari timestamp ISO yang dikirim backend.
+  ///
+  /// Backend mengirim UTC (mis. `2026-08-11T06:58:07.000000Z`). Menampilkan
+  /// nilai itu apa adanya salah dua kali: jamnya bukan waktu setempat, dan
+  /// teks sepanjang itu merusak tata letak kartu. Mengembalikan [fallback]
+  /// bila nilainya kosong atau tidak bisa diurai, supaya UI tidak pernah
+  /// menampilkan string mentah.
+  /// Sengaja TANPA locale `id_ID`.
+  ///
+  /// Pola `HH:mm` murni angka — tidak ada nama bulan/hari yang bergantung
+  /// bahasa — sehingga tidak butuh `initializeDateFormatting`. Menyertakan
+  /// locale justru membuat fungsi ini melempar `LocaleDataException` bila data
+  /// locale belum dimuat, dan itu terlalu rapuh untuk sesuatu yang dipakai di
+  /// banyak kartu daftar.
+  static String formatClockFromIso(String? iso, {String fallback = '-'}) {
+    if (iso == null || iso.trim().isEmpty) return fallback;
+    final parsed = DateTime.tryParse(iso);
+    if (parsed == null) return fallback;
+    return DateFormat('HH:mm').format(parsed.toLocal());
+  }
+
+  /// Tanggal `dd MMM yyyy` dari timestamp ISO backend.
+  ///
+  /// Butuh `initializeDateFormatting('id_ID')` (dipanggil saat boot) karena
+  /// nama bulannya bergantung bahasa.
+  static String formatDateFromIso(String? iso, {String fallback = '-'}) {
+    if (iso == null || iso.trim().isEmpty) return fallback;
+    final parsed = DateTime.tryParse(iso);
+    if (parsed == null) return fallback;
+    return DateFormat('dd MMM yyyy', 'id_ID').format(parsed.toLocal());
+  }
+
+  /// `13:00:00` → `13:00`. Jam jadwal disimpan dengan detik yang selalu nol.
+  static String trimSeconds(String? clock, {String fallback = '-'}) {
+    if (clock == null || clock.trim().isEmpty) return fallback;
+    final parts = clock.trim().split(':');
+    if (parts.length < 2) return clock.trim();
+    return '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}';
+  }
+
   static String formatDuration(int minutes) {
     if (minutes < 60) return '$minutes mnt';
     final hours = minutes ~/ 60;

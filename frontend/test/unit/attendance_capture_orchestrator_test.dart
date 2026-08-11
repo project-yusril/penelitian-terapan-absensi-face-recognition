@@ -36,6 +36,11 @@ void main() {
         provider,
         ticks: () => ticks,
         authoritativeNow: () => anchor.now,
+        // Jam perangkat disuntikkan agar sejalan dengan waktu palsu di test.
+        // Tanpa ini service memakai DateTime.now() asli, sehingga stempel
+        // fixture (Juli 2026) tampak berumur berbulan-bulan dan ditolak
+        // aturan umur.
+        deviceNow: () => DateTime.utc(2026, 7, 18, 1).add(ticks),
       );
       const policy = AttendanceLocationPolicy(
         maxAccuracyMeters: 20,

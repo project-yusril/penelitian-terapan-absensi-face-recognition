@@ -23,7 +23,10 @@
 6. Build dashboard: `npm run build`.
 7. Cache config/routes/views setelah seluruh env final.
 8. Beri permission hanya pada `storage/` dan `bootstrap/cache/` yang diperlukan runtime.
-9. Jalankan scheduler setiap menit dan queue worker terkelola Supervisor/systemd.
+9. Jalankan scheduler dan queue worker sebagai proses long-running yang dipantau. Pilih mekanisme sesuai OS host:
+   - **Linux (production)**: cron `* * * * * php artisan schedule:run` (atau `schedule:work` di bawah Supervisor/systemd), plus queue worker terkelola Supervisor/systemd.
+   - **Windows (dev/on-prem)**: `php artisan schedule:work` dijalankan oleh **Windows Task Scheduler**. Repo menyertakan `backend/schedule-worker.bat` (wrapper yang men-set path php + project lalu memanggil `schedule:work`); daftarkan sebagai task (mis. `AbsensiMahasiswaScheduler`) dengan trigger *At log on*, *restart on failure*, dan *execution time limit* unlimited agar scheduler hidup permanen tanpa perintah manual. Registrasi task memerlukan hak admin satu kali.
+   Scheduler inilah yang memicu `attendance:auto-close` dan `attendance:mark-absent` (keduanya `everyMinute`), reminder, notification outbox, dan backup. Tanpa scheduler yang hidup, ALPHA dan auto-close tidak akan pernah tercatat.
 10. Gunakan `/api/health` sebagai public liveness. Batasi `/api/healthz` ke operator/internal network.
 
 Foto enrollment/re-enrollment dan dokumen izin tidak dipublikasikan melalui `storage:link`. Endpoint private controller adalah access path resminya. `storage:link` hanya boleh digunakan untuk asset yang memang diklasifikasikan publik.

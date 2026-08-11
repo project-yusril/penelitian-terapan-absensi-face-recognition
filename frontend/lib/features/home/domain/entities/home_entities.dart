@@ -58,8 +58,40 @@ class JadwalHariIni extends Equatable {
     return !now.isBefore(notBefore!) && !now.isAfter(expiresAt!);
   }
 
-  bool get isCheckedIn =>
-      attendanceStatus != null && attendanceStatus != 'belum';
+  /// Jendela absensi jadwal ini sudah lewat.
+  ///
+  /// Tanpa keadaan ini, jadwal yang jamnya sudah berlalu jatuh ke cabang
+  /// terakhir dan diberi label "Belum dimulai" — keliru dan membingungkan,
+  /// mis. kelas 08:00–12:30 masih tertulis "belum dimulai" pada pukul 14:30.
+  bool get hasEnded {
+    final now = anchoredNow();
+    if (!hasTimeAnchor || now == null || expiresAt == null) return false;
+    return now.isAfter(expiresAt!);
+  }
+
+  /// Status yang berarti mahasiswa benar-benar melakukan check-in.
+  ///
+  /// `alpha`, `izin`, dan `sakit` BUKAN check-in. Versi sebelumnya menganggap
+  /// setiap status selain `belum` sebagai sudah check-in, sehingga begitu job
+  /// `attendance:mark-absent` membuat record alpha, jadwal yang justru bolos
+  /// akan tampil sebagai "Check-in".
+  static const Set<String> _presentStatuses = {
+    'hadir',
+    'hadir_terlambat',
+    'pending',
+  };
+
+  bool get isCheckedIn => _presentStatuses.contains(attendanceStatus);
+
+  /// Tidak hadir: sudah ditandai alpha, atau jamnya lewat tanpa absensi.
+  bool get isMissed =>
+      attendanceStatus == 'alpha' ||
+      (hasEnded && !isCheckedIn && !isExcused);
+
+  /// Berhalangan dengan izin resmi.
+  bool get isExcused =>
+      attendanceStatus == 'izin' || attendanceStatus == 'sakit';
+
   bool get isCheckedOut => checkoutTime != null;
   bool get canCheckIn =>
       hasTimeAnchor && backendCanCheckIn && !isCheckedIn && isOngoing;

@@ -11,6 +11,8 @@ import 'package:safe_device/safe_device.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/errors/exceptions.dart';
+import '../../../../core/logging/app_logger.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/offline/offline_queue_item.dart';
 
@@ -75,6 +77,8 @@ class AttendancePage extends StatefulWidget {
 
 class _AttendancePageState extends State<AttendancePage>
     with WidgetsBindingObserver {
+  static final AppLogger _log = AppLogger.tag('Attendance');
+
   // Step 0: Location validation
   // Step 1: Liveness detection
   // Step 2: Face verification
@@ -104,6 +108,10 @@ class _AttendancePageState extends State<AttendancePage>
   bool _isCameraInitialized = false;
   bool _faceDetected = false;
   bool _livenessPassed = false; // C-02: track real liveness result
+  /// Progres challenge liveness (0..1) untuk progress bar, selaras dengan
+  /// halaman enrollment. Tanpa ini user tidak tahu tantangannya sudah terbaca
+  /// berapa kali dan cenderung menyerah di tengah jalan.
+  double _livenessProgress = 0;
   String _challenge = '';
   double _faceThreshold = 1.0;
   double _faceDistance = 0;
@@ -286,7 +294,19 @@ class _AttendancePageState extends State<AttendancePage>
           _locationPolicy!.maxAgeSeconds <= 0) {
         throw StateError('Kebijakan permit absensi tidak lengkap');
       }
-    } catch (e) {
+    } catch (e, stack) {
+      _log.error(
+        'gagal memperoleh permit absensi',
+        data: {
+          'jadwalId': widget.jadwalId,
+          'aksi': widget.isCheckout ? 'check_out' : 'check_in',
+          if (e is ServerException) 'status': e.statusCode,
+          if (e is ServerException) 'kode': e.code,
+          if (e is ServerException) 'errors': e.errors,
+        },
+        error: e,
+        stackTrace: stack,
+      );
       if (mounted) {
         setState(() {
           _currentStep = -1;
@@ -369,7 +389,16 @@ class _AttendancePageState extends State<AttendancePage>
       if (mounted) setState(() => _faceDetected = true);
       if (_currentStep != 1) return;
       final passed = await _livenessService.checkChallenge(face, _challenge);
-      if (!_isCurrent(snapshot.attemptId) || !passed) return;
+      if (!_isCurrent(snapshot.attemptId)) return;
+      if (mounted) {
+        setState(() {
+          _livenessProgress = _livenessService.progress;
+          _statusMessage = _livenessService.hasNeutral
+              ? _livenessInstruction(_challenge)
+              : 'Hadap lurus ke kamera & buka mata';
+        });
+      }
+      if (!passed) return;
       if (mounted) {
         setState(() {
           _livenessPassed = true;
@@ -378,9 +407,23 @@ class _AttendancePageState extends State<AttendancePage>
         });
       }
       await _verifyFace(snapshot, face);
-    } catch (e) {
-      debugPrint('Detection error: $e');
+    } catch (e, stack) {
+      _log.error('analisis frame absensi gagal', error: e, stackTrace: stack);
     }
+  }
+
+  /// Instruksi liveness yang jelas + progres (mis. "Kedipkan mata (1/3)").
+  String _livenessInstruction(String challenge) {
+    final base = switch (challenge) {
+      'smile' => 'Tersenyumlah ke kamera',
+      'turn_left' => 'Tolehkan kepala ke kiri',
+      'turn_right' => 'Tolehkan kepala ke kanan',
+      'blink' => 'Kedipkan mata',
+      'nod' => 'Anggukkan kepala',
+      _ => AppConstants.livenessChallengeLabels[challenge] ?? 'Ikuti instruksi',
+    };
+    return '$base (${_livenessService.consecutivePass}'
+        '/${_livenessService.requiredConsecutivePass})';
   }
 
   Future<void> _verifyFace(CameraFrameSnapshot snapshot, Face face) async {
@@ -483,6 +526,18 @@ class _AttendancePageState extends State<AttendancePage>
 
     late final AttendanceCaptureEvidence evidence;
     try {
+      // Kebijakan lokasi dicatat lebih dulu: `capture()` menolak fix yang
+      // akurasinya di atas ambang ATAU yang usianya melewati batas, dan
+      // batas usia itu sangat ketat (default 10 detik). Tanpa angka ini,
+      // kegagalan di sini mustahil dibedakan dari masalah GPS biasa.
+      _log.info(
+        'mengambil bukti lokasi untuk pengiriman',
+        data: {
+          'maxAkurasiMeter': policy.maxAccuracyMeters,
+          'maxUsiaDetik': policy.maxAgeSeconds,
+          'radiusGeofence': widget.geofenceRadius,
+        },
+      );
       evidence = await AttendanceCaptureOrchestrator(anchor, locationService)
           .capture(
             policy: policy,
@@ -490,8 +545,21 @@ class _AttendancePageState extends State<AttendancePage>
             geofenceLon: widget.geofenceLon,
             geofenceRadius: widget.geofenceRadius,
           );
-    } catch (e) {
-      _failSubmission('Lokasi terbaru tidak valid: $e');
+      _log.info(
+        'bukti lokasi diperoleh',
+        data: {
+          'jarakMeter': evidence.location.distanceMeters,
+          'akurasiMeter': evidence.location.position.accuracy,
+          'usiaMs': evidence.locationAgeMs,
+          'mockTerdeteksi': evidence.location.mockDetected,
+        },
+      );
+    } catch (e, stack) {
+      _failSubmission(
+        'Lokasi terbaru tidak valid: $e',
+        error: e,
+        stackTrace: stack,
+      );
       return;
     }
     if (!_isCurrent(attemptId)) return;
@@ -614,7 +682,25 @@ class _AttendancePageState extends State<AttendancePage>
     }
   }
 
-  void _failSubmission(String message) {
+  /// Batalkan pengiriman dan kembalikan alur ke tahap liveness.
+  ///
+  /// Selalu mencatat alasannya. Sebelumnya fungsi ini hanya mengganti pesan di
+  /// layar lalu diam, sehingga siklus "verifikasi berhasil → gagal kirim →
+  /// ulangi" berputar tanpa meninggalkan satu baris log pun — dari luar
+  /// tampak seperti aplikasi menggantung, padahal ada kegagalan berulang.
+  void _failSubmission(String message, {Object? error, StackTrace? stackTrace}) {
+    _log.error(
+      'pengiriman absensi dibatalkan',
+      data: {
+        'alasan': message,
+        'jarakMeter': _distanceToGeofence,
+        'akurasiMeter': _gpsAccuracy,
+        'adaPermit': _permitToken != null,
+        'adaKebijakanLokasi': _locationPolicy != null,
+      },
+      error: error,
+      stackTrace: stackTrace,
+    );
     if (!mounted) return;
     setState(() {
       _statusMessage = message;
@@ -639,15 +725,32 @@ class _AttendancePageState extends State<AttendancePage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(widget.isCheckout ? 'Check-out' : 'Check-in'),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.surface,
+        foregroundColor: AppColors.textPrimary,
+        elevation: 0,
+        centerTitle: true,
       ),
       body: BlocListener<FaceBloc, FaceState>(
         listener: (context, state) {
           if (state is FaceError) {
+            // Satu-satunya event FaceBloc yang dikirim halaman ini adalah
+            // LoadReferenceEmbedding, jadi FaceError berarti data wajah
+            // pembanding gagal dimuat — absensi mustahil dilanjutkan.
+            //
+            // Sebelumnya ini hanya snackbar yang hilang beberapa detik
+            // kemudian, menyisakan layar yang tampak siap padahal sudah
+            // buntu. Sekarang alasannya ditahan di layar.
+            _log.error(
+              'gagal memuat data wajah pembanding',
+              data: {'pesan': state.message},
+            );
+            setState(() {
+              _currentStep = -1;
+              _statusMessage = state.message;
+            });
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.message),
@@ -656,151 +759,261 @@ class _AttendancePageState extends State<AttendancePage>
             );
           }
         },
+        // SafeArea: sebelumnya konten menempel langsung ke notch di atas dan
+        // gesture bar di bawah karena Scaffold gelap dipakai tanpa inset.
+        child: SafeArea(
+          child: Column(
+            children: [
+              _buildStepIndicators(),
+              _buildStatusStrip(),
+              Expanded(child: _buildStage()),
+              _buildBottomPanel(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Indikator 4 tahap, sejajar dengan alur `_currentStep`.
+  Widget _buildStepIndicators() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+      child: Row(
+        children: [
+          _stepIndicator(1, 'Lokasi', _locationValid),
+          _stepConnector(_currentStep >= 1),
+          _stepIndicator(2, 'Liveness', _currentStep >= 1),
+          _stepConnector(_currentStep >= 2),
+          _stepIndicator(3, 'Wajah', _currentStep >= 2),
+          _stepConnector(_currentStep >= 3),
+          _stepIndicator(4, 'Selesai', _currentStep >= 3),
+        ],
+      ),
+    );
+  }
+
+  /// Tiga penanda syarat absensi yang wajib terlihat sepanjang proses:
+  /// lokasi, liveness, dan kecocokan wajah.
+  Widget _buildStatusStrip() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: _statusChip(
+              icon: Icons.location_on_outlined,
+              label: 'Lokasi',
+              value: _locationStatusText(),
+              state: _mockLocationDetected
+                  ? _CheckState.error
+                  : (_locationValid ? _CheckState.ok : _CheckState.pending),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _statusChip(
+              icon: Icons.face_retouching_natural_outlined,
+              label: 'Liveness',
+              value: _livenessPassed
+                  ? 'Lolos'
+                  : (_challenge.isEmpty
+                        ? 'Menunggu'
+                        : AppConstants.livenessChallengeLabels[_challenge] ??
+                              'Ikuti instruksi'),
+              state: _livenessPassed ? _CheckState.ok : _CheckState.pending,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _statusChip(
+              icon: Icons.verified_user_outlined,
+              label: 'Wajah',
+              value: _faceMatched
+                  ? 'Cocok (${_faceDistance.toStringAsFixed(2)})'
+                  : 'Menunggu',
+              state: _faceMatched ? _CheckState.ok : _CheckState.pending,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _locationStatusText() {
+    if (_mockLocationDetected) return 'Fake GPS';
+    if (_isValidating) return 'Memeriksa…';
+    if (!_locationValid) return 'Di luar area';
+    return '${_distanceToGeofence.toStringAsFixed(0)} m '
+        '(±${_gpsAccuracy.toStringAsFixed(0)} m)';
+  }
+
+  /// Panggung utama: kartu gelap membulat yang sama bentuknya dengan halaman
+  /// enrollment. Isinya berganti sesuai tahap, tetapi ukurannya tetap sehingga
+  /// tata letak tidak melompat saat berpindah tahap.
+  Widget _buildStage() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: _currentStep == -1
+          ? _buildBlockedStage()
+          : (_currentStep == 0 ? _buildLocationStage() : _buildCameraStage()),
+    );
+  }
+
+  /// Tahap 1 — lokasi. Di sinilah pesan "di luar area perkuliahan" tampil
+  /// besar dan disertai angka jarak, supaya user tahu harus mendekat berapa
+  /// jauh alih-alih hanya diberi tahu bahwa dia gagal.
+  Widget _buildLocationStage() {
+    if (_isValidating) {
+      return const Center(
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Status indicators
-            Container(
-              padding: const EdgeInsets.all(16),
-              color: Colors.black87,
-              child: Column(
-                children: [
-                  _buildStatusRow(
-                    'Lokasi',
-                    _locationValid,
-                    _mockLocationDetected
-                        ? 'Fake GPS'
-                        : '${_distanceToGeofence.toStringAsFixed(0)}m (±${_gpsAccuracy.toStringAsFixed(0)}m)',
-                    isError: _mockLocationDetected,
-                  ),
-                  _buildStatusRow(
-                    'Liveness',
-                    _livenessPassed,
-                    _challenge.isNotEmpty
-                        ? AppConstants.livenessChallengeLabels[_challenge] ?? ''
-                        : 'Menunggu...',
-                  ),
-                  _buildStatusRow(
-                    'Wajah',
-                    _faceMatched,
-                    _faceMatched
-                        ? 'Match (${_faceDistance.toStringAsFixed(4)})'
-                        : 'Menunggu...',
-                  ),
-                ],
-              ),
+            CircularProgressIndicator(color: Colors.white),
+            SizedBox(height: 16),
+            Text(
+              'Memvalidasi lokasi…',
+              style: TextStyle(color: Colors.white, fontSize: 15),
             ),
+          ],
+        ),
+      );
+    }
 
-            // Camera / status area
-            Expanded(
-              child: _currentStep == 0
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_isValidating)
-                            const CircularProgressIndicator(color: Colors.white)
-                          else if (!_locationValid)
-                            Column(
-                              children: [
-                                const Icon(
-                                  Icons.location_off,
-                                  size: 64,
-                                  color: AppColors.danger,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  _statusMessage,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                AppButton(
-                                  text: 'Coba Lagi',
-                                  onPressed: _validateLocation,
-                                  isExpanded: false,
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
-                    )
-                  : Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        if (_isCameraInitialized && _cameraController != null)
-                          CameraPreview(_cameraController!),
-                        Container(
-                          width: 220,
-                          height: 280,
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: _faceDetected
-                                  ? AppColors.success
-                                  : Colors.white54,
-                              width: 3,
-                            ),
-                            borderRadius: BorderRadius.circular(140),
-                          ),
-                        ),
-                        if (_challenge.isNotEmpty && _currentStep == 1)
-                          Positioned(
-                            bottom: 24,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                AppConstants
-                                        .livenessChallengeLabels[_challenge] ??
-                                    '',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+    final selisih = _distanceToGeofence - widget.geofenceRadius;
+    final title = _mockLocationDetected
+        ? 'Lokasi palsu terdeteksi'
+        : 'Anda di luar area perkuliahan';
+    final detail = _mockLocationDetected
+        ? 'Matikan aplikasi Fake GPS / mock location, lalu coba lagi.'
+        : 'Mendekatlah sekitar ${selisih.clamp(0, double.infinity).toStringAsFixed(0)} m '
+              'lagi ke ${widget.mataKuliahName}.';
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _mockLocationDetected
+                    ? Icons.gpp_maybe_outlined
+                    : Icons.wrong_location_outlined,
+                size: 56,
+                color: AppColors.danger,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                detail,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              if (!_mockLocationDetected) ...[
+                const SizedBox(height: 16),
+                _distanceReadout(),
+              ],
+              const SizedBox(height: 20),
+              AppButton(
+                text: 'Coba Lagi',
+                onPressed: _validateLocation,
+                isExpanded: false,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Angka jarak vs radius — membuat kegagalan lokasi bisa ditindaklanjuti.
+  Widget _distanceReadout() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white10,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _readoutItem(
+            'Jarak',
+            '${_distanceToGeofence.toStringAsFixed(0)} m',
+          ),
+          Container(
+            width: 1,
+            height: 28,
+            margin: const EdgeInsets.symmetric(horizontal: 14),
+            color: Colors.white24,
+          ),
+          _readoutItem('Radius', '${widget.geofenceRadius.toStringAsFixed(0)} m'),
+          Container(
+            width: 1,
+            height: 28,
+            margin: const EdgeInsets.symmetric(horizontal: 14),
+            color: Colors.white24,
+          ),
+          _readoutItem('Akurasi', '±${_gpsAccuracy.toStringAsFixed(0)} m'),
+        ],
+      ),
+    );
+  }
+
+  Widget _readoutItem(String label, String value) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white54, fontSize: 11),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Tahap terkunci: wajah belum pernah didaftarkan, jadi verifikasi mustahil.
+  Widget _buildBlockedStage() {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.no_accounts_outlined,
+              size: 56,
+              color: AppColors.warning,
             ),
-
-            // Bottom status
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    widget.mataKuliahName,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _statusMessage,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: _currentStep == 3
-                          ? AppColors.success
-                          : AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
+            const SizedBox(height: 16),
+            Text(
+              _statusMessage,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 15),
             ),
           ],
         ),
@@ -808,48 +1021,259 @@ class _AttendancePageState extends State<AttendancePage>
     );
   }
 
-  /// L-04: icon color sekarang reflect status spesifik:
-  /// - hijau saat valid
-  /// - merah saat error (mock GPS / fail)
-  /// - abu-abu saat menunggu
-  Widget _buildStatusRow(
-    String label,
-    bool isValid,
-    String detail, {
-    bool isError = false,
-  }) {
-    final Color iconColor;
-    if (isValid) {
-      iconColor = AppColors.success;
-    } else if (isError) {
-      iconColor = AppColors.danger;
-    } else {
-      iconColor = Colors.white30;
-    }
+  /// Tahap 2–4 — kamera, bingkai wajah, instruksi liveness, dan progres.
+  Widget _buildCameraStage() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        if (_isCameraInitialized && _cameraController != null)
+          SizedBox.expand(
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _cameraController!.value.previewSize?.height ?? 720,
+                height: _cameraController!.value.previewSize?.width ?? 1280,
+                child: CameraPreview(_cameraController!),
+              ),
+            ),
+          )
+        else
+          const Center(child: CircularProgressIndicator(color: Colors.white)),
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
+        // Bingkai wajah: hijau saat wajah terbaca, putih saat menunggu.
+        Container(
+          width: 240,
+          height: 300,
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: _faceDetected ? AppColors.success : Colors.white,
+              width: 3,
+            ),
+            borderRadius: BorderRadius.circular(150),
+          ),
+        ),
+
+        // Instruksi ditempel ke bawah panggung (bukan offset tetap dari
+        // tengah) agar tidak meluber di layar pendek.
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: 16,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _statusMessage,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                if (_currentStep == 1) ...[
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: _livenessProgress,
+                      minHeight: 6,
+                      backgroundColor: Colors.white24,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        AppColors.success,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          Icon(
-            isValid
-                ? Icons.check_circle
-                : (isError ? Icons.error : Icons.radio_button_unchecked),
-            size: 18,
-            color: iconColor,
+        ),
+
+        // Tahap akhir: kunci layar agar user tidak menyangka masih perlu
+        // melakukan sesuatu saat data sedang dikirim.
+        if (_currentStep == 3)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black54,
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(color: Colors.white),
+                    const SizedBox(height: 16),
+                    Text(
+                      _statusMessage,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-          const SizedBox(width: 8),
+      ],
+    );
+  }
+
+  /// Panel bawah: identitas mata kuliah + pesan tahap berjalan.
+  Widget _buildBottomPanel() {
+    final outOfArea = !_isValidating && !_locationValid;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: outOfArea
+            ? AppColors.danger.withValues(alpha: 0.10)
+            : AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: outOfArea ? AppColors.danger : AppColors.border,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            outOfArea
+                ? Icons.error_outline
+                : (widget.isCheckout ? Icons.logout : Icons.login),
+            size: 20,
+            color: outOfArea ? AppColors.danger : AppColors.primary,
+          ),
+          const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              detail,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.mataKuliahName,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  outOfArea
+                      ? 'Absensi hanya bisa dilakukan di dalam area perkuliahan.'
+                      : _statusMessage,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: outOfArea
+                        ? AppColors.danger
+                        : (_currentStep == 3
+                              ? AppColors.success
+                              : AppColors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _stepConnector(bool active) {
+    return Expanded(
+      child: Container(
+        height: 2,
+        color: active ? AppColors.success : AppColors.border,
+      ),
+    );
+  }
+
+  Widget _stepIndicator(int step, String label, bool active) {
+    return Column(
+      children: [
+        CircleAvatar(
+          radius: 14,
+          backgroundColor: active ? AppColors.success : AppColors.border,
+          child: Text(
+            '$step',
+            style: TextStyle(
+              color: active ? Colors.white : AppColors.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: active ? FontWeight.w600 : FontWeight.normal,
+            color: active ? AppColors.success : AppColors.textMuted,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Kartu ringkas satu syarat absensi.
+  Widget _statusChip({
+    required IconData icon,
+    required String label,
+    required String value,
+    required _CheckState state,
+  }) {
+    final Color accent = switch (state) {
+      _CheckState.ok => AppColors.success,
+      _CheckState.error => AppColors.danger,
+      _CheckState.pending => AppColors.textMuted,
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: accent),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: state == _CheckState.pending
+                  ? AppColors.textMuted
+                  : accent,
             ),
           ),
         ],
@@ -857,3 +1281,6 @@ class _AttendancePageState extends State<AttendancePage>
     );
   }
 }
+
+/// Status satu syarat absensi pada strip indikator.
+enum _CheckState { ok, error, pending }
