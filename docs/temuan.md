@@ -20,9 +20,9 @@ Sebagian besar fitur yang dijelaskan PRD sudah memiliki implementasi dan banyak 
 2. Converter kamera sudah memiliki contract test dan Firebase Test Lab harness, tetapi matriks Android fisik low/mid/high belum dijalankan (H-16).
 3. CI, secret environment, dan branch protection remote belum dapat dibuktikan aktif/green dari workspace ini (L-09).
 4. Reliability/performance lapangan dan validitas penelitian masih memiliki task R terbuka: R-02 (load-test runner eksternal), R-03 (metodologi FAR/FRR dan anti-spoofing terpisah), dan R-05 (pengambilan data lapangan). R-01 dan R-04 sudah ditutup sehingga metrik geofence dan pemisahan dataset per prodi kini valid.
-5. Tiga item milestone tanpa task ID kini dilacak sebagai MS-01 (matriks role-permission-prodi), MS-02 (policy retention/consent/backup/deletion biometrik), dan MS-03 (browser/device E2E). Satu temuan baru M-23 muncul saat sinkronisasi Definition of Done.
+5. Tiga item milestone tanpa task ID kini dilacak sebagai MS-01 (selesai), MS-02 (policy retention/consent/backup/deletion biometrik), dan MS-03 (browser/device E2E). Dua temuan baru muncul dari pekerjaan sinkronisasi ini: M-23 (limiter API tidak pernah dipasang) dan M-24 (endpoint analisis bocor lintas prodi), keduanya sudah ditutup.
 
-Audit awal mengonsolidasikan **59 temuan utama** dan 5 task validitas penelitian. Tabel berikut adalah distribusi severity awal, bukan jumlah temuan yang masih terbuka, dan tidak mencakup temuan yang ditambahkan setelah audit awal (M-23):
+Audit awal mengonsolidasikan **59 temuan utama** dan 5 task validitas penelitian. Tabel berikut adalah distribusi severity awal, bukan jumlah temuan yang masih terbuka, dan tidak mencakup temuan yang ditambahkan setelah audit awal (M-23, M-24):
 
 | Severity | Jumlah | Arti |
 |---|---:|---|
@@ -36,7 +36,7 @@ Audit awal mengonsolidasikan **59 temuan utama** dan 5 task validitas penelitian
 | Pemeriksaan | Hasil |
 |---|---|
 | `composer validate --strict` | **Lulus**, manifest valid; DomPDF dipin `^3.1` |
-| `php artisan test` | **Lulus: 198 test, 711 assertion** pada PHP 8.3.30 (11 Agustus 2026, setelah R-04; sebelumnya 189/666 pada 11 Agustus 2026 dan 182/653 pada 9 Agustus 2026) |
+| `php artisan test` | **Lulus: 206 test, 735 assertion** pada PHP 8.3.30 (11 Agustus 2026, setelah R-04/M-23/M-24/MS-01; sebelumnya 198/711, 189/666, dan 182/653 pada 9 Agustus 2026) |
 | `npm run build` | **Lulus**, Vite membangun frontend Inertia/Vue |
 | `npm audit --package-lock-only --omit=dev` dan full graph | **0 known vulnerabilities** setelah lockfile diperbarui (11 Agustus 2026) |
 | `flutter test` | **186 test lulus** (11 Agustus 2026; sebelumnya 144 pada 9 Agustus 2026), termasuk lifecycle FCM (L-02), navigasi checkout (H-13), gap converter BGRA/UnsupportedError (H-16), comparator/formatters production (L-06), permit contract, queue lease, dan camera converter |
@@ -491,7 +491,23 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 - Dampak: endpoint terautentikasi tanpa limiter eksplisit tidak berbatas, termasuk `POST /auth/change-password` dan `POST /auth/refresh`. Ini menahan Definition of Done "seluruh auth endpoint memiliki rate limit". Endpoint publik auth (`login`, `forgot-password`, `reset-password`) tidak terpengaruh karena sudah memakai `throttle:login`.
 - Perbaikan: pasang `throttle:api` pada group API melalui `Middleware::api()`, atau beri limiter eksplisit pada endpoint auth terautentikasi. Karena perubahan ini menyentuh seluruh permukaan API, sebaiknya dikerjakan sebagai perubahan tersendiri beserta test yang memastikan feature suite tidak tertahan limiter.
 - Acceptance: `POST /auth/change-password` dan `POST /auth/refresh` menghasilkan 429 setelah melewati batas, dan seluruh backend suite tetap lulus.
-- Task: [ ] **M-23 Pasang limiter API default atau beri limiter eksplisit pada endpoint auth terautentikasi.**
+- Task: [X] **M-23 Pasang limiter API default atau beri limiter eksplisit pada endpoint auth terautentikasi.**
+- Status 11 Agustus 2026: selesai. `throttle:api` (60/menit per user) dipasang pada group API terautentikasi di `routes/api.php`, bukan pada group API global, agar hanya berlaku untuk request yang membawa identitas — route publik tetap memakai `throttle:login`. `POST /auth/change-password` mendapat limiter tersendiri `throttle:auth-sensitive` (5/menit per user) karena memverifikasi `current_password` dengan `Hash::check` sehingga merupakan permukaan brute force bagi token yang dicuri.
+- Keying sengaja per user, bukan per IP. Seluruh mahasiswa di belakang NAT kampus berbagi satu alamat, sehingga kuota per IP akan membuat satu pengguna aktif mengunci pengguna lain — pertimbangan yang sama sudah dipakai pada limiter `login` (M-21). Fallback IP hanya untuk request tanpa identitas.
+- Verifikasi: `ApiRateLimitTest` membuktikan change-password menghasilkan 429 setelah lima percobaan, batas endpoint sensitif tercapai jauh sebelum kuota API umum, endpoint terautentikasi umum tetap berbatas, dan user kedua dari IP yang sama tidak ikut terkunci. Full backend suite tetap lulus, jadi limiter baru tidak menahan test yang ada.
+- Catatan test harness: HTTP test client memakai ulang container yang sama antar request dalam satu test, sehingga guard memoize user dari request sebelumnya dan token user kedua tetap teresolusi sebagai user pertama. Production tidak memiliki masalah ini karena setiap request mendapat container baru; test memanggil `forgetGuards()` untuk menirukan batas request tersebut. Perilaku ini sempat menyerupai "limiter ter-key per IP" saat diagnosis awal.
+
+### [M-24] Endpoint analisis penelitian bocor lintas prodi
+
+- Ditemukan 11 Agustus 2026 saat menyusun matriks MS-01, bukan bagian dari 59 temuan audit awal.
+- Bukti: `backend/routes/api.php` menempatkan `api/admin/analysis/*` di group `role:super_admin,admin_jurusan,admin_prodi`, sedangkan `Api\Admin\AnalysisController` tidak pernah menerapkan scope aktor — `prodi_id` hanya filter opsional dari request.
+- Masalah: H-21 menjadikan scope aktor canonical untuk monitoring, dashboard, report/export, object lookup, dan setting, tetapi endpoint analisis tidak ikut ditinjau karena halaman web `/analysis` memang dibatasi `super_admin`. Permukaan API-nya lebih luas daripada permukaan web.
+- Dampak: `admin_prodi` dan `admin_jurusan` dapat membaca statistik kehadiran, distribusi status/SP, sebaran jarak geofence, latensi per device, dan distribusi verifikasi wajah milik prodi lain. Ini persis kategori kebocoran yang disebut H-21 ("kebocoran NIM, pola kehadiran, statistik ... prodi lain"), hanya pada endpoint yang terlewat.
+- Perbaikan: terapkan scope aktor yang sama seperti H-21, dengan konvensi filter request hanya boleh mempersempit scope.
+- Acceptance: aktor tingkat prodi yang meminta prodi lain menerima 403; tanpa filter, dataset dipersempit ke prodinya sendiri; aktor tingkat prodi tanpa `prodi_id` fail-closed; `super_admin` tetap dapat melihat gabungan.
+- Task: [X] **M-24 Terapkan scope aktor pada endpoint analisis penelitian.**
+- Status 11 Agustus 2026: selesai. `ScopesAnalysisDataset::resolveAnalysisProdiScope` menjadi resolver canonical dan dipakai seluruh endpoint `Api\Admin\AnalysisController` serta halaman web. `super_admin` menerima `prodi_id` request apa adanya (null berarti gabungan); role tingkat prodi dipaksa ke `prodi_id` aktor, permintaan prodi lain menghasilkan 403, dan aktor tanpa `prodi_id` ditolak alih-alih jatuh ke dataset global.
+- Verifikasi: `AnalysisProdiScopeTest` menambah empat skenario — admin prodi meminta prodi lain 403, admin prodi tanpa filter dipersempit ke prodinya sendiri (FAR/FRR prodinya, bukan gabungan), admin prodi tanpa `prodi_id` 403, dan `super_admin` tetap menerima gabungan.
 
 ## Temuan Low
 
@@ -616,8 +632,8 @@ Checklist:
 ### Milestone 2: Authorization dan Account Security
 
 - [x] C-01, C-02, C-03, C-07, H-19, H-20, M-21, dan H-21 selesai. (Seluruh delapan task bertanda `[X]`; M-21 ditutup 9 Agustus 2026 dan H-21 ditutup 18 Juli 2026.)
-- [ ] **MS-01** Buat matriks role-permission-prodi sebagai sumber kebenaran.
-- [~] Tambahkan negative tests untuk setiap endpoint sensitif. Negative test lintas role/prodi sudah ada untuk user/role (C-02), approval Kaprodi (C-03), workflow SP (C-07), monitoring/dashboard/report/setting (H-21), dan permit attendance. Sisa: cakupan belum dapat dinyatakan menyeluruh sampai MS-01 mendefinisikan daftar endpoint sensitif canonical untuk diaudit.
+- [x] **MS-01** Buat matriks role-permission-prodi sebagai sumber kebenaran. (Selesai 11 Agustus 2026 — [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md).)
+- [~] Tambahkan negative tests untuk setiap endpoint sensitif. Negative test lintas role/prodi sudah ada untuk user/role (C-02), approval Kaprodi (C-03), workflow SP (C-07), monitoring/dashboard/report/setting (H-21), analisis penelitian (MS-01), dan permit attendance; checklist kelas serangan ada di MS-01. Sisa: belum ada test yang menegakkan matriks sebagai invarian, yaitu membaca tabel route lalu menggagalkan route non-publik yang tidak memiliki guard role.
 
 ### Milestone 3: Attendance Integrity
 
@@ -648,7 +664,7 @@ tetap terbuka:
 
 | ID | Milestone | Task | Kenapa masih terbuka |
 |---|---|---|---|
-| MS-01 | M2 | Matriks role-permission-prodi sebagai sumber kebenaran | `AuthorizationService` sudah menjadi implementasi canonical (H-21), tetapi tidak ada dokumen matriks yang dapat dipakai mengaudit kelengkapan negative test per endpoint |
+| ~~MS-01~~ | M2 | ~~Matriks role-permission-prodi sebagai sumber kebenaran~~ | **Selesai 11 Agustus 2026.** [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md) diturunkan dari `php artisan route:list --json` (bukan ditulis tangan) dan memuat tiga lapis enforcement, aturan scope, hierarki assignability, matriks guard per domain, guard tambahan, serta checklist kelas serangan. Penyusunannya langsung menemukan satu kebocoran lintas prodi — lihat baris berikut |
 | MS-02 | M4 | Retention, consent, backup, dan deletion policy biometrik | Encryption at rest, akses privat, dan audit akses selesai (H-05/H-06); kebijakan retensi/persetujuan/backup/penghapusan belum ditulis dan belum punya prosedur uji |
 | MS-03 | M5 | Browser/device E2E enam role dashboard + mobile | Butuh browser runtime dan perangkat fisik; beririsan dengan H-16 (matriks Android) dan L-07 (scan axe/Lighthouse) |
 
@@ -658,8 +674,8 @@ Project baru dapat dinyatakan release candidate bila seluruh kondisi berikut ter
 
 - [ ] Tidak ada Critical atau High yang terbuka. **Terbuka: C-04, H-04, H-16.**
 - [~] Backend berhasil bootstrap, migrate, queue, schedule, dan test pada platform production yang terdokumentasi. Bootstrap, migration, dan test terverifikasi pada PHP 8.3.30 dengan MySQL 8.0.30 (`migrate`, `migrate:rollback`, `migrate:fresh`); manifest Nginx/systemd untuk queue dan scheduler tersedia di `deploy/`. Sisa: eksekusi queue worker dan scheduler pada host production sesungguhnya belum dibuktikan (bagian dari L-09).
-- [~] Authorization matrix memiliki negative tests lintas role dan lintas prodi. Negative test lintas role/prodi tersedia untuk C-02, C-03, C-07, dan H-21. Sisa: MS-01 belum ada sehingga kelengkapan cakupan belum dapat diaudit terhadap daftar endpoint sensitif canonical.
-- [~] Reset password tidak mengekspos token dan seluruh auth endpoint memiliki rate limit. C-01 selesai; `login`, `forgot-password`, dan `reset-password` memakai `throttle:login`, sedangkan login web dan verifikasi TOTP memakai throttle M-21. Sisa: M-23 — limiter `api` terdefinisi tetapi tidak pernah dipasang, sehingga `POST /auth/change-password` dan `POST /auth/refresh` belum berbatas.
+- [~] Authorization matrix memiliki negative tests lintas role dan lintas prodi. Matriks canonical tersedia (MS-01, [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md)) beserta checklist kelas serangan, dan seluruh kelas pada checklist tersebut sudah memiliki negative test (C-02, C-03, C-07, H-21, M-24, H-19, M-21/M-23). Sisa: belum ada test yang menegakkan matriks sebagai invarian, yaitu membaca tabel route lalu menggagalkan route non-publik yang tidak memiliki guard role — sehingga route baru tanpa guard masih bisa lolos tanpa terdeteksi otomatis.
+- [x] Reset password tidak mengekspos token dan seluruh auth endpoint memiliki rate limit. C-01 menutup eksposur token; `login`, `forgot-password`, dan `reset-password` memakai `throttle:login`, login web dan verifikasi TOTP memakai throttle M-21, group API terautentikasi memakai `throttle:api`, dan `change-password` memakai `throttle:auth-sensitive` yang lebih ketat (M-23).
 - [ ] Online/offline check-in dan checkout memiliki bukti yang tidak dapat dipalsukan hanya dengan mengubah payload. **C-04 terbuka**; production dikontain fail-closed (menolak request), bukan dibuktikan tahan pemalsuan.
 - [x] Offline queue terisolasi per akun, encrypted, crash-safe, dan idempotent. (C-06 isolasi/enkripsi per user, H-15 lease dan crash recovery, M-05/M-06 idempotency, M-08 klasifikasi failure dan backoff.)
 - [x] Schema/model/controller konsisten dan migration diuji fresh serta upgrade. (H-07 sampai H-10; migration M-19/M-20 idempotent serta lulus `migrate`, rollback, dan `migrate:fresh`.)

@@ -8,7 +8,8 @@
 
 - Sanctum bearer token untuk mobile dan session authentication untuk web.
 - `user.active` pada seluruh protected route; deactivation mencabut token dan database session.
-- Object-level authorization dan prodi scope pada mutation sensitif yang telah ditutup di audit.
+- Object-level authorization dan prodi scope pada mutation sensitif yang telah ditutup di audit. Matriks role/permission/prodi canonical beserta tiga lapis enforcement ada di [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md) (MS-01).
+- Endpoint analisis penelitian memakai scope aktor: role tingkat prodi dipaksa ke `prodi_id` sendiri dan fail-closed tanpa prodi, sehingga statistik prodi lain tidak terbaca (M-24).
 - Forgot-password generic/non-enumerating; token hanya melalui email, single-use, expiring, dan reset mencabut credential lama.
 - Tidak ada password universal. Import/provisioning menggunakan random placeholder dan one-time activation.
 - Attendance permit sekali pakai, short-lived, dan bound ke resource/action/UUID.
@@ -18,6 +19,7 @@
 - Biometric/medical files private dan diakses melalui authenticated signed route.
 - Android release fail-closed tanpa release signing secrets.
 - Throttle login web (`throttle:login`, 5/menit per IP+identitas, 30/menit per IP) dan TOTP verify (`throttle:5,1`).
+- Seluruh group API terautentikasi memakai `throttle:api` (60/menit per user) dan `POST /auth/change-password` memakai `throttle:auth-sensitive` (5/menit per user) karena memverifikasi `current_password`. Keying per user, bukan per IP, agar NAT kampus tidak saling mengunci (M-23).
 - Ganti password web mencabut seluruh Sanctum token dan session lain milik user, lalu me-regenerate sesi aktif (M-21).
 - Session cookie fail-closed di production: `AppServiceProvider` memaksa `secure`+`http_only` dan `same_site` minimal `lax` saat env cookie tidak diset; `SameSite=none` otomatis dipasangkan dengan `Secure` (M-21).
 - Rekam akademik historis dilindungi FK `ON DELETE RESTRICT`; hard delete master ditolak database selama ada riwayat, arsip via soft delete (M-19).

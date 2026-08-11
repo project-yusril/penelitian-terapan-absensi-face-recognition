@@ -26,7 +26,7 @@ class AnalysisController extends Controller
     public function index(Request $request): Response
     {
         // R-04: `prodi_id` mempersempit dataset, bukan hanya memilih threshold.
-        $prodiId = $this->resolveAnalysisProdiId($request);
+        $prodiId = $this->resolveAnalysisProdiScope($request);
         $threshold = $request->filled('threshold')
             ? (float) $request->threshold
             : $this->resolveProdiThreshold($prodiId);

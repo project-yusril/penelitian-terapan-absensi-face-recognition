@@ -196,6 +196,20 @@ manajemen; halaman web `/analysis` dibatasi `super_admin`.
 - Tanpa `prodi_id`, seluruh prodi digabung. Angka gabungan tidak boleh dilaporkan sebagai hasil satu prodi.
 - Pada `face-verification`, `threshold` eksplisit tetap mengalahkan threshold prodi dan ditandai `test_data.threshold_source = "manual"`.
 
+### Scope aktor pada endpoint analisis (M-24)
+
+Endpoint ini terbuka untuk `super_admin`, `admin_jurusan`, dan `admin_prodi`,
+sehingga `prodi_id` tidak boleh dipercaya apa adanya. Filter request hanya dapat
+**mempersempit** scope, tidak pernah memperluasnya:
+
+| Aktor | Perilaku |
+|---|---|
+| `super_admin` | `prodi_id` request dipakai apa adanya; tanpa filter berarti gabungan seluruh prodi |
+| `admin_jurusan`, `admin_prodi` | Dipaksa ke `prodi_id` aktor. Meminta prodi lain menghasilkan `403` |
+| Aktor tingkat prodi tanpa `prodi_id` | `403` (fail-closed, tidak jatuh ke dataset global) |
+
+Matriks role lengkap ada di [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md).
+
 ### Definisi success rate geofence (canonical — R-01)
 
 - `total_attempts` dan `success` dihitung dari action `checkin_success` versus `checkin_failed`.

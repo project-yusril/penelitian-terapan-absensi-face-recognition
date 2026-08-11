@@ -20,6 +20,7 @@ Jika terdapat perbedaan, gunakan urutan berikut:
 | [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md) | Komponen, trust boundary, data flow, FCM, dan platform support Android-only |
 | [CURRENT-API.md](CURRENT-API.md) | Kontrak API executable, termasuk production biometric containment |
 | [SECURITY.md](SECURITY.md) | Kontrol keamanan, secret, provisioning, containment biometrik, dan residual risk |
+| [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md) | Matriks role/permission/prodi canonical, tiga lapis enforcement, dan checklist audit negative test (MS-01) |
 | [THREAT-MODEL-ATTENDANCE.md](THREAT-MODEL-ATTENDANCE.md) | Aktor ancaman, kontrol yang ditegakkan server, klaim client yang belum terverifikasi, dan batas klaim |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Environment, CI, backend deployment, Android release/device matrix, rollback, dan restore |
 | [temuan.md](temuan.md) | Temuan aktif, status remediation, acceptance, dan evidence |
@@ -60,6 +61,7 @@ Dokumen historis tidak boleh digunakan untuk membuat endpoint, credential, deplo
 | Camera matrix | Harness tersedia; physical Android low/mid/high evidence belum ada | [temuan.md](temuan.md#h-16-camera-converter-belum-diverifikasi-pada-device-matrix) |
 | CI/repository | Workflow/hygiene tersedia; remote green run dan enforcement belum terbukti | [temuan.md](temuan.md#l-09-hygiene-repositorydeployment-belum-memadai) |
 | Dataset analisis penelitian | `prodi_id` mempersempit dataset, bukan hanya threshold; atribusi memakai prodi subjek | [PRD-07-analisis-evaluasi.md](PRD-07-analisis-evaluasi.md), [CURRENT-API.md](CURRENT-API.md) |
+| Authorization | Tiga lapis: guard role, object policy, query scope. Role tingkat prodi fail-closed ke `prodi_id` aktor | [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md) |
 
 ## Aturan Pemeliharaan
 

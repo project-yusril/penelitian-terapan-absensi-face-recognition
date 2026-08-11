@@ -211,6 +211,94 @@ class AnalysisProdiScopeTest extends TestCase
         $this->assertSame(50.0, $method->invoke($controller, null)['success_rate']);
     }
 
+    private function prodiAdminToken(string $email, int $prodiId, string $role = 'admin_prodi'): string
+    {
+        $admin = User::factory()->create([
+            'email' => $email,
+            'password' => Hash::make('12345678'),
+            'status' => 'aktif',
+            'enrollment_status' => 'not_required',
+            'prodi_id' => $prodiId,
+        ]);
+        $admin->roles()->attach(Role::where('name', $role)->first()->id);
+
+        return $this->postJson('/api/auth/login', [
+            'login' => $email,
+            'password' => '12345678',
+        ])->json('data.token');
+    }
+
+    /**
+     * MS-01 menemukan ini: `/api/admin/analysis/*` terbuka untuk `admin_prodi`
+     * dan `admin_jurusan`, tetapi datanya lintas prodi dan tidak pernah
+     * di-scope ke aktor. Role tingkat prodi jadi bisa membaca statistik prodi
+     * lain — kebocoran sejenis yang ditutup H-21 untuk monitoring/report.
+     */
+    public function test_prodi_admin_cannot_read_other_prodi_analysis(): void
+    {
+        $this->seedOpposingProdiDatasets();
+
+        $token = $this->prodiAdminToken('admin-ti@test.com', $this->prodiTi);
+
+        // Meminta prodi lain secara eksplisit ditolak, bukan diam-diam dilayani.
+        $this->withHeaders(['Authorization' => "Bearer {$token}"])
+            ->getJson('/api/admin/analysis/face-verification?prodi_id='.$this->prodiTe)
+            ->assertStatus(403);
+    }
+
+    public function test_prodi_admin_is_forced_to_own_prodi_when_filter_omitted(): void
+    {
+        $this->seedOpposingProdiDatasets();
+
+        $token = $this->prodiAdminToken('admin-ti2@test.com', $this->prodiTi);
+
+        // Tanpa filter, aktor tingkat prodi tidak boleh menerima gabungan
+        // seluruh prodi; scope dipersempit ke prodinya sendiri.
+        $data = $this->withHeaders(['Authorization' => "Bearer {$token}"])
+            ->getJson('/api/admin/analysis/face-verification?threshold=0.5')
+            ->assertStatus(200)
+            ->json('data');
+
+        $this->assertSame(2, $data['test_data']['genuine_count']);
+        $this->assertSame(2, $data['test_data']['impostor_count']);
+        $this->assertEqualsWithDelta(0, $data['test_data']['far'], 0.001);
+        $this->assertEqualsWithDelta(0, $data['test_data']['frr'], 0.001);
+    }
+
+    public function test_super_admin_still_sees_combined_dataset(): void
+    {
+        $this->seedOpposingProdiDatasets();
+
+        $all = $this->faceVerification(['threshold' => 0.5]);
+
+        $this->assertSame(4, $all['test_data']['genuine_count']);
+        $this->assertSame(4, $all['test_data']['impostor_count']);
+    }
+
+    public function test_prodi_admin_without_prodi_is_denied(): void
+    {
+        $this->seedOpposingProdiDatasets();
+
+        $admin = User::factory()->create([
+            'email' => 'admin-tanpa-prodi@test.com',
+            'password' => Hash::make('12345678'),
+            'status' => 'aktif',
+            'enrollment_status' => 'not_required',
+            'prodi_id' => null,
+        ]);
+        $admin->roles()->attach(Role::where('name', 'admin_prodi')->first()->id);
+
+        $token = $this->postJson('/api/auth/login', [
+            'login' => 'admin-tanpa-prodi@test.com',
+            'password' => '12345678',
+        ])->json('data.token');
+
+        // Fail-closed, bukan jatuh ke dataset global.
+        $this->withHeaders(['Authorization' => "Bearer {$token}"])
+            ->getJson('/api/admin/analysis/face-verification')
+            ->assertStatus(403);
+    }
+
     /**
      * Regression R-01 untuk endpoint API: definisinya harus sama dengan
      * `Web\AnalysisController::geofenceData`. Endpoint ini sebelumnya masih

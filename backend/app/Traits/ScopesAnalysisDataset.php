@@ -3,6 +3,7 @@
 namespace App\Traits;
 
 use App\Models\User;
+use App\Services\AuthorizationService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -37,6 +38,36 @@ trait ScopesAnalysisDataset
         ]);
 
         return $request->filled('prodi_id') ? (int) $request->input('prodi_id') : null;
+    }
+
+    /**
+     * Prodi efektif setelah scope aktor diterapkan.
+     *
+     * Endpoint `/api/admin/analysis/*` terbuka untuk `admin_jurusan` dan
+     * `admin_prodi`, bukan hanya `super_admin`, sedangkan datanya bersifat
+     * lintas prodi. Tanpa scope aktor, role tingkat prodi dapat membaca
+     * statistik kehadiran, distribusi SP, dan sebaran verifikasi wajah milik
+     * prodi lain — persis kebocoran yang ditutup H-21 untuk monitoring,
+     * dashboard, report, dan setting.
+     *
+     * Mengikuti konvensi H-21: filter request hanya boleh mempersempit scope,
+     * tidak pernah memperluasnya. Aktor tanpa `prodi_id` fail-closed.
+     */
+    protected function resolveAnalysisProdiScope(Request $request): ?int
+    {
+        $requested = $this->resolveAnalysisProdiId($request);
+        $actor = $request->user();
+
+        abort_unless($actor !== null, 403);
+
+        if (app(AuthorizationService::class)->isSuperAdmin($actor)) {
+            return $requested;
+        }
+
+        abort_unless($actor->prodi_id !== null, 403);
+        abort_unless($requested === null || $requested === (int) $actor->prodi_id, 403);
+
+        return (int) $actor->prodi_id;
     }
 
     /**

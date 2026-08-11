@@ -74,9 +74,25 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureRateLimiting(): void
     {
-        // Default API rate limit: 60 requests per minute per user
+        // M-23: default API rate limit, 60 request per menit per user.
+        //
+        // Keying per user, bukan per IP. Seluruh mahasiswa di belakang NAT
+        // kampus berbagi satu alamat, sehingga kuota per IP akan membuat satu
+        // pengguna aktif mengunci pengguna lain — masalah yang sama sudah
+        // dihindari pada limiter `login` (M-21). Fallback IP hanya untuk
+        // request tanpa identitas.
         RateLimiter::for('api', function (Request $request) {
-            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+            return Limit::perMinute(60)->by($request->user()?->getAuthIdentifier() ?: $request->ip());
+        });
+
+        // M-23: mutasi credential pada sesi yang sudah login.
+        //
+        // `POST /auth/change-password` memverifikasi `current_password` dengan
+        // `Hash::check`, sehingga token yang dicuri dapat dipakai menebak
+        // password lama. Ancamannya per akun, bukan per IP, jadi keying cukup
+        // per user dan tidak perlu batas IP yang bisa mengunci NAT kampus.
+        RateLimiter::for('auth-sensitive', function (Request $request) {
+            return Limit::perMinute(5)->by('auth-sensitive|'.($request->user()?->getAuthIdentifier() ?: $request->ip()));
         });
 
         // Auth (login) rate limit.

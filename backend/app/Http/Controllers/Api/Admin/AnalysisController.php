@@ -31,7 +31,7 @@ class AnalysisController extends Controller
      */
     public function geofence(Request $request): JsonResponse
     {
-        $prodiId = $this->resolveAnalysisProdiId($request);
+        $prodiId = $this->resolveAnalysisProdiScope($request);
 
         $scoped = fn (array $actions): Builder => $this->applyDateRange(
             $this->scopeDatasetToProdi(AttendanceLog::whereIn('action', $actions), $prodiId),
@@ -74,7 +74,7 @@ class AnalysisController extends Controller
     {
         // R-04: `prodi_id` mempersempit dataset, bukan hanya memilih threshold,
         // sehingga distance dan ambang selalu berasal dari prodi yang sama.
-        $prodiId = $this->resolveAnalysisProdiId($request);
+        $prodiId = $this->resolveAnalysisProdiScope($request);
 
         $query = $this->scopeDatasetToProdi(
             Attendance::whereNotNull('checkin_face_distance'),
@@ -245,7 +245,7 @@ class AnalysisController extends Controller
      */
     public function latency(Request $request): JsonResponse
     {
-        $prodiId = $this->resolveAnalysisProdiId($request);
+        $prodiId = $this->resolveAnalysisProdiScope($request);
 
         $query = $this->applyDateRange(
             $this->scopeDatasetToProdi(AttendanceLog::whereNotNull('inference_time_ms'), $prodiId),
@@ -289,7 +289,7 @@ class AnalysisController extends Controller
             'semester_id' => 'nullable|exists:semesters,id',
         ]);
 
-        $prodiId = $this->resolveAnalysisProdiId($request);
+        $prodiId = $this->resolveAnalysisProdiScope($request);
 
         // Distribusi status kehadiran
         $statusDistribution = $this->scopeDatasetToProdi(Attendance::query(), $prodiId)
@@ -350,7 +350,7 @@ class AnalysisController extends Controller
      */
     public function simultaneousTest(Request $request): JsonResponse
     {
-        $prodiId = $this->resolveAnalysisProdiId($request);
+        $prodiId = $this->resolveAnalysisProdiScope($request);
 
         // Data dari attendance_logs yang punya metadata concurrent_level
         $logs = $this->scopeDatasetToProdi(
@@ -396,7 +396,7 @@ class AnalysisController extends Controller
         // Ambil data sistem
         $query = $this->scopeDatasetToProdi(
             Attendance::query(),
-            $this->resolveAnalysisProdiId($request)
+            $this->resolveAnalysisProdiScope($request)
         );
         if ($request->filled('mata_kuliah_id')) {
             $query->where('mata_kuliah_id', $request->mata_kuliah_id);

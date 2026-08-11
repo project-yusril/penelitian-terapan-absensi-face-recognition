@@ -52,7 +52,13 @@ Route::prefix('auth')->middleware('throttle:login')->group(function () {
 });
 
 // Protected routes
-Route::middleware(['auth:sanctum', 'user.active'])->group(function () {
+//
+// M-23: limiter `api` sudah lama terdefinisi di `AppServiceProvider` tetapi
+// tidak pernah dipasang, sehingga seluruh endpoint terautentikasi tanpa
+// limiter eksplisit tidak berbatas. Dipasang di group ini (bukan group API
+// global) agar hanya berlaku untuk request yang membawa identitas dan dapat
+// di-key per user; route publik memakai `throttle:login` sendiri.
+Route::middleware(['auth:sanctum', 'user.active', 'throttle:api'])->group(function () {
 
     Route::get('/private/enrollment-photos/{user}', [
         PrivateFileController::class,
@@ -72,7 +78,10 @@ Route::middleware(['auth:sanctum', 'user.active'])->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
         Route::post('/refresh', [AuthController::class, 'refresh']);
-        Route::post('/change-password', [AuthController::class, 'changePassword']);
+        // M-23: lebih ketat dari limiter API umum karena memverifikasi
+        // `current_password`, sehingga merupakan permukaan brute force.
+        Route::post('/change-password', [AuthController::class, 'changePassword'])
+            ->middleware('throttle:auth-sensitive');
     });
 
     // Profile
