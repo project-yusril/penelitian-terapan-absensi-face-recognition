@@ -73,6 +73,7 @@ Dokumen historis tidak boleh digunakan untuk membuat endpoint, credential, deplo
 
 ## CI
 
-- `backend-ci.yml` dan `frontend-ci.yml` dikonfigurasi untuk setiap push/PR. `android-release.yml` dan `android-device-tests.yml` manual. Green remote run, protected environments, dan required checks belum boleh diklaim sampai evidence L-09 tersedia. Detail lihat [DEPLOYMENT.md](DEPLOYMENT.md).
+- `backend-ci.yml` dan `frontend-ci.yml` dikonfigurasi untuk setiap push/PR. `android-release.yml` dan `android-device-tests.yml` manual. Detail lihat [DEPLOYMENT.md](DEPLOYMENT.md).
+- Seluruh pekerjaan lokal sudah di-push ke `origin/main` pada 11 Agustus 2026 (`5e49bfe`, `b271326`), sehingga workflow push/PR terpicu pada revision tersebut. **Push hanya memicu workflow, bukan membuktikan hasilnya.** Green remote run, protected environments, dan required checks tetap belum boleh diklaim sampai evidence L-09 tersedia — GitHub CLI tidak tersedia di workspace ini.
 
 **Pembaruan terakhir:** 11 Agustus 2026.
