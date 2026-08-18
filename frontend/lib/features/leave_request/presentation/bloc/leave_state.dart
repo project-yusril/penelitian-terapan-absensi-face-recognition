@@ -19,10 +19,10 @@ class LeaveLoaded extends LeaveState {
 }
 
 class LeaveSubmitted extends LeaveState {
-  final LeaveRequest leave;
-  const LeaveSubmitted(this.leave);
+  final LeaveSubmissionResult result;
+  const LeaveSubmitted(this.result);
   @override
-  List<Object?> get props => [leave];
+  List<Object?> get props => [result];
 }
 
 class LeaveError extends LeaveState {

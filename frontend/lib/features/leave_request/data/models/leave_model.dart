@@ -1,5 +1,52 @@
 import '../../domain/entities/leave_entities.dart';
 
+class SkippedCourseModel extends SkippedCourse {
+  const SkippedCourseModel({
+    required super.mataKuliahId,
+    super.nama,
+    required super.alasan,
+    required super.pesan,
+  });
+
+  factory SkippedCourseModel.fromJson(Map<String, dynamic> json) {
+    return SkippedCourseModel(
+      mataKuliahId: json['mata_kuliah_id'] ?? 0,
+      nama: json['nama']?.toString(),
+      alasan: json['alasan']?.toString() ?? '',
+      pesan: json['pesan']?.toString() ?? '',
+    );
+  }
+}
+
+class LeaveSubmissionResultModel extends LeaveSubmissionResult {
+  const LeaveSubmissionResultModel({
+    required super.created,
+    super.skipped = const [],
+  });
+
+  /// Menerima dua bentuk `data` dari `POST /mahasiswa/leave-requests`:
+  /// objek LeaveRequest tunggal (mode single-MK) atau envelope
+  /// `{created_count, leave_requests, skipped}` (mode multi-MK).
+  factory LeaveSubmissionResultModel.fromJson(Map<String, dynamic> json) {
+    final rows = json['leave_requests'];
+    if (rows is List) {
+      return LeaveSubmissionResultModel(
+        created: rows
+            .whereType<Map>()
+            .map((e) => LeaveRequestModel.fromJson(e.cast<String, dynamic>()))
+            .toList(),
+        skipped: (json['skipped'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((e) => SkippedCourseModel.fromJson(e.cast<String, dynamic>()))
+            .toList(),
+      );
+    }
+    return LeaveSubmissionResultModel(
+      created: [LeaveRequestModel.fromJson(json)],
+    );
+  }
+}
+
 class LeaveRequestModel extends LeaveRequest {
   const LeaveRequestModel({
     required super.id,

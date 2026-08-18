@@ -40,9 +40,12 @@ class _LeaveView extends StatelessWidget {
         listener: (context, state) {
           if (state is LeaveSubmitted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Pengajuan berhasil dikirim'),
+              SnackBar(
+                content: Text(_submissionSummary(state.result)),
                 backgroundColor: AppColors.success,
+                duration: state.result.skipped.isEmpty
+                    ? const Duration(seconds: 4)
+                    : const Duration(seconds: 7),
               ),
             );
             context.read<LeaveBloc>().add(LoadMyLeaves());
@@ -95,6 +98,20 @@ class _LeaveView extends StatelessWidget {
         child: const Icon(Icons.add, color: Colors.white),
       ),
     );
+  }
+
+  /// Ringkasan hasil pengajuan: jumlah izin terbentuk plus MK yang dilewati
+  /// (sudah punya izin aktif atau tidak punya jadwal pada rentang tanggal).
+  String _submissionSummary(LeaveSubmissionResult result) {
+    final jumlah = result.createdCount;
+    final pesan = jumlah == 1
+        ? 'Pengajuan berhasil dikirim'
+        : '$jumlah pengajuan berhasil dikirim';
+    if (result.skipped.isEmpty) return pesan;
+    final dilewati = result.skipped
+        .map((s) => '${s.nama ?? 'MK ${s.mataKuliahId}'} (${s.pesan})')
+        .join('; ');
+    return '$pesan. Dilewati: $dilewati';
   }
 
   void _showSubmitForm(BuildContext context) {
@@ -245,6 +262,7 @@ class _SubmitLeaveSheetState extends State<_SubmitLeaveSheet> {
 
   String _jenis = 'izin';
   int? _mataKuliahId;
+  bool _semuaMataKuliah = false;
   DateTime? _tanggalMulai;
   DateTime? _tanggalSelesai;
   String? _fileName;
@@ -338,7 +356,30 @@ class _SubmitLeaveSheetState extends State<_SubmitLeaveSheet> {
                 },
               ),
               const SizedBox(height: 12),
-              _buildMataKuliahField(),
+              // Sakit sehari biasanya menyangkut seluruh MK hari itu. Toggle ini
+              // membuat satu izin per MK, bukan mengubah model izin jadi per-hari.
+              SwitchListTile.adaptive(
+                value: _semuaMataKuliah,
+                onChanged: (value) => setState(() => _semuaMataKuliah = value),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text(
+                  'Berlaku untuk semua MK',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Satu pengajuan dibuat untuk tiap mata kuliah yang punya jadwal pada rentang tanggal',
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                ),
+              ),
+              if (!_semuaMataKuliah) ...[
+                const SizedBox(height: 4),
+                _buildMataKuliahField(),
+              ],
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -566,11 +607,12 @@ class _SubmitLeaveSheetState extends State<_SubmitLeaveSheet> {
     context.read<LeaveBloc>().add(
       SubmitLeave(
         jenis: _jenis,
-        mataKuliahId: _mataKuliahId,
+        mataKuliahId: _semuaMataKuliah ? null : _mataKuliahId,
         tanggalMulai: mulai,
         tanggalSelesai: selesai,
         keterangan: _keteranganController.text.trim(),
         filePath: _filePath,
+        allMataKuliah: _semuaMataKuliah,
       ),
     );
 

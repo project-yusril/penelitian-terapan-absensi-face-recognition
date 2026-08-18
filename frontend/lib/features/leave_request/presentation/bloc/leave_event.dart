@@ -16,6 +16,12 @@ class SubmitLeave extends LeaveEvent {
   final String keterangan;
   final String? filePath;
 
+  /// Berlaku untuk semua MK yang punya jadwal pada rentang tanggal.
+  final bool allMataKuliah;
+
+  /// Subset MK bila pengguna memilih sendiri; diabaikan saat [allMataKuliah].
+  final List<int>? mataKuliahIds;
+
   const SubmitLeave({
     required this.jenis,
     this.mataKuliahId,
@@ -23,6 +29,8 @@ class SubmitLeave extends LeaveEvent {
     required this.tanggalSelesai,
     required this.keterangan,
     this.filePath,
+    this.allMataKuliah = false,
+    this.mataKuliahIds,
   });
 
   @override
@@ -33,5 +41,7 @@ class SubmitLeave extends LeaveEvent {
     tanggalSelesai,
     keterangan,
     filePath,
+    allMataKuliah,
+    mataKuliahIds,
   ];
 }

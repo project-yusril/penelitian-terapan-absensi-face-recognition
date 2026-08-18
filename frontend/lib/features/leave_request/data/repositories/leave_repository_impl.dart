@@ -28,13 +28,15 @@ class LeaveRepositoryImpl implements LeaveRepository {
   }
 
   @override
-  Future<Either<Failure, LeaveRequest>> submitLeave({
+  Future<Either<Failure, LeaveSubmissionResult>> submitLeave({
     required String jenis,
     required int? mataKuliahId,
     required String tanggalMulai,
     required String tanggalSelesai,
     required String keterangan,
     String? filePath,
+    bool allMataKuliah = false,
+    List<int>? mataKuliahIds,
   }) async {
     if (!await _networkInfo.isConnected) {
       return const Left(NetworkFailure('Tidak ada koneksi internet'));
@@ -47,6 +49,8 @@ class LeaveRepositoryImpl implements LeaveRepository {
         tanggalSelesai: tanggalSelesai,
         keterangan: keterangan,
         filePath: filePath,
+        allMataKuliah: allMataKuliah,
+        mataKuliahIds: mataKuliahIds,
       );
       return Right(leave);
     } on ServerException catch (e) {

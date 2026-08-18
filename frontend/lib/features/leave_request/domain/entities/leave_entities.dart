@@ -1,5 +1,39 @@
 import 'package:equatable/equatable.dart';
 
+/// Mata kuliah yang tidak dibuatkan izin saat pengajuan multi-MK.
+class SkippedCourse extends Equatable {
+  final int mataKuliahId;
+  final String? nama;
+
+  /// Kode alasan dari backend: `duplikat` atau `tanpa_jadwal`.
+  final String alasan;
+  final String pesan;
+
+  const SkippedCourse({
+    required this.mataKuliahId,
+    this.nama,
+    required this.alasan,
+    required this.pesan,
+  });
+
+  @override
+  List<Object?> get props => [mataKuliahId, nama, alasan, pesan];
+}
+
+/// Hasil pengajuan izin, menyatukan mode single-MK (satu baris) dan multi-MK
+/// (beberapa baris + ringkasan MK yang dilewati).
+class LeaveSubmissionResult extends Equatable {
+  final List<LeaveRequest> created;
+  final List<SkippedCourse> skipped;
+
+  const LeaveSubmissionResult({required this.created, this.skipped = const []});
+
+  int get createdCount => created.length;
+
+  @override
+  List<Object?> get props => [created, skipped];
+}
+
 class LeaveRequest extends Equatable {
   final int id;
   final int userId;

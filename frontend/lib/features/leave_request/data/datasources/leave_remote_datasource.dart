@@ -14,13 +14,15 @@ class EnrolledCourse {
 abstract class LeaveRemoteDataSource {
   Future<List<LeaveRequestModel>> getMyLeaves();
   Future<List<EnrolledCourse>> getEnrolledCourses();
-  Future<LeaveRequestModel> submitLeave({
+  Future<LeaveSubmissionResultModel> submitLeave({
     required String jenis,
     required int? mataKuliahId,
     required String tanggalMulai,
     required String tanggalSelesai,
     required String keterangan,
     String? filePath,
+    bool allMataKuliah = false,
+    List<int>? mataKuliahIds,
   });
 }
 
@@ -76,13 +78,15 @@ class LeaveRemoteDataSourceImpl implements LeaveRemoteDataSource {
   }
 
   @override
-  Future<LeaveRequestModel> submitLeave({
+  Future<LeaveSubmissionResultModel> submitLeave({
     required String jenis,
     required int? mataKuliahId,
     required String tanggalMulai,
     required String tanggalSelesai,
     required String keterangan,
     String? filePath,
+    bool allMataKuliah = false,
+    List<int>? mataKuliahIds,
   }) async {
     try {
       MultipartFile? suratFile;
@@ -96,16 +100,27 @@ class LeaveRemoteDataSourceImpl implements LeaveRemoteDataSource {
         'tanggal_selesai': tanggalSelesai,
         'keterangan': keterangan,
       };
-      if (mataKuliahId != null) fields['mata_kuliah_id'] = mataKuliahId;
+      // Mode multi-MK: backend melakukan fan-out satu izin per MK. `mata_kuliah_id`
+      // tunggal hanya dikirim pada mode lama agar kontrak lama tetap berlaku.
+      if (allMataKuliah) {
+        fields['all_mata_kuliah'] = '1';
+      } else if (mataKuliahIds != null && mataKuliahIds.isNotEmpty) {
+        fields['mata_kuliah_ids'] = mataKuliahIds;
+      } else if (mataKuliahId != null) {
+        fields['mata_kuliah_id'] = mataKuliahId;
+      }
       if (suratFile != null) fields['file_surat'] = suratFile;
 
-      final formData = FormData.fromMap(fields);
+      // `multiCompatible` menulis list sebagai `mata_kuliah_ids[]`, bentuk yang
+      // dibaca PHP/Laravel sebagai array. Format `multi` bawaan Dio mengulang
+      // key tanpa kurung dan hanya menyisakan nilai terakhir di sisi backend.
+      final formData = FormData.fromMap(fields, ListFormat.multiCompatible);
 
       final response = await _apiClient.uploadFile(
         ApiConstants.leavesEndpoint,
         data: formData,
       );
-      return LeaveRequestModel.fromJson(
+      return LeaveSubmissionResultModel.fromJson(
         response.data['data'] as Map<String, dynamic>,
       );
     } catch (e) {

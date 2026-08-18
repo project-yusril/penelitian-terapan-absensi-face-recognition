@@ -37,10 +37,12 @@ class LeaveBloc extends Bloc<LeaveEvent, LeaveState> {
       tanggalSelesai: event.tanggalSelesai,
       keterangan: event.keterangan,
       filePath: event.filePath,
+      allMataKuliah: event.allMataKuliah,
+      mataKuliahIds: event.mataKuliahIds,
     );
     result.fold(
       (failure) => emit(LeaveError(failure.message)),
-      (leave) => emit(LeaveSubmitted(leave)),
+      (submission) => emit(LeaveSubmitted(submission)),
     );
   }
 }
