@@ -93,7 +93,7 @@ Ambang ini adalah default `prodi_settings` dan sama dengan `AppConstants` mobile
 - Rate limit: group API terautentikasi memakai `throttle:api` 60/menit **per user**, `POST /auth/change-password` memakai `throttle:auth-sensitive` 5/menit per user. Keying per user, bukan per IP, agar NAT kampus tidak saling mengunci (M-23).
 - Authorization: matriks role/permission/prodi canonical ada di [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md); enforcement tiga lapis (guard role, object policy, query scope) dan filter request hanya boleh mempersempit scope (H-21/MS-01).
 - Dataset analisis penelitian: `prodi_id` mempersempit dataset — bukan hanya memilih threshold — dengan atribusi prodi subjek (`users.prodi_id`), dan endpoint analisis memakai scope aktor sehingga role tingkat prodi tidak dapat membaca prodi lain (R-04/M-24).
-- Attendance/enrollment production fail-closed sampai trusted verifier tersedia (C-04/H-04).
+- Attendance/enrollment production fail-closed. Trusted verifier (C-04/H-04) di luar scope penelitian; [ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak, residual risk diterima.
 - Platform mobile release Android-only; iOS tidak didukung (H-17).
 - FCM lifecycle tersedia sebagai explicit opt-in; default release off (L-02).
 - Workflow Backend/Frontend CI sudah didefinisikan; remote enforcement/evidence masih mengikuti L-09.
@@ -103,7 +103,7 @@ Ambang ini adalah default `prodi_settings` dan sama dengan `AppConstants` mobile
 Permit server → Geofence → Liveness challenge → Face Match → Submit evidence → Consume permit
 ```
 
-Flow tersebut hanya compatibility/non-production sampai trusted verifier tersedia. Production saat ini berhenti di gate `TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`.
+Flow tersebut hanya compatibility/non-production. Production berhenti permanen di gate `TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` karena trusted verifier di luar scope penelitian ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak).
 
 ### Timeline
 - Total estimasi: ~22 minggu (5.5 bulan)

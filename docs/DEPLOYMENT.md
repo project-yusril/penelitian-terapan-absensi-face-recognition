@@ -57,7 +57,7 @@ Mail delivery adalah dependency keamanan untuk reset/activation. Verifikasi peng
 
 Lifecycle FCM mobile (register/refresh/revoke + handler) sudah diimplementasikan. Release default mematikan FCM melalui `ENABLE_FCM_PUSH=false`; aplikasi tidak mengklaim atau mencoba push tanpa konfigurasi. Untuk mengaktifkan push, inject `google-services.json` dari secret manager sebelum build, set protected variable `ENABLE_FCM_PUSH=true`, dan isi `FIREBASE_PROJECT_ID`/`FIREBASE_CREDENTIALS_PATH` pada backend. Workflow fail-closed bila FCM diaktifkan tanpa file konfigurasi. Service account JSON tetap private dan tidak boleh masuk repository.
 
-Attendance/enrollment berbasis client scalar dikontain fail-closed di production. `BIOMETRIC_ALLOW_CLIENT_CLAIMS` wajib `false`; endpoint permit, check-in/out, offline sync, enrollment/re-enrollment, dan approval biometrik mengembalikan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`. Nilai `true` hanya untuk local/testing compatibility dan tidak boleh dipakai sebagai production workaround. Aktivasi kembali memerlukan challenge-bound capture artifact, trusted verifier, dan platform attestation sesuai `THREAT-MODEL-ATTENDANCE.md`.
+Attendance/enrollment berbasis client scalar dikontain fail-closed di production. `BIOMETRIC_ALLOW_CLIENT_CLAIMS` wajib `false`; endpoint permit, check-in/out, offline sync, enrollment/re-enrollment, dan approval biometrik mengembalikan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`. Nilai `true` hanya untuk local/testing compatibility dan tidak boleh dipakai sebagai production workaround. Trusted verifier server-side (challenge-bound capture, matching/liveness server, attestation) **di luar scope penelitian** dan ditolak di [ADR-001](ADR-001-trusted-biometric-verifier.md); untuk konteks penelitian containment ini permanen. Aktivasi kembali endpoint biometrik production memerlukan **keputusan kenaikan ke produksi** yang menghidupkan ulang ADR-001 beserta verifier, sesuai `THREAT-MODEL-ATTENDANCE.md`.
 
 ## Android Release
 
@@ -81,7 +81,7 @@ Build lokal:
 flutter build appbundle --release --dart-define=API_BASE_URL=https://api.example.ac.id/api
 ```
 
-Verifikasi certificate signer, app startup, login, checkout navigation, offline recovery, camera, dan GPS pada physical Android device sebelum distribusi. Permit/check-in/out production tetap diblokir sampai trusted biometric verifier tersedia.
+Verifikasi certificate signer, app startup, login, checkout navigation, offline recovery, camera, dan GPS pada physical Android device sebelum distribusi. Permit/check-in/out production tetap diblokir permanen untuk konteks penelitian (trusted verifier di luar scope — [ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak).
 
 ## iOS
 

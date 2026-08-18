@@ -5,8 +5,8 @@
 > [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md), [CURRENT-API.md](CURRENT-API.md),
 > dan [SECURITY.md](SECURITY.md). NIM/NIDN atau password universal tidak pernah
 > menjadi credential awal. Mobile release hanya untuk mahasiswa Android; fungsi
-> Dosen berjalan di dashboard web. Attendance/enrollment production sedang
-> fail-closed sampai trusted verifier tersedia.
+> Dosen berjalan di dashboard web. Attendance/enrollment production
+> fail-closed; trusted verifier (C-04/H-04) di luar scope penelitian ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak).
 
 ## 1. MODUL AUTENTIKASI & USER MANAGEMENT
 
@@ -267,11 +267,18 @@
 - **Platform**: Mobile
 - **Detail**:
   - Mahasiswa pilih jenis: IZIN atau SAKIT
-  - Pilih mata kuliah yang tidak dihadiri
+  - Pilih mata kuliah yang tidak dihadiri, **atau** aktifkan opsi "Berlaku untuk semua MK"
   - Pilih tanggal (bisa range tanggal untuk sakit berkepanjangan)
   - Upload foto/scan surat (JPG/PNG/PDF, max 5MB)
   - Tambah keterangan (opsional)
   - Status: PENDING approval
+
+- **Opsi semua mata kuliah (sakit sehari)**:
+  - Satu submit menghasilkan **satu izin per mata kuliah KRS aktif** pada semester dan tahun ajaran aktif yang periodenya mencakup rentang pengajuan serta mempunyai jadwal aktif; model data tetap per-MK sehingga alpha/SP/rekap tidak berubah
+  - MK tanpa jadwal pada rentang, dan MK yang sudah punya izin PENDING/APPROVED dengan rentang tanggal yang beririsan, dilewati dan dilaporkan ke mahasiswa
+  - Satu surat dipakai bersama seluruh baris yang terbentuk
+  - Approval tetap per baris: menyetujui satu izin tidak mengubah mata kuliah lain
+  - Kontrak payload dan bentuk response ada di [CURRENT-API.md](CURRENT-API.md)
 
 #### FR-IZIN-002: Approval Izin/Sakit
 - **Deskripsi**: Dosen atau Admin Prodi menyetujui/menolak izin

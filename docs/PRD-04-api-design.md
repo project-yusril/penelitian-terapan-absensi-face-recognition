@@ -7,8 +7,9 @@
 > dan offline payload lama di bawah tidak boleh digunakan bila bertentangan
 > dengan dokumen current.
 > Endpoint attendance/enrollment yang tercantum dapat tersedia sebagai route,
-> tetapi production saat ini mengembalikan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`
-> sampai trusted verifier tersedia.
+> tetapi production mengembalikan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`.
+> Trusted verifier (C-04/H-04) di luar scope penelitian ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak),
+> sehingga containment ini permanen untuk konteks penelitian.
 
 > **D-01 & D-02 (disinkronkan 16 Juni 2026):** Dokumen ini telah diselaraskan
 > dengan implementasi nyata di `backend/routes/api.php`. Base URL, prefix, method,
@@ -359,10 +360,15 @@ Prefix `/mahasiswa/attendance`. Check-in/out & sync butuh middleware `enrollment
 | Method | Endpoint | Deskripsi | Role | Status |
 |--------|----------|-----------|------|--------|
 | GET | `/mahasiswa/leave-requests` | List izin saya | Mahasiswa | 🟡 (dulu `/leaves/my`) |
-| POST | `/mahasiswa/leave-requests` | Submit izin/sakit | Mahasiswa | 🟡 (dulu `/leaves`) |
+| POST | `/mahasiswa/leave-requests` | Submit izin/sakit (single MK, atau fan-out multi-MK) | Mahasiswa | 🟡 (dulu `/leaves`) |
 | GET | `/kaprodi/leave-requests` | List izin (approval) | Kaprodi | 🟡 (dulu `/leaves/pending`) |
 | PUT | `/kaprodi/leave-requests/{id}/approve` | Approve izin | Kaprodi | ✅ |
 | PUT | `/kaprodi/leave-requests/{id}/reject` | Reject izin | Kaprodi | ✅ |
+
+`POST /mahasiswa/leave-requests` mendukung dua mode (detail payload & response di [CURRENT-API.md](CURRENT-API.md)):
+
+- **Single (kontrak lama):** kirim `mata_kuliah_id`. Response berupa satu objek `LeaveRequest`.
+- **Multi-MK (fan-out):** kirim `all_mata_kuliah=true` atau `mata_kuliah_ids[]`. Backend membuat satu `LeaveRequest` per MK enrolled yang punya jadwal aktif pada rentang tanggal, dalam satu transaksi. Response memuat `created_count`, `leave_requests[]`, dan `skipped[]` (MK yang dilewati karena duplikat atau tanpa jadwal). Model data tetap per-MK.
 
 ---
 

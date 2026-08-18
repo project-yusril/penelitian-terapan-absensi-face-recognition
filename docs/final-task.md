@@ -7,9 +7,14 @@
 > keputusan release tanpa memeriksa dokumen current.
 >
 > Sinkronisasi 11 Agustus 2026: H-13, H-17, dan L-02 selesai. C-04/H-04
-> terkontain fail-closed tetapi menunggu trusted verifier; H-16 menunggu physical
+> terkontain fail-closed; H-16 menunggu physical
 > Android matrix; L-09 menunggu green remote CI/protected enforcement. iOS tidak
 > didukung dan FCM default release off.
+>
+> Sinkronisasi 12 Agustus 2026: C-04/H-04 (trusted verifier server-side)
+> **dinyatakan di luar scope penelitian** — [ADR-001](ADR-001-trusted-biometric-verifier.md)
+> ditolak, residual risk diterima. Bukan lagi backlog aktif; production tetap
+> fail-closed permanen untuk penelitian.
 >
 > Sinkronisasi lanjutan 11 Agustus 2026: R-04 (filter dataset analisis per prodi),
 > MS-01 ([matriks role-permission-prodi](ROLE-PERMISSION-MATRIX.md)), M-23 (limiter
@@ -87,7 +92,7 @@ Prioritas utama. Sebagian hardening build/release sudah dikerjakan, tetapi deplo
 
 ### A.4 Final Testing di Produksi
 - [ ] Smoke test login 6 role di domain produksi
-- [ ] Setelah trusted verifier tersedia, uji alur absensi end-to-end (mobile → API produksi); flow production saat ini sengaja diblokir
+- [ ] Uji alur absensi end-to-end di produksi hanya relevan bila proyek dinaikkan ke produksi dan C-04/H-04 dibuka kembali; untuk penelitian, trusted verifier di luar scope ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak) dan flow production sengaja diblokir permanen
 - [ ] Uji Web Push & FCM di produksi (HTTPS)
 - [ ] Uji export Excel/PDF + generate SP di produksi
 - [ ] Verifikasi scheduler & queue berjalan (cek log); pastikan ALPHA tercatat otomatis beberapa menit setelah jadwal selesai dan attendance yang lupa checkout ter-auto-close

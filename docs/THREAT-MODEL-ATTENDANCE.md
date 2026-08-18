@@ -2,7 +2,9 @@
 
 **Status:** maintained
 **Pembaruan:** 11 Agustus 2026
-**Konteks:** dokumen ini memenuhi bagian "buat threat model" pada acceptance C-04 di [temuan.md](temuan.md). Dokumen ini **tidak menutup C-04/H-04**. Tujuannya adalah menyatakan apa yang diverifikasi server, apa yang masih merupakan klaim client, dan mengapa production saat ini fail-closed.
+**Konteks:** dokumen ini memenuhi bagian "buat threat model" pada acceptance C-04 di [temuan.md](temuan.md). Dokumen ini **tidak menutup C-04/H-04**. Tujuannya adalah menyatakan apa yang diverifikasi server, apa yang masih merupakan klaim client, dan mengapa production fail-closed.
+
+> **Keputusan scope 12 Agustus 2026.** C-04/H-04 (trusted verifier server-side) **di luar scope penelitian**. Rancangan verifier ditinjau di [ADR-001](ADR-001-trusted-biometric-verifier.md) dan **ditolak**; verifier tidak dibangun. Threat model ini tetap valid sebagai pernyataan batas klaim: production fail-closed permanen (untuk penelitian) dan data legacy adalah **client-attested**. Bagian "Arah Remediasi C-04" di bawah kini menjadi **panduan bila proyek dinaikkan ke produksi**, bukan backlog aktif.
 
 ## Aset yang Dilindungi
 
@@ -45,13 +47,13 @@ Diverifikasi pada `AttendancePermitService`, `AttendancePolicyService`, `Api/Mah
 | Status dan alpha | Diturunkan server dari waktu server dan setting prodi |
 | Batas kualitas lokasi | Akurasi dan umur fix ditolak bila melewati policy prodi (baseline `gps_accuracy_minimum` 20 m) |
 | Comparator match | Ambang `face_distance <= face_threshold` konsisten mobile/backend/analisis (L-08/R-04); server menegakkan penolakan |
-| Transport | HTTPS wajib pada release; cleartext hanya loopback debug |
+| Transport | HTTPS wajib pada release; cleartext debug hanya loopback/emulator atau LAN privat terpercaya dengan akun/data uji |
 | Abuse rate | Permit dan capture dibatasi `throttle:attendance` 10/menit per user; group API terautentikasi dibatasi `throttle:api` 60/menit per user (M-23). Keying per user, bukan per IP |
 | Scope pembaca | Endpoint analisis memakai scope aktor: role tingkat prodi tidak dapat membaca data prodi lain (M-24). Matriks lengkap di [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md) |
 
 > Catatan metrik penelitian: analisis success rate geofence dihitung dari `checkin_success` vs `checkin_failed`, bukan `geofence_valid` (R-01), dan filter `prodi_id` mempersempit dataset dengan atribusi prodi subjek (R-04). Keduanya memperbaiki *validitas laporan*, bukan menutup residual C-04 di bawah.
 
-Konsekuensi: A2, A3, dan sebagian besar A4 sudah tertutup. Permit menutup absensi tanpa preauthorization, salah binding, dan replay. A1 dikontain di production dengan menonaktifkan mutation biometrik sampai trusted verifier tersedia; ini mencegah pemalsuan masuk ke data resmi tetapi membuat fitur attendance/enrollment production tidak tersedia.
+Konsekuensi: A2, A3, dan sebagian besar A4 sudah tertutup. Permit menutup absensi tanpa preauthorization, salah binding, dan replay. A1 dikontain di production dengan menonaktifkan mutation biometrik secara permanen untuk konteks penelitian (trusted verifier di luar scope — [ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak); ini mencegah pemalsuan masuk ke data resmi tetapi membuat fitur attendance/enrollment production tidak tersedia.
 
 ## Residual: Klaim Client yang Belum Dapat Diverifikasi
 
@@ -97,7 +99,10 @@ Tidak boleh diklaim:
 
 Untuk data compatibility/non-production, perlakukan hasil sebagai **client-attested**, bukan bukti forensik. Production tidak boleh menghasilkan attendance/enrollment dari flow legacy. Setelah verifier tersedia pun, sediakan jalur sanggah manual untuk keputusan akademik berkonsekuensi seperti SP/DO.
 
-## Arah Remediasi C-04
+## Arah Remediasi C-04 (opsional — hanya untuk kenaikan ke produksi)
+
+> **Bukan backlog aktif.** Verifier di luar scope penelitian ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak).
+> Daftar berikut adalah rujukan bila suatu saat proyek dinaikkan ke tingkat produksi.
 
 Berurutan dari dampak tertinggi:
 

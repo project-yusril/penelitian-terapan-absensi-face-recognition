@@ -48,7 +48,7 @@ sumber kebenaran authorization (MS-01).
 
 Permit mencegah request tanpa preauthorization, wrong binding, dan replay. Permit belum membuat koordinat, face distance, atau liveness result menjadi bukti yang diverifikasi independen oleh server. Karena itu production memasang `RequireTrustedBiometricEvidence` dan menolak permit, attendance online/offline, enrollment/re-enrollment, reference embedding, serta approval biometrik dengan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`. Compatibility switch hanya berlaku di environment non-production.
 
-Data legacy/test bersifat **client-attested**, bukan bukti forensik. Production tidak menerima data tersebut sampai trusted verifier tersedia. C-04/H-04 dan batas klaim lengkap ada di [THREAT-MODEL-ATTENDANCE.md](THREAT-MODEL-ATTENDANCE.md) dan [temuan.md](temuan.md).
+Data legacy/test bersifat **client-attested**, bukan bukti forensik. Production tetap menolak data tersebut. Trusted verifier server-side (C-04/H-04) **di luar scope penelitian**: rancangannya ditinjau di [ADR-001](ADR-001-trusted-biometric-verifier.md) dan **ditolak**, sehingga face matching/liveness tetap on-device dan production sengaja fail-closed. Ini batasan penelitian yang diterima sebagai residual risk, bukan pekerjaan tertunda. C-04/H-04 dan batas klaim lengkap ada di [THREAT-MODEL-ATTENDANCE.md](THREAT-MODEL-ATTENDANCE.md), [ADR-001](ADR-001-trusted-biometric-verifier.md), dan [temuan.md](temuan.md).
 
 ## Attendance Window
 
@@ -134,4 +134,4 @@ Jangan menerbitkan artifact iOS. Membuka dukungan iOS memerlukan release decisio
 - Checkout navigation H-13 selesai.
 - Camera converter harness tersedia, tetapi H-16 menunggu Firebase Test Lab physical Android low/mid/high evidence.
 - FCM L-02 selesai sebagai explicit opt-in; default release tetap off.
-- Sistem belum production-ready selama C-04/H-04 dan evidence release L-09/H-16 masih terbuka.
+- Sistem **memenuhi tujuan penelitian** (face recognition on-device + geofencing terbukti), tetapi **belum production-ready**: C-04/H-04 sengaja di luar scope penelitian ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak) dan evidence release L-09/H-16 masih terbuka. Menaikkan ke produksi mengharuskan C-04/H-04 dibuka kembali.

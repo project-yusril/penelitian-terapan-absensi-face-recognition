@@ -5,7 +5,8 @@
 > pada [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md) dan
 > [CURRENT-API.md](CURRENT-API.md). Offline mode memerlukan permit valid. Diagram
 > biometric flow hanya berlaku untuk compatibility/non-production; production
-> berhenti fail-closed sampai trusted verifier tersedia.
+> berhenti fail-closed. Trusted verifier (C-04/H-04) di luar scope penelitian
+> ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak).
 
 ## 1. FLOW UTAMA: PROSES ABSENSI (CHECK-IN)
 
@@ -403,21 +404,37 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │ MAHASISWA submit izin/sakit via mobile app                           │
 │ - Pilih jenis (izin/sakit)                                           │
-│ - Pilih mata kuliah                                                  │
+│ - Pilih mata kuliah, ATAU aktifkan "Berlaku untuk semua MK"          │
 │ - Pilih tanggal (range)                                              │
 │ - Upload surat (foto/scan)                                           │
 │ - Keterangan (opsional)                                              │
 │ Status: PENDING                                                      │
 └─────────────────────┬───────────────────────────────────────────────┘
                       │
-                      ▼
+        ┌─────────────┴───────────────┐
+        │                             │
+        ▼                             ▼
+┌───────────────────┐   ┌─────────────────────────────────────────────┐
+│ Single MK         │   │ Semua/Beberapa MK (fan-out)                  │
+│ - 1 LeaveRequest  │   │ - `all_mata_kuliah=true` atau `mata_kuliah_  │
+│   untuk MK itu    │   │   ids[]`                                     │
+│                   │   │ - Backend buat 1 LeaveRequest per MK enrolled│
+│                   │   │   yang punya jadwal aktif pada rentang       │
+│                   │   │ - MK tanpa jadwal / sudah ada izin aktif     │
+│                   │   │   dilewati (dilaporkan di `skipped`)         │
+│                   │   │ - Semua baris dibuat dalam satu transaksi;   │
+│                   │   │   model tetap per-MK (alpha/SP tak berubah)  │
+└─────────┬─────────┘   └─────────────────────┬───────────────────────┘
+          └───────────────┬───────────────────┘
+                          ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│ Notifikasi ke Dosen pengampu MK                                      │
+│ Notifikasi ke Dosen pengampu MK (per baris LeaveRequest)             │
 │ Dosen review di web/mobile:                                          │
 │ - Lihat surat yang diupload                                         │
 │ - Approve → status attendance berubah ke IZIN/SAKIT, alpha = 0      │
 │ - Reject → status tetap ALPHA + alasan penolakan                    │
 │ Notifikasi ke mahasiswa                                              │
+│ (setiap baris di-approve/reject independen per MK)                   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 

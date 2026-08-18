@@ -1,7 +1,7 @@
 # Kontrak API Saat Ini
 
 **Status:** maintained summary  
-**Pembaruan:** 11 Agustus 2026
+**Pembaruan:** 18 Agustus 2026
 **Authority:** `backend/routes/api.php`, request validation, services, dan feature tests  
 **Base path:** `/api`
 
@@ -99,9 +99,11 @@ Token hanya boleh digunakan sekali dan terikat user, schedule, course, action, a
 
 > **Production containment:** kontrak permit/attendance scalar di bawah hanya aktif
 > untuk local/testing compatibility. Production selalu mengembalikan
-> `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` sampai challenge-bound capture
-> artifact diverifikasi server/trusted verifier. `BIOMETRIC_ALLOW_CLIENT_CLAIMS`
-> tidak dapat membuka bypass di production.
+> `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`. Challenge-bound capture artifact yang
+> diverifikasi server (trusted verifier) **di luar scope penelitian** — rancangan
+> ditolak di [ADR-001](ADR-001-trusted-biometric-verifier.md), sehingga containment
+> ini bersifat permanen untuk konteks penelitian dan hanya dibuka bila proyek
+> dinaikkan ke produksi. `BIOMETRIC_ALLOW_CLIENT_CLAIMS` tidak dapat membuka bypass di production.
 
 Containment yang sama berlaku untuk:
 
@@ -111,6 +113,21 @@ Containment yang sama berlaku untuk:
 - approval enrollment/re-enrollment pada API maupun web.
 
 Read-only status/history yang tidak membuat atau mengaktifkan evidence biometrik tetap mengikuti authentication/authorization normal.
+
+### `POST /mahasiswa/enrollment/check-duplicate`
+
+Preflight enrollment ini hanya dapat dipanggil mahasiswa terautentikasi, memakai limiter biometrik per pengguna/IP, dan mengembalikan `Cache-Control: private, no-store`. Wajah yang belum terdaftar menghasilkan `200 {"is_duplicate": false}`. Jika embedding paling dekat cocok dengan akun aktif pada prodi yang sama dan embedding berstatus `pending` atau `approved`, respons `409 BIOMETRIC_CONFLICT` menambahkan hanya nama tampilan pemilik:
+
+```json
+{
+  "code": "BIOMETRIC_CONFLICT",
+  "message": "Data biometrik tidak dapat digunakan untuk pendaftaran.",
+  "matched_name": "Yusril",
+  "logout_required": false
+}
+```
+
+Respons tidak mengirim NIM, kelas, user ID, distance, threshold, atau embedding. Wajah akun nonaktif, soft-deleted, atau prodi lain tidak digunakan sebagai identity oracle. Backend menghitung konflik berdasarkan token Sanctum/session aktif dan mengubah `logout_required` menjadi `true` pada konflik ketiga, termasuk bila aplikasi direstart; token atau web session langsung dicabut server-side. Mobile menampilkan nama tersebut untuk membantu pengguna perangkat bersama dan menjalankan cleanup logout lokal saat flag aktif. Login ulang membuat token/counter baru sehingga pengguna dapat mengulang enrollment dengan wajah pemilik akun yang benar.
 
 ## Online Check-in/Checkout
 
@@ -172,6 +189,74 @@ Online capture time berasal dari server. Client timestamp tidak dapat memperluas
 ```
 
 `type` menggunakan underscore: `check_in` atau `check_out`, bukan hyphen. Maksimum 20 item. Setiap item memerlukan permit dan UUID berbeda. Hasil dipetakan per `client_uuid`.
+
+## Izin/Sakit (Leave Request)
+
+### `POST /mahasiswa/leave-requests`
+
+Multipart (`file_surat` opsional, `jpg|jpeg|png|pdf`, maksimum 5 MB). Field
+bersama untuk kedua mode: `jenis` (`izin`/`sakit`), `tanggal_mulai`
+(`after_or_equal:today`), `tanggal_selesai` (`after_or_equal:tanggal_mulai`),
+dan `keterangan` (maksimum 500 karakter).
+
+Pemilihan mata kuliah memakai salah satu dari tiga bentuk:
+
+| Mode | Field | Perilaku |
+|---|---|---|
+| Single (kontrak lama) | `mata_kuliah_id` | Wajib bila dua field di bawah tidak dikirim. Tidak menyaring jadwal |
+| Semua MK | `all_mata_kuliah=true` | Fan-out ke seluruh MK KRS aktif pada periode akademik aktif yang punya jadwal aktif pada rentang |
+| Subset MK | `mata_kuliah_ids[]` | Fan-out ke MK yang disebut; tetap disaring periode, status, jadwal, dan keanggotaan |
+
+Aturan resolusi mode multi:
+
+- Target hanya MK yang mahasiswa **enrolled**, MK/semester/tahun ajarannya berstatus
+  `aktif`, seluruh rentang pengajuan berada di dalam periode semester dan tahun
+  ajaran, serta punya `Jadwal` berstatus `aktif` pada salah satu hari yang tercakup
+  `tanggal_mulai..tanggal_selesai`. Subset eksplisit yang tidak memenuhi periode
+  atau status menghasilkan `422` tanpa membuat baris.
+- MK yang sudah punya izin `pending`/`approved` dengan rentang tanggal yang
+  **beririsan** (`tanggal_mulai ≤ selesai baru` dan `tanggal_selesai ≥ mulai
+  baru`) dilewati, bukan menggagalkan seluruh pengajuan. Aturan overlap ini juga
+  berlaku pada mode single (dua izin multi-hari yang bertumpuk untuk MK yang sama
+  ditolak sebagai duplikat).
+- Seluruh baris dibuat dalam satu transaksi dan berbagi satu `file_surat`. Bila
+  transaksi gagal, file yang telanjur diunggah ikut dihapus. Cek duplikat diulang
+  di dalam lock transaksi sehingga submit paralel tidak menghasilkan izin ganda.
+- `mata_kuliah_ids[]` yang memuat MK di luar enrollment menghasilkan `403` dan
+  tidak membuat baris apa pun.
+- Model data tetap **satu baris per mata kuliah**. Alpha, SP, dan rekap tidak
+  berubah karena semuanya tetap dihitung per MK.
+
+Response mode single tetap satu objek `LeaveRequest` (201), seperti sebelumnya.
+Response mode multi (201):
+
+```json
+{
+  "success": true,
+  "message": "Pengajuan izin dibuat untuk 2 mata kuliah",
+  "data": {
+    "created_count": 2,
+    "leave_requests": [{ "id": 41, "mata_kuliah_id": 11, "status": "pending" }],
+    "skipped": [
+      {
+        "mata_kuliah_id": 13,
+        "nama": "Statistika",
+        "alasan": "tanpa_jadwal",
+        "pesan": "Tidak ada jadwal aktif pada rentang tanggal"
+      }
+    ]
+  }
+}
+```
+
+`alasan` bernilai `duplikat` atau `tanpa_jadwal`. Bila tidak ada satu pun baris
+yang dapat dibuat, response `422`; pada mode multi ringkasan `skipped` yang sama
+dikirim di `errors.skipped`, termasuk ketika semua target tersaring cek-ulang di
+dalam lock transaksi (submit paralel).
+
+Approval tidak berubah: `PUT /kaprodi/leave-requests/{id}/approve` bekerja
+per baris, sehingga menyetujui satu izin hanya memengaruhi attendance mata
+kuliah tersebut.
 
 ## Analisis dan Evaluasi Penelitian
 

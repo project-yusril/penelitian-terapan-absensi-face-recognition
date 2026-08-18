@@ -10,7 +10,7 @@ Jika terdapat perbedaan, gunakan urutan berikut:
 2. **Dokumen current:** `CURRENT-ARCHITECTURE.md`, `CURRENT-API.md`, `SECURITY.md`, dan `DEPLOYMENT.md`.
 3. **Audit aktif:** `temuan.md` adalah satu-satunya backlog risiko dan evidence tracker authoritative.
 4. **PRD:** tujuan produk dan acceptance criteria. Detail endpoint/schema pada PRD harus menunjuk ke dokumen current, bukan mengalahkan implementasi.
-5. **Proposal aktif:** rencana yang belum diimplementasikan, seperti `rencana-izin.md`; bukan kontrak runtime.
+5. **Catatan implementasi:** rencana yang sudah selesai, seperti `rencana-izin.md`; bukan pengganti kontrak current.
 6. **Dokumen historis:** task plan, analisis lama, final-task, dan fix log hanya merekam kondisi pada tanggal pembuatannya.
 
 ## Referensi Current
@@ -37,8 +37,12 @@ Jika terdapat perbedaan, gunakan urutan berikut:
 ### Tracker dan Proposal
 
 - `temuan.md`: satu-satunya tracker remediation aktif.
-- `rencana-izin.md`: proposal aktif untuk shortcut izin multi-MK; belum menjadi API/runtime contract.
+- `rencana-izin.md`: catatan implementasi shortcut izin multi-MK yang sudah selesai; kontrak authoritative ada di `CURRENT-API.md`.
 - `SOP-R05-R07.md`: draft SOP penelitian; belum executable sampai prasyarat di dokumen terpenuhi.
+
+### Architecture Decision Records (ADR)
+
+- `ADR-001-trusted-biometric-verifier.md`: **DITOLAK / tidak dilanjutkan.** Rancangan trusted biometric verifier server-side (C-04/H-04). Verifier **di luar scope penelitian**; production tetap fail-closed dan residual risk diterima. Disimpan sebagai catatan keputusan bila proyek dinaikkan ke tingkat produksi. Bukan rencana aktif.
 
 ### Historis
 
@@ -55,7 +59,7 @@ Dokumen historis tidak boleh digunakan untuk membuat endpoint, credential, deplo
 | Area | Status current | Authority |
 |---|---|---|
 | Platform mobile | Android-only; iOS tidak didukung | [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md), [DEPLOYMENT.md](DEPLOYMENT.md) |
-| Attendance/enrollment production | Fail-closed sampai trusted verifier tersedia | [SECURITY.md](SECURITY.md), [THREAT-MODEL-ATTENDANCE.md](THREAT-MODEL-ATTENDANCE.md) |
+| Attendance/enrollment production | Fail-closed. Trusted verifier (C-04/H-04) **di luar scope penelitian** — [ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak; residual risk diterima | [SECURITY.md](SECURITY.md), [THREAT-MODEL-ATTENDANCE.md](THREAT-MODEL-ATTENDANCE.md), [ADR-001](ADR-001-trusted-biometric-verifier.md) |
 | FCM mobile | Lifecycle selesai; release default off, opt-in via secret/config | [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md), [DEPLOYMENT.md](DEPLOYMENT.md) |
 | Checkout | Action dan navigation contract selesai | [temuan.md](temuan.md#h-13-checkout-ui-tidak-memiliki-actionnavigasi-yang-dapat-dicapai) |
 | Camera matrix | Harness tersedia; physical Android low/mid/high evidence belum ada | [temuan.md](temuan.md#h-16-camera-converter-belum-diverifikasi-pada-device-matrix) |
@@ -80,4 +84,4 @@ Dokumen historis tidak boleh digunakan untuk membuat endpoint, credential, deplo
 - `backend-ci.yml` dan `frontend-ci.yml` dikonfigurasi untuk setiap push/PR. `android-release.yml` dan `android-device-tests.yml` manual. Detail lihat [DEPLOYMENT.md](DEPLOYMENT.md).
 - Seluruh pekerjaan lokal sudah di-push ke `origin/main` pada 11 Agustus 2026 (`5e49bfe`, `b271326`, `d46f0b1`, `13fc302`), sehingga workflow push/PR terpicu pada revision tersebut. **Push hanya memicu workflow, bukan membuktikan hasilnya.** Green remote run, protected environments, dan required checks tetap belum boleh diklaim sampai evidence L-09 tersedia — GitHub CLI tidak tersedia di workspace ini.
 
-**Pembaruan terakhir:** 11 Agustus 2026.
+**Pembaruan terakhir:** 18 Agustus 2026 (resync hasil verifikasi tooling ke keadaan sekarang: `php artisan test` 224/819, `flutter test` 189, `flutter analyze` bersih, formatter lulus, `npm run build` lulus — lihat [temuan.md](temuan.md#hasil-verifikasi-tooling); termasuk izin multi-MK, UX konflik biometrik perangkat bersama, dan panduan debug LAN privat).

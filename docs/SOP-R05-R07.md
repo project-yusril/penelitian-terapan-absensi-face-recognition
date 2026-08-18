@@ -6,7 +6,8 @@
 > fixture/consent/script yang benar-benar ada, akun test terisolasi, permit per
 > action/UUID, dan pengukuran eksternal dari load-test runner. Residual research
 > validity mengikuti R-01 sampai R-05 di [temuan.md](temuan.md).
-> Production attendance saat ini fail-closed sampai trusted verifier tersedia;
+> Production attendance fail-closed permanen untuk konteks penelitian (trusted
+> verifier di luar scope — [ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak);
 > SOP hanya boleh dijalankan pada environment penelitian non-production yang
 > mengaktifkan compatibility mode secara eksplisit dan mengisolasi seluruh data test.
 

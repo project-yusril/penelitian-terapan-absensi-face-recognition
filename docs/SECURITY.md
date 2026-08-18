@@ -25,11 +25,11 @@
 - Rekam akademik historis dilindungi FK `ON DELETE RESTRICT`; hard delete master ditolak database selama ada riwayat, arsip via soft delete (M-19).
 - Invariant domain ditegakkan database via CHECK/UNIQUE/composite index sebagai lapisan terakhir terhadap import/race/script (M-20).
 - CI gate: `flutter analyze --fatal-warnings --fatal-infos` + `flutter test` (Frontend CI) dan backend test/validate/audit (Backend CI) berjalan pada setiap push/PR.
-- Production biometric containment menolak seluruh mutation/reference/approval yang bergantung pada scalar client sampai trusted verifier tersedia.
+- Production biometric containment menolak seluruh mutation/reference/approval yang bergantung pada scalar client. Containment ini bersifat permanen untuk konteks penelitian karena trusted verifier di luar scope (lihat Residual Risk Utama).
 
 ## Residual Risk Utama
 
-- Legacy implementation masih menghitung koordinat, face distance, liveness, dan embedding dari client, sehingga production memblokir endpoint terkait dengan `TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` sampai trusted verifier tersedia. Lihat C-04/H-04.
+- **Trusted verifier server-side (C-04/H-04) di luar scope penelitian — residual risk diterima.** Legacy implementation menghitung koordinat, face distance, liveness, dan embedding dari client; face matching berjalan on-device dan server tidak mengulangnya. Rancangan verifier server-side ditinjau di [ADR-001](ADR-001-trusted-biometric-verifier.md) dan **ditolak** karena di luar kebutuhan penelitian. Karena itu production memblokir endpoint terkait dengan `TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` secara permanen (untuk penelitian), dan sistem **tidak boleh diklaim tahan proxy attendance atau presentation attack**. Menaikkan proyek ke produksi mengharuskan C-04/H-04 dibuka kembali. Lihat C-04/H-04 di [temuan.md](temuan.md).
 - iOS tidak didukung dan tidak termasuk release matrix. Lihat H-17.
 - Readiness detail `/healthz` harus dibatasi. Lihat M-15.
 - FCM mobile memiliki token lifecycle dan handler lengkap, tetapi release default `ENABLE_FCM_PUSH=false`; opt-in mewajibkan konfigurasi Firebase yang diinjeksi secret manager. Lihat L-02.

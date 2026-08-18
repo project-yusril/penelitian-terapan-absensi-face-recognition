@@ -526,6 +526,15 @@ CREATE TABLE leave_requests (
 );
 ```
 
+> **Dedup di level aplikasi (bukan constraint DB).** Tidak ada unique constraint
+> pada `(user_id, mata_kuliah_id, tanggal_*)`. `LeaveRequestController@store`
+> menolak izin baru bila untuk `user_id`+`mata_kuliah_id` yang sama sudah ada baris
+> `pending`/`approved` dengan rentang tanggal yang **beririsan** (`tanggal_mulai ≤
+> selesai_baru` dan `tanggal_selesai ≥ mulai_baru`). Cek ini diulang di dalam lock
+> transaksi (`lockForUpdate` pada baris `users`) agar submit paralel — termasuk
+> fan-out multi-MK — tidak menghasilkan izin ganda. Detail kontrak API ada di
+> [CURRENT-API.md](CURRENT-API.md#izinsakit-leave-request).
+
 ### 2.18 Tabel: `prodi_settings`
 ```sql
 CREATE TABLE prodi_settings (

@@ -145,7 +145,7 @@ Jumlah route dihitung per entri tabel route, termasuk varian method.
 
 | Guard | Route | Fungsi |
 |---|---|---|
-| `biometric.trusted` | 12 route: permit, check-in/out, sync-offline, enrollment, re-enrollment, embedding, approval enrollment/re-enrollment (API + web) | C-04/H-04: production selalu `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` sampai trusted verifier tersedia |
+| `biometric.trusted` | 12 route: permit, check-in/out, sync-offline, enrollment, re-enrollment, embedding, approval enrollment/re-enrollment (API + web) | C-04/H-04: production selalu `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`. Trusted verifier di luar scope penelitian ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak); containment permanen untuk penelitian |
 | `enrollment.approved` | 5 route: permit, check-in, check-out, sync-offline, embedding | Menahan absensi sampai embedding disetujui |
 | `user.active` | Seluruh group terproteksi (API + web) | H-19: akun nonaktif ditolak walau token lama masih ada |
 | `2fa` | Group web | Menegakkan TOTP saat aktif |

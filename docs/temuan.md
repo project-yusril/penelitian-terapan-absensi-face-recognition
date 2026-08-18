@@ -1,7 +1,7 @@
 # Temuan Audit Menyeluruh Absensi Mahasiswa
 
 Tanggal audit: 17 Juli 2026
-Pembaruan status terakhir: 11 Agustus 2026
+Pembaruan status terakhir: 18 Agustus 2026
 Scope: `backend/`, `frontend/`, seluruh dokumentasi di `docs/`, konfigurasi platform, migration, seeder, test, dan dependency manifest/lockfile.
 Metode: review statis lintas backend Laravel, web Inertia/Vue, Flutter, database, security, business logic, serta verifikasi build/test/tooling yang tersedia.
 
@@ -12,11 +12,13 @@ Metode: review statis lintas backend Laravel, web Inertia/Vue, Flutter, database
 
 ## Kesimpulan Eksekutif
 
-Status project saat ini: **belum layak dipakai sebagai sistem absensi produksi atau sumber keputusan akademik resmi**. Mutation attendance/enrollment sengaja fail-closed di production sampai trusted biometric verifier tersedia; matriks kamera Android fisik dan enforcement CI/release environment juga belum memiliki evidence eksternal.
+Status project saat ini: **memenuhi tujuan penelitian, tetapi belum layak dipakai sebagai sistem absensi produksi atau sumber keputusan akademik resmi**. Mutation attendance/enrollment sengaja fail-closed di production; matriks kamera Android fisik dan enforcement CI/release environment juga belum memiliki evidence eksternal.
+
+> **Keputusan scope 12 Agustus 2026.** C-04 dan H-04 (trusted biometric verifier server-side) **dinyatakan di luar scope penelitian** dan diterima sebagai **residual risk yang didokumentasikan**, bukan backlog aktif. Rancangannya ditinjau di [ADR-001](ADR-001-trusted-biometric-verifier.md) dan **ditolak** karena biaya integrasi tinggi tanpa nilai untuk penelitian; tujuan penelitian (kelayakan face recognition on-device + geofencing) sudah tercapai dengan matching di perangkat. Production tetap fail-closed dan data legacy diperlakukan **client-attested**, bukan bukti forensik. Menaikkan proyek ke tingkat produksi mengharuskan C-04/H-04 dibuka kembali.
 
 Sebagian besar fitur yang dijelaskan PRD sudah memiliki implementasi dan banyak temuan awal telah ditutup. Risiko terbuka terbesar saat ini adalah:
 
-1. Trusted verifier untuk challenge-bound capture, server-side liveness/matching, hardware signature, dan attestation belum tersedia (C-04/H-04). Production dikontain dengan menolak endpoint terkait, bukan mempercayai scalar client.
+1. Trusted verifier untuk challenge-bound capture, server-side liveness/matching, hardware signature, dan attestation **tidak diimplementasikan — di luar scope penelitian (C-04/H-04, [ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak)**. Production dikontain dengan menolak endpoint terkait, bukan mempercayai scalar client. Ini batasan penelitian yang wajib disebut di laporan, bukan gap yang harus ditutup untuk skripsi.
 2. Converter kamera sudah memiliki contract test dan Firebase Test Lab harness, tetapi matriks Android fisik low/mid/high belum dijalankan (H-16).
 3. CI, secret environment, dan branch protection remote belum dapat dibuktikan aktif/green dari workspace ini (L-09).
 4. Reliability/performance lapangan dan validitas penelitian masih memiliki task R terbuka: R-02 (load-test runner eksternal), R-03 (metodologi FAR/FRR dan anti-spoofing terpisah), dan R-05 (pengambilan data lapangan). R-01 dan R-04 sudah ditutup sehingga metrik geofence dan pemisahan dataset per prodi kini valid.
@@ -36,15 +38,33 @@ Audit awal mengonsolidasikan **59 temuan utama** dan 5 task validitas penelitian
 | Pemeriksaan | Hasil |
 |---|---|
 | `composer validate --strict` | **Lulus**, manifest valid; DomPDF dipin `^3.1` |
-| `php artisan test` | **Lulus: 206 test, 735 assertion** pada PHP 8.3.30 (11 Agustus 2026, setelah R-04/M-23/M-24/MS-01; sebelumnya 198/711, 189/666, dan 182/653 pada 9 Agustus 2026) |
-| `npm run build` | **Lulus**, Vite membangun frontend Inertia/Vue |
+| `php artisan test` | **Lulus: 224 test, 819 assertion** pada PHP 8.3.30 (18 Agustus 2026, setelah hardening izin multi-MK dan konflik biometrik; sebelumnya 218/795 pada 12 Agustus 2026) |
+| `npm run build` | **Lulus** (18 Agustus 2026), Vite/Rolldown membangun frontend Inertia/Vue |
 | `npm audit --package-lock-only --omit=dev` dan full graph | **0 known vulnerabilities** setelah lockfile diperbarui (11 Agustus 2026) |
-| `flutter test` | **186 test lulus** (11 Agustus 2026; sebelumnya 144 pada 9 Agustus 2026), termasuk lifecycle FCM (L-02), navigasi checkout (H-13), gap converter BGRA/UnsupportedError (H-16), comparator/formatters production (L-06), permit contract, queue lease, dan camera converter |
-| `flutter analyze` | **Bersih, No issues found** (11 Agustus 2026); CI memakai `--fatal-warnings --fatal-infos` |
+| `flutter test` | **189 test lulus** (18 Agustus 2026), termasuk kontrak konflik biometrik dan izin multi-MK, lifecycle FCM (L-02), navigasi checkout (H-13), comparator/formatters production (L-06), permit contract, queue lease, dan camera converter |
+| `flutter analyze` | **Bersih, No issues found** (18 Agustus 2026); CI memakai `--fatal-warnings --fatal-infos` |
+| `vendor/bin/pint --test` | **Lulus, tanpa style issue** (18 Agustus 2026) |
 | Composer advisory audit | **0 advisory** setelah DomPDF/Guzzle/CommonMark diperbarui (11 Agustus 2026) |
 | Git/history audit | Root adalah Git repository pada `main` dengan remote GitHub; history dua commit diaudit tanpa forbidden secret filename |
 
 Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berada pada authorization dan state transition yang tidak diperiksa oleh build.
+
+> **Update 12 Agustus 2026 — fitur izin multi-MK.** `POST /mahasiswa/leave-requests`
+> menerima mode fan-out (`all_mata_kuliah` / `mata_kuliah_ids[]`) yang membuat satu
+> `LeaveRequest` per MK enrolled ber-jadwal pada rentang, dalam satu transaksi
+> ber-lock; model data tetap per-MK. Dua perbaikan hasil code review ikut masuk:
+> (1) dedup diubah dari kesamaan `tanggal_mulai` menjadi **irisan rentang** sehingga
+> izin multi-hari yang bertumpuk untuk MK yang sama tidak lagi lolos dan menimpa
+> attendance; (2) cabang 422 "nihil dibuat" pada jalur cek-ulang dalam lock kini
+> konsisten mengirim `errors.skipped`; fan-out sekarang juga dibatasi ke MK KRS aktif
+> pada semester/tahun ajaran aktif yang periodenya mencakup tanggal pengajuan. Bukti:
+> `php artisan test` → **224/224 (819 assertion)** termasuk 14 test
+> `LeaveRequestMultiCourseTest`; `flutter test` →
+> **189 lulus** termasuk `leave_multi_course_contract_test.dart`; `flutter analyze
+> --fatal-warnings --fatal-infos` bersih. Kontrak terdokumentasi di
+> [CURRENT-API.md](CURRENT-API.md#izinsakit-leave-request), [PRD-02](PRD-02-functional-requirements.md),
+> [PRD-03 §2.17](PRD-03-database-design.md), [PRD-04 §5](PRD-04-api-design.md),
+> [PRD-05 §8](PRD-05-flow-diagram.md), dan rencana kerja [rencana-izin.md](rencana-izin.md).
 
 ## Temuan Critical
 
@@ -98,6 +118,7 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 - Blocker penyelesaian: implementasikan challenge-bound capture artifact yang diverifikasi server atau trusted verifier, hardware-backed device signature, dan platform attestation sebagai sinyal tambahan. Jangan menandai C-04 `[X]` hanya berdasarkan nonce/permit.
 - Status 26 Juli 2026: **masih terbuka, tidak ada perubahan trust model**. Bagian acceptance "buat threat model" telah diselesaikan dan didokumentasikan di [THREAT-MODEL-ATTENDANCE.md](THREAT-MODEL-ATTENDANCE.md), yang memetakan kontrol yang benar-benar ditegakkan server, lima nilai yang masih merupakan klaim client (`latitude`/`longitude`, `mock_location_detected`, `liveness_passed`, `face_distance`, `gps_accuracy`/`location_age_ms`), tiga skenario serangan yang belum termitigasi (absensi tanpa hadir fisik, proxy attendance, presentation attack), batas klaim yang boleh dibuat, dan urutan remediasi. Sisa acceptance C-04 (capture artifact terverifikasi, attestation, hardware signature) belum dikerjakan karena merupakan perubahan arsitektur, bukan patch.
 - Status 11 Agustus 2026: **terkontain, tetap terbuka**. Middleware `RequireTrustedBiometricEvidence` dipasang pada permit, reference embedding, online check-in/out, offline sync, enrollment/re-enrollment, serta approval API/web. Production selalu merespons `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`; `BIOMETRIC_ALLOW_CLIENT_CLAIMS=true` hanya bekerja di local/testing dan tidak dapat membuka bypass production. Regression test membuktikan default reject, opt-in non-production, dan production tetap reject walau switch diset. Dengan demikian payload scalar palsu tidak dapat masuk ke record production, tetapi fitur attendance production belum tersedia; C-04 baru boleh `[X]` setelah trusted verifier/attestation yang disebut blocker benar-benar diimplementasikan.
+- **Keputusan scope 12 Agustus 2026: DI LUAR SCOPE PENELITIAN — diterima sebagai residual risk.** Trusted verifier server-side (server mengulang matching/liveness dari artefak capture) adalah kontrol tingkat produksi terhadap penyerang aktif yang memodifikasi APK. Untuk penelitian/skripsi ini, tujuan — membuktikan kelayakan absensi berbasis face recognition on-device (MobileFaceNet) + geofencing — sudah terpenuhi dengan matching di perangkat. Rancangan verifier ditinjau di [ADR-001](ADR-001-trusted-biometric-verifier.md) dan **DITOLAK/tidak dilanjutkan**: uji kelayakan runtime menunjukkan biaya integrasi tinggi tanpa nilai penelitian (tidak ada runtime TFLite Node yang matang di Windows tanpa build tools; alternatif menuntut Python/ONNX/konversi model yang tidak diinginkan). C-04 tetap `[ ]` secara teknis, tetapi **tidak lagi menjadi backlog aktif**: production tetap fail-closed, data legacy hanya untuk penelitian non-production dan diperlakukan **client-attested** (bukan bukti forensik). Batasan ini wajib disebut eksplisit di laporan penelitian dan tidak boleh diklaim tahan proxy attendance/presentation attack. Menaikkan proyek ke produksi memerlukan keputusan baru yang menghidupkan kembali ADR-001.
 
 ### [C-05] Offline sync dapat memalsukan absensi historis dan lintas jadwal
 
@@ -151,8 +172,8 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 - Dampak: bearer token, password, foto/embedding, lokasi, dan payload absensi dapat disadap/diubah di LAN/Wi-Fi.
 - Perbaikan: HTTPS production, URL via flavor/`--dart-define`, cleartext hanya debug-host terpilih, release fail-closed bila URL bukan HTTPS.
 - Task: [X] **H-02 Wajibkan HTTPS dan nonaktifkan cleartext pada build release.**
-- Status 17 Juli 2026: selesai. URL API wajib diberikan melalui `--dart-define=API_BASE_URL`; release/profile fail-closed pada URL kosong/non-HTTPS. Debug HTTP hanya menerima loopback. Android main manifest dan network-security-config menolak cleartext, sementara debug overlay hanya mengizinkan localhost/127.0.0.1. Auth interceptor menolak request cross-origin agar bearer token tidak diteruskan ke host lain.
-- Verifikasi: AppConfig tests mencakup HTTPS release, HTTP release rejection, debug loopback allow, dan LAN HTTP rejection; full Flutter suite 66 test lulus.
+- Status 18 Agustus 2026: selesai. URL API wajib diberikan melalui `--dart-define=API_BASE_URL`; release/profile fail-closed pada URL kosong/non-HTTPS. Debug HTTP menerima loopback, alias emulator, dan alamat privat RFC 1918 untuk physical-device development. Root README membatasi LAN cleartext ke hotspot/router pribadi terpercaya, akun/data uji, firewall profil Private, dan `LocalSubnet`; Wi-Fi publik tidak didukung. Auth interceptor tetap menolak request cross-origin agar bearer token tidak diteruskan ke host lain.
+- Verifikasi: AppConfig tests mencakup HTTPS release, HTTP release rejection, debug loopback/emulator/private-LAN allow, dan public-host HTTP rejection; full Flutter suite tetap menjadi quality gate.
 
 ### [H-03] Token dan PII mobile disimpan plaintext
 
@@ -172,6 +193,7 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 - Task: [ ] **H-04 Perbaiki trust dan lifecycle enrollment biometrik.**
 - Status 17 Juli 2026: **parsial**. Auto-approval telah dihapus: submit membuat satu candidate `pending`, user menjadi `pending`, dan API/web approval/rejection memakai service transaksional yang mengunci user serta tepat satu candidate dan menulis audit. Attendance membutuhkan user dan embedding approved. Namun server masih menerima `liveness_passed` sebagai klaim client tanpa challenge/capture proof yang diverifikasi server, sehingga task belum boleh `[X]` sampai blocker C-04 diselesaikan.
 - Status 11 Agustus 2026: **terkontain, tetap terbuka**. Submit initial/re-enrollment, duplicate probe, reference embedding, dan approval biometrik API/web memakai gate production yang sama dengan C-04. Embedding/liveness client tidak dapat dibuat atau diaktifkan di production. Lifecycle `pending -> approved/rejected` tetap tersedia pada test compatibility, tetapi trusted capture verifier belum ada sehingga enrollment production sengaja tidak tersedia dan H-04 belum `[X]`.
+- **Keputusan scope 12 Agustus 2026: DI LUAR SCOPE PENELITIAN — diterima sebagai residual risk.** H-04 berbagi blocker dengan C-04 (verifier server-side untuk liveness/capture enrollment). Sesuai keputusan pada C-04 dan [ADR-001](ADR-001-trusted-biometric-verifier.md) yang ditolak, verifier tidak dibangun. Auto-approve sudah dihapus, lifecycle `pending -> approved/rejected` dan enkripsi embedding (H-05) sudah ada; yang tidak diimplementasikan hanya verifikasi liveness/capture server-side. Ini diterima sebagai batasan penelitian dan wajib disebut di laporan. H-04 tetap `[ ]` teknis tetapi bukan backlog aktif.
 
 ### [H-05] Face embedding plaintext dan terekspos melalui serializer admin
 
@@ -418,7 +440,7 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 - Bukti: backend `EnrollmentController.php:116-158`; mobile menampilkan nama/NIM/kelas di `enrollment_page.dart:253-263`, `:380-385`.
 - Dampak: probing embedding membocorkan identitas mahasiswa lain.
 - Task: [X] **M-14 Kembalikan konflik anonim, rate-limit khusus, dan audit probing biometrik.**
-- Status 18 Juli 2026: selesai. Probe dan final enrollment memakai `BiometricDuplicateService` canonical dan konflik anonim `409 BIOMETRIC_CONFLICT` tanpa nama, NIM, kelas, ID, distance, atau threshold serta response `no-store`. Limiter khusus menerapkan ceiling user per menit/jam dan IP. Audit hanya menyimpan actor, outcome, ukuran embedding, IP, dan user-agent. Collision set mencakup pending/approved; check-create dan approval diserialkan global serta approval mengulang authoritative duplicate check agar kandidat concurrent tidak sama-sama lolos.
+- Status 18 Agustus 2026: kebijakan produk diubah untuk perangkat bersama. Probe terautentikasi `409 BIOMETRIC_CONFLICT` mengembalikan hanya nama tampilan pemilik embedding terdekat yang akunnya aktif dan berada pada prodi yang sama; akun nonaktif/soft-deleted dan prodi lain tidak menjadi identity oracle. NIM, kelas, ID, distance, threshold, dan embedding tidak dikirim, respons tetap `no-store`, dan nama disensor dari log mobile. Backend menghitung konflik berdasarkan token Sanctum/session aktif (tetap berlaku setelah app restart), memberi `logout_required=true` pada konflik ketiga, dan langsung mencabut token atau web session server-side; login ulang membuat token/counter baru. Limiter per pengguna/jam/IP dan audit allowlist tetap berlaku. Final enrollment tetap memakai konflik generik tanpa identitas. Collision set scoped mencakup pending/approved; check-create dan approval diserialkan global serta approval mengulang authoritative duplicate check agar kandidat concurrent tidak sama-sama lolos.
 
 ### [M-15] Health endpoint membocorkan detail internal
 
@@ -638,14 +660,14 @@ Checklist:
 ### Milestone 3: Attendance Integrity
 
 - [x] C-05, C-06, H-11, H-12, H-13, H-14, dan H-15 selesai.
-- [ ] C-04 dan H-16 ditutup. C-04 terkontain (production fail-closed) tetapi menunggu trusted verifier; H-16 menunggu physical-device matrix Android.
+- [ ] C-04 dan H-16. **C-04 di luar scope penelitian (residual risk diterima, [ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak)**; production tetap fail-closed. H-16 menunggu physical-device matrix Android.
 - [x] Satukan logika web/API/scheduler dalam service domain transaksional. (`AttendanceWorkflowService`, `LeaveApprovalService`, `SpWorkflowService`, dan scheduler alpha/auto-close idempotent — M-01, M-02, M-07.)
 - [x] Tambahkan online/offline check-in/check-out contract dan concurrency tests. (Mixed-batch contract H-14, idempotency M-05/M-06, dan row lock/transisi terkondisi M-07.)
 
 ### Milestone 4: Privacy dan Data Integrity
 
 - [x] H-03, H-05 sampai H-10, M-13, M-14, M-19, dan M-20 selesai.
-- [ ] H-04 ditutup. Terkontain (enrollment production fail-closed) tetapi menunggu trusted verifier yang sama dengan C-04.
+- [ ] H-04. **Di luar scope penelitian (residual risk diterima)** — berbagi blocker verifier dengan C-04; production enrollment tetap fail-closed. Lihat keputusan scope 12 Agustus 2026 di atas.
 - [ ] **MS-02** Tetapkan retention, consent, backup, dan deletion policy biometrik. (Encryption at rest dan access audit sudah ditutup H-05/H-06; policy tertulisnya belum ada.)
 - [x] Uji larangan cascade delete historis. (M-19: FK RESTRICT + `HistoricalMasterLifecycleTest`.)
 
@@ -672,11 +694,11 @@ tetap terbuka:
 
 Project baru dapat dinyatakan release candidate bila seluruh kondisi berikut terpenuhi:
 
-- [ ] Tidak ada Critical atau High yang terbuka. **Terbuka: C-04, H-04, H-16.**
+- [ ] Tidak ada Critical atau High yang terbuka. **Terbuka: C-04, H-04 (keduanya di luar scope penelitian — residual risk diterima, [ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak), dan H-16 (menunggu device Android).** Untuk tingkat produksi, C-04/H-04 harus dibuka kembali.
 - [~] Backend berhasil bootstrap, migrate, queue, schedule, dan test pada platform production yang terdokumentasi. Bootstrap, migration, dan test terverifikasi pada PHP 8.3.30 dengan MySQL 8.0.30 (`migrate`, `migrate:rollback`, `migrate:fresh`); manifest Nginx/systemd untuk queue dan scheduler tersedia di `deploy/`. Sisa: eksekusi queue worker dan scheduler pada host production sesungguhnya belum dibuktikan (bagian dari L-09).
 - [~] Authorization matrix memiliki negative tests lintas role dan lintas prodi. Matriks canonical tersedia (MS-01, [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md)) beserta checklist kelas serangan, dan seluruh kelas pada checklist tersebut sudah memiliki negative test (C-02, C-03, C-07, H-21, M-24, H-19, M-21/M-23). Sisa: belum ada test yang menegakkan matriks sebagai invarian, yaitu membaca tabel route lalu menggagalkan route non-publik yang tidak memiliki guard role — sehingga route baru tanpa guard masih bisa lolos tanpa terdeteksi otomatis.
 - [x] Reset password tidak mengekspos token dan seluruh auth endpoint memiliki rate limit. C-01 menutup eksposur token; `login`, `forgot-password`, dan `reset-password` memakai `throttle:login`, login web dan verifikasi TOTP memakai throttle M-21, group API terautentikasi memakai `throttle:api`, dan `change-password` memakai `throttle:auth-sensitive` yang lebih ketat (M-23).
-- [ ] Online/offline check-in dan checkout memiliki bukti yang tidak dapat dipalsukan hanya dengan mengubah payload. **C-04 terbuka**; production dikontain fail-closed (menolak request), bukan dibuktikan tahan pemalsuan.
+- [ ] Online/offline check-in dan checkout memiliki bukti yang tidak dapat dipalsukan hanya dengan mengubah payload. **C-04 di luar scope penelitian** ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak); production dikontain fail-closed (menolak request), bukan dibuktikan tahan pemalsuan. Kriteria DoD ini hanya wajib untuk rilis produksi, bukan untuk penelitian.
 - [x] Offline queue terisolasi per akun, encrypted, crash-safe, dan idempotent. (C-06 isolasi/enkripsi per user, H-15 lease dan crash recovery, M-05/M-06 idempotency, M-08 klasifikasi failure dan backoff.)
 - [x] Schema/model/controller konsisten dan migration diuji fresh serta upgrade. (H-07 sampai H-10; migration M-19/M-20 idempotent serta lulus `migrate`, rollback, dan `migrate:fresh`.)
 - [~] Data biometrik encrypted, private, tidak masuk serializer/log, dan memiliki retention policy. Encryption at rest dengan key terpisah, disk privat + signed URL, penghapusan dari serializer umum, dan audit akses selesai (H-05, H-06, M-14). Sisa: MS-02 — policy retention/consent/backup/deletion belum ditulis.

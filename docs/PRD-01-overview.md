@@ -10,7 +10,8 @@
 > **Interpretasi current 11 Agustus 2026:** bagian yang menyebut standalone Vue
 > SPA, Laravel 11, deployment domain terpisah, mobile Dosen, atau iOS adalah
 > desain awal. Release mobile saat ini Android-only untuk mahasiswa. Attendance
-> dan enrollment production fail-closed sampai trusted verifier tersedia; FCM
+> dan enrollment production fail-closed; trusted verifier (C-04/H-04) di luar scope
+> penelitian ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak). FCM
 > adalah opt-in dan default off. Implementasi saat ini dijelaskan di
 > [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md), kontrak API di
 > [CURRENT-API.md](CURRENT-API.md), residual risk di [SECURITY.md](SECURITY.md),
