@@ -1,6 +1,6 @@
 # Mobile Absensi Mahasiswa
 
-Aplikasi Flutter Android mahasiswa untuk enrollment biometrik, attendance permit, check-in/check-out, offline queue, riwayat, izin, dan status SP. Production attendance/enrollment saat ini fail-closed sampai backend memiliki trusted biometric verifier.
+Aplikasi Flutter Android mahasiswa untuk enrollment biometrik, attendance permit, check-in/check-out, offline queue, riwayat, izin, dan status SP. Trusted biometric verifier berada di luar scope release penelitian ini sehingga production attendance/enrollment tetap fail-closed; detail keputusan ada di [ADR-001](../docs/ADR-001-trusted-biometric-verifier.md).
 
 ## Konfigurasi API
 
@@ -10,7 +10,7 @@ Aplikasi Flutter Android mahasiswa untuk enrollment biometrik, attendance permit
 flutter run --dart-define=API_BASE_URL=https://api.example.ac.id/api
 ```
 
-Release/profile hanya menerima HTTPS. Debug HTTP hanya menerima loopback (`localhost`, `127.0.0.1`, `::1`); LAN HTTP dan `10.0.2.2` tidak diterima oleh policy saat ini.
+Release/profile hanya menerima HTTPS. Debug HTTP menerima loopback, alias emulator `10.0.2.2`, dan alamat privat RFC 1918 untuk pengujian perangkat fisik. LAN HTTP hanya boleh dipakai dengan akun/data uji pada hotspot atau router pribadi yang dipercaya karena trafik tidak terenkripsi. Panduan backend, firewall, build APK Wi-Fi, dan fallback USB tersedia di [README project](../README.md#menjalankan-aplikasi-melalui-wi-fi).
 
 ## Platform
 
@@ -21,7 +21,7 @@ Release/profile hanya menerima HTTPS. Debug HTTP hanya menerima loopback (`local
 
 ## Attendance Flow
 
-1. Aplikasi meminta permit dari server. Production saat ini mengembalikan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` sampai trusted verifier tersedia.
+1. Aplikasi meminta permit dari server. Production release penelitian mengembalikan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` karena trusted verifier tidak diimplementasikan dalam scope ini.
 2. Server memeriksa academic-resource invariant dan attendance window.
 3. Aplikasi memvalidasi lokasi, liveness, dan wajah.
 4. Evidence dikirim bersama permit sekali pakai.

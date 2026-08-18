@@ -123,7 +123,10 @@ void main() {
       // Satu baris ini memberi log ke SELURUH bloc/cubit aplikasi sekaligus.
       Bloc.observer = AppBlocObserver();
 
-      _bootLog.info('aplikasi mulai', data: {'mode': kReleaseMode ? 'release' : 'debug'});
+      _bootLog.info(
+        'aplikasi mulai',
+        data: {'mode': kReleaseMode ? 'release' : 'debug'},
+      );
 
       // Formatters memakai DateFormat dengan locale 'id_ID' (mis. nama bulan
       // pada `formatDate`). Tanpa inisialisasi ini, pemanggilnya melempar
@@ -141,13 +144,18 @@ void main() {
         SharedPreferences.getInstance,
       );
       const secureStorage = FlutterSecureStorage();
-      final secureSession = SecureSessionStore(secureStorage, sharedPreferences);
-      await _bootLog.timed('SecureSessionStore.initialize', secureSession.initialize);
+      final secureSession = SecureSessionStore(
+        secureStorage,
+        sharedPreferences,
+      );
+      await _bootLog.timed(
+        'SecureSessionStore.initialize',
+        secureSession.initialize,
+      );
       final sessionCoordinator = SessionCoordinator(secureSession);
 
-      // AppConfig melempar StateError kalau API_BASE_URL kosong/bukan HTTPS
-      // maupun loopback. Tanpa log ini, kegagalannya hanya tampak sebagai
-      // layar putih tanpa penjelasan apa pun.
+      // AppConfig melempar StateError kalau API_BASE_URL kosong atau melanggar
+      // policy transport (release wajib HTTPS; debug HTTP hanya host lokal/privat).
       late final AppConfig appConfig;
       try {
         appConfig = AppConfig.fromEnvironment();
@@ -167,7 +175,10 @@ void main() {
       final offlineQueueService = OfflineQueueService(
         const SecureQueueKeyStore(secureStorage),
       );
-      await _bootLog.timed('OfflineQueueService.init', offlineQueueService.init);
+      await _bootLog.timed(
+        'OfflineQueueService.init',
+        offlineQueueService.init,
+      );
       final captureCleanupRegistry = TemporaryCaptureCleanupRegistry(
         sharedPreferences,
       );
@@ -382,9 +393,8 @@ class _MyAppState extends State<MyApp> {
                   settings.arguments is JadwalHariIni) {
                 final jadwal = settings.arguments as JadwalHariIni;
                 return MaterialPageRoute(
-                  builder: (_) => _ProtectedRoute(
-                    child: buildAttendancePageFor(jadwal),
-                  ),
+                  builder: (_) =>
+                      _ProtectedRoute(child: buildAttendancePageFor(jadwal)),
                 );
               }
               // L-01: alur lupa password nyata (forgot + reset via endpoint backend).
