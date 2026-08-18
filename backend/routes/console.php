@@ -23,3 +23,6 @@ Schedule::command('notifications:process-outbox')->everyMinute()->withoutOverlap
 
 // Scheduler: Backup database harian jam 02:00 (rotasi 14 hari).
 Schedule::command('backup:database')->dailyAt('02:00')->withoutOverlapping();
+
+// Development lokal: `php artisan serve:all` menjalankan dev server DAN
+// scheduler sekaligus dari satu proses (lihat app/Console/Commands/ServeAll.php).

@@ -346,7 +346,7 @@ Super Admin (Owner/Peneliti)
 ## 5. ENVIRONMENT & DEPLOYMENT
 
 ### 5.1 Development
-- Backend: `php artisan serve` (localhost:8000)
+- Backend: `php artisan serve:all` (dev server + scheduler sekaligus, default localhost:8000) atau `composer dev`
 - Frontend Web: `npm run dev` (localhost:5173)
 - Mobile: Flutter debug mode (Android emulator / physical device)
 - Database: MySQL local
@@ -358,7 +358,7 @@ Super Admin (Owner/Peneliti)
 - MySQL: same server atau managed database
 - SSL: Let's Encrypt (auto-renew)
 - Queue Worker: Supervisor
-- Cron: Laravel Scheduler (setiap menit) — Linux via `schedule:run`; Windows dev/on-prem via Windows Task Scheduler yang menjalankan `schedule:work` (lihat DEPLOYMENT.md)
+- Cron: Laravel Scheduler (setiap menit) — Linux via `schedule:run`; Windows dev/on-prem via Windows Task Scheduler yang menjalankan `schedule:work` (lihat DEPLOYMENT.md). Development lokal cukup `serve:all` (dev server + scheduler satu proses).
 
 ### 5.3 Domain Structure
 - API: `api.absensi.domain.com`

@@ -224,7 +224,7 @@ export default function () {
 ### 3.5 Eksekusi 3 level
 
 ```powershell
-# Pastikan php artisan serve sedang jalan di terminal lain.
+# Pastikan backend sedang jalan (php artisan serve:all atau composer dev) di terminal lain.
 cd docs/load-test
 
 k6 run -e LEVEL=20 r07.js > result-20.txt
@@ -243,7 +243,7 @@ k6 run -e LEVEL=40 r07.js > result-40.txt
    Field `per_concurrent_level` = `{20: {...}, 30: {...}, 40: {...}}`.
 3. Tulis di laporan:
    - Tabel level vs avg latency vs P95 vs success rate.
-   - Bottleneck (CPU/DB/RAM) dari log `php artisan serve` & `mysqld`.
+   - Bottleneck (CPU/DB/RAM) dari log backend (`serve:all`/Laravel log) & `mysqld`.
    - Apakah sistem memenuhi SLA (mis. P95 < 2s, success ≥ 95%).
 
 ### 3.7 Kriteria sukses

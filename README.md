@@ -46,6 +46,8 @@ npm ci
 composer dev
 ```
 
+`composer dev` menjalankan dev server, scheduler, queue listener, log viewer, dan Vite sekaligus. Tanpa `composer dev`, jalankan `php artisan serve:all` (dev server + scheduler) dari `backend/` — scheduler wajib hidup agar status ALPHA dan auto-close tercatat otomatis (lihat DEPLOYMENT.md).
+
 Flutter, dengan backend HTTPS yang dapat dijangkau perangkat:
 
 ```powershell
@@ -103,12 +105,11 @@ File `.env` berisi konfigurasi dan secret lokal sehingga tidak boleh dikomit.
 
 ```powershell
 cd backend
-php artisan serve --host=0.0.0.0 --port=8000
+php artisan serve:all
 ```
 
-Arti parameter:
+`serve:all` menjalankan dev server (default `--host=0.0.0.0 --port=8000`) **dan** scheduler sekaligus dari satu proses, sehingga ALPHA/auto-close tercatat otomatis. Penjelasan parameter:
 
-- `php artisan serve` menjalankan development server Laravel.
 - `--host=0.0.0.0` membuat server mendengarkan semua interface IPv4 laptop, termasuk Wi-Fi. Nilai ini adalah alamat bind server, bukan alamat yang ditulis di Flutter atau browser.
 - `--port=8000` membuka Laravel pada TCP port `8000`.
 - HP mengakses server memakai IP nyata laptop, misalnya `http://192.168.8.28:8000`, bukan `http://0.0.0.0:8000`.
@@ -211,6 +212,7 @@ Pada mode ini `127.0.0.1` bekerja karena port HP dijembatani ke laptop melalui U
 5. Pastikan `API_BASE_URL` memakai IP laptop, bukan `127.0.0.1`, `localhost`, atau `0.0.0.0`.
 6. Pastikan aplikasi yang terpasang dibangun ulang dengan `API_BASE_URL` berisi IP laptop terbaru.
 7. Jika jaringan mengaktifkan client isolation, gunakan hotspot/router pribadi yang dipercaya atau fallback USB. Jangan membuka HTTP development server pada Wi-Fi publik.
+8. Pastikan backend dijalankan dengan `php artisan serve:all` (bukan `serve` saja) — tanpa scheduler, status ALPHA dan auto-close tidak tercatat otomatis.
 
 ## Verifikasi
 

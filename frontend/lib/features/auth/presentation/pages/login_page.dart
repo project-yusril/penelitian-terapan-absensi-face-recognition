@@ -73,18 +73,10 @@ class _LoginPageState extends State<LoginPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
+                    Image.asset(
+                      'assets/images/logo.png',
                       width: 80,
                       height: 80,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(
-                        Icons.school,
-                        size: 40,
-                        color: Colors.white,
-                      ),
                     ),
                     const SizedBox(height: 24),
                     const Text(

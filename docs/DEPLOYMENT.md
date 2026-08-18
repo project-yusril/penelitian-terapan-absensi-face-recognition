@@ -1,7 +1,7 @@
 # Deployment dan Release
 
 **Status:** maintained runbook
-**Pembaruan:** 11 Agustus 2026
+**Pembaruan:** 18 Agustus 2026
 **Release matrix:** web/backend + Android; iOS tidak didukung
 
 ## Baseline
@@ -13,6 +13,24 @@
 - Flutter `3.44.2` / Dart `3.12.2`, sesuai CI dan constraint `pubspec.yaml`.
 - JDK 17 untuk Android Gradle/Kotlin build; workflow memakai Temurin 17.
 - HTTPS wajib untuk web/API production.
+
+## Development Lokal (Windows/Dev)
+
+Untuk development lokal cukup satu perintah dari `backend/`:
+
+```powershell
+php artisan serve:all
+```
+
+`serve:all` (lihat `backend/app/Console/Commands/ServeAll.php`) menjalankan dev server **dan** scheduler (`schedule:work`) sekaligus dari satu proses. Default `--host=0.0.0.0 --port=8000`; kedua proses dimonitor — jika salah satu berhenti, semua dihentikan. Alternatif satu perintah penuh:
+
+```powershell
+composer dev
+```
+
+yang menjalankan `serve:all`, queue listener, log viewer (Pail), dan Vite sekaligus.
+
+> **Penting:** tanpa scheduler yang hidup, `attendance:auto-close` dan `attendance:mark-absent` tidak pernah mengeksekusi sehingga status ALPHA tidak tercatat. `php artisan serve` saja **tidak cukup**; gunakan `serve:all` atau `composer dev`.
 
 ## Backend Production
 
@@ -27,7 +45,7 @@
 8. Beri permission hanya pada `storage/` dan `bootstrap/cache/` yang diperlukan runtime.
 9. Jalankan scheduler dan queue worker sebagai proses long-running yang dipantau. Pilih mekanisme sesuai OS host:
    - **Linux (production)**: install manifest `deploy/systemd/absensi-queue.service`, `absensi-schedule.service`, dan `absensi-schedule.timer`, lalu sesuaikan `/srv/absensi` serta `/etc/absensi/absensi.env` dengan host.
-   - **Windows (dev/on-prem)**: `php artisan schedule:work` dijalankan oleh **Windows Task Scheduler**. Repo menyertakan `backend/schedule-worker.bat` (wrapper yang men-set path php + project lalu memanggil `schedule:work`); daftarkan sebagai task (mis. `AbsensiMahasiswaScheduler`) dengan trigger *At log on*, *restart on failure*, dan *execution time limit* unlimited agar scheduler hidup permanen tanpa perintah manual. Registrasi task memerlukan hak admin satu kali.
+   - **Windows (dev/on-prem)**: `php artisan schedule:work` dijalankan oleh **Windows Task Scheduler**. Repo menyertakan `backend/schedule-worker.bat` (wrapper yang men-set path php + project lalu memanggil `schedule:work`); daftarkan sebagai task (mis. `AbsensiMahasiswaScheduler`) dengan trigger *At log on*, *restart on failure*, dan *execution time limit* unlimited agar scheduler hidup permanen tanpa perintah manual. Registrasi task memerlukan hak admin satu kali. Untuk development lokal harian cukup `php artisan serve:all` (lihat seksi Development Lokal di atas) — Windows Task Scheduler hanya untuk skenario on-prem permanen.
    Scheduler inilah yang memicu `attendance:auto-close` dan `attendance:mark-absent` (keduanya `everyMinute`), reminder, notification outbox, dan backup. Tanpa scheduler yang hidup, ALPHA dan auto-close tidak akan pernah tercatat.
 10. Gunakan `/api/health` sebagai public liveness. Batasi `/api/healthz` ke operator/internal network.
 

@@ -74,6 +74,7 @@ Dokumen historis tidak boleh digunakan untuk membuat endpoint, credential, deplo
 - Perubahan limiter wajib memperbarui `PRD-08-non-functional.md`, `SECURITY.md`, dan tabel troubleshooting `SOP-R05-R07.md`, karena rencana load test R-07 bergantung pada angka tersebut.
 - Perubahan migration/domain state wajib memperbarui `CURRENT-ARCHITECTURE.md` atau PRD terkait.
 - Perubahan secret, signing, runtime, queue, scheduler, atau storage wajib memperbarui `DEPLOYMENT.md` dan `.env.example`.
+- Perubahan command dev server/scheduler (mis. `serve:all`) wajib memperbarui `backend/README.md`, `README.md` root, dan `DEPLOYMENT.md` agar alur menjalankan backend tetap satu sumber.
 - Perubahan kontrol keamanan wajib memperbarui `SECURITY.md` dan evidence pada `temuan.md`.
 - Perubahan comparator/threshold/GPS baseline atau invariant wajib menjaga konsistensi lintas mobile/backend/analisis dan dicatat sebagai "canonical" di `CURRENT-ARCHITECTURE.md`.
 - Status `[X]` hanya diberikan setelah acceptance dapat dibuktikan. Implementasi yang menunggu device/manual test tetap `[ ]` dengan status parsial.
@@ -84,4 +85,4 @@ Dokumen historis tidak boleh digunakan untuk membuat endpoint, credential, deplo
 - `backend-ci.yml` dan `frontend-ci.yml` dikonfigurasi untuk setiap push/PR. `android-release.yml` dan `android-device-tests.yml` manual. Detail lihat [DEPLOYMENT.md](DEPLOYMENT.md).
 - Seluruh pekerjaan lokal sudah di-push ke `origin/main` pada 11 Agustus 2026 (`5e49bfe`, `b271326`, `d46f0b1`, `13fc302`), sehingga workflow push/PR terpicu pada revision tersebut. **Push hanya memicu workflow, bukan membuktikan hasilnya.** Green remote run, protected environments, dan required checks tetap belum boleh diklaim sampai evidence L-09 tersedia — GitHub CLI tidak tersedia di workspace ini.
 
-**Pembaruan terakhir:** 18 Agustus 2026 (resync hasil verifikasi tooling ke keadaan sekarang: `php artisan test` 224/819, `flutter test` 189, `flutter analyze` bersih, formatter lulus, `npm run build` lulus — lihat [temuan.md](temuan.md#hasil-verifikasi-tooling); termasuk izin multi-MK, UX konflik biometrik perangkat bersama, dan panduan debug LAN privat).
+**Pembaruan terakhir:** 18 Agustus 2026 (resync hasil verifikasi tooling ke keadaan sekarang: `php artisan test` 224/819, `flutter test` 189, `flutter analyze` bersih, formatter lulus, `npm run build` lulus — lihat [temuan.md](temuan.md#hasil-verifikasi-tooling); termasuk izin multi-MK, UX konflik biometrik perangkat bersama, dan panduan debug LAN privat; command `serve:all` menjalankan dev server + scheduler sekaligus untuk development lokal).

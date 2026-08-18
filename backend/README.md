@@ -36,14 +36,17 @@ Isi biometric encryption key, database, dan mail sebelum menguji enrollment/acti
 
 | Command | Fungsi |
 |---|---|
-| `composer dev` | Menjalankan server, queue listener, log viewer, dan Vite |
+| `composer dev` | Menjalankan server, scheduler, queue listener, log viewer, dan Vite |
 | `composer test` | Membersihkan config cache dan menjalankan backend tests |
 | `npm run build` | Build asset Inertia/Vue production |
 | `php artisan migrate` | Menjalankan migration authoritative |
+| `php artisan serve:all` | Menjalankan dev server **dan** scheduler sekaligus dari satu proses (`serve` + `schedule:work`), opsi `--host=0.0.0.0 --port=8000` |
 | `php artisan schedule:list` | Memeriksa scheduled tasks |
-| `php artisan schedule:work` | Menjalankan scheduler long-running (memicu `attendance:auto-close` & `attendance:mark-absent` tiap menit, reminder, outbox, backup) |
+| `php artisan schedule:work` | Menjalankan scheduler long-running saja (memicu `attendance:auto-close` & `attendance:mark-absent` tiap menit, reminder, outbox, backup) |
 
-Scheduler harus hidup permanen agar ALPHA dan auto-close tercatat otomatis. Di Windows dev/on-prem, `schedule:work` dijalankan lewat Windows Task Scheduler menggunakan wrapper `schedule-worker.bat` (lihat `docs/DEPLOYMENT.md`). Di Linux gunakan cron `schedule:run` atau `schedule:work` di bawah Supervisor/systemd.
+Untuk development lokal gunakan `php artisan serve:all` (atau `composer dev`) — satu perintah ini sudah menyalakan dev server sekaligus scheduler, sehingga ALPHA dan auto-close tercatat otomatis tanpa proses terpisah. Lihat `app/Console/Commands/ServeAll.php`.
+
+Untuk deployment Windows on-prem, scheduler permanen dijalankan lewat Windows Task Scheduler menggunakan wrapper `schedule-worker.bat` (lihat `docs/DEPLOYMENT.md`). Di Linux gunakan cron `schedule:run` atau `schedule:work` di bawah Supervisor/systemd.
 
 ## Security Notes
 

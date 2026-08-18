@@ -77,6 +77,7 @@ Prioritas utama. Sebagian hardening build/release sudah dikerjakan, tetapi deplo
 - [ ] Verifikasi private biometric/document disks; jangan gunakan `storage:link` sebagai akses enrollment/izin
 - [ ] Set permission `storage/` & `bootstrap/cache/`
 - [ ] Setup scheduler agar hidup permanen (auto-close, mark-absent, reminder, backup — semua `everyMinute`):
+  - Development lokal: cukup `php artisan serve:all` (dev server + scheduler satu proses, lihat `backend/app/Console/Commands/ServeAll.php`)
   - Linux: cron `* * * * * php artisan schedule:run`
   - Windows: Windows Task Scheduler menjalankan `backend/schedule-worker.bat` (`php artisan schedule:work`), trigger *At log on* + *restart on failure* (task `AbsensiMahasiswaScheduler`)
 - [ ] Setup queue worker via Supervisor (`queue:work`) untuk notifikasi/push
