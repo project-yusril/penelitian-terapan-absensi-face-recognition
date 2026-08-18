@@ -35,7 +35,7 @@ trait ResolvesListQuery
      * Resolve kolom dan arah sorting dari allowlist.
      *
      * @param  array<int, string>  $allowed  Kolom yang boleh digunakan untuk sorting.
-     * @return array{0: string, 1: string}  [kolom, arah]
+     * @return array{0: string, 1: string} [kolom, arah]
      */
     protected function resolveSort(Request $request, array $allowed, string $defaultColumn, string $defaultDir = 'desc'): array
     {

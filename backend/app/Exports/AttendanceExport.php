@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Models\AlphaAccumulation;
 use App\Models\Attendance;
 use App\Models\MataKuliah;
 use App\Models\User;
@@ -289,7 +290,7 @@ class AttendanceExport
      * M-17: akumulasi alpha diambil sekali untuk semua mahasiswa.
      *
      * @param  array<int, int>  $userIds
-     * @return array<int, \App\Models\AlphaAccumulation>
+     * @return array<int, AlphaAccumulation>
      */
     protected function getAlphaAccumulations(array $userIds): array
     {
@@ -297,7 +298,7 @@ class AttendanceExport
             return [];
         }
 
-        return \App\Models\AlphaAccumulation::whereIn('user_id', $userIds)
+        return AlphaAccumulation::whereIn('user_id', $userIds)
             ->when($this->semesterId, fn ($q) => $q->where('semester_id', $this->semesterId))
             ->get()
             ->keyBy('user_id')

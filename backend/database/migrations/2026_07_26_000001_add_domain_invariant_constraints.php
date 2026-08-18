@@ -84,7 +84,7 @@ return new class extends Migration
         }
 
         DB::statement(
-            "ALTER TABLE `mata_kuliahs` ADD COLUMN `kelas_key` VARCHAR(10) "
+            'ALTER TABLE `mata_kuliahs` ADD COLUMN `kelas_key` VARCHAR(10) '
             ."GENERATED ALWAYS AS (COALESCE(`kelas`, '')) STORED"
         );
 
