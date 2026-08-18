@@ -243,6 +243,7 @@ const Set<String> _sensitiveKeys = <String>{
   'embedding',
   'embedding[]',
   'face_embedding',
+  'matched_name',
   'foto',
   'photo',
   'signature',

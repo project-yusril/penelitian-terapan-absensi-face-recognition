@@ -12,6 +12,7 @@ import '../../../../core/errors/exceptions.dart';
 import '../../../../core/logging/app_logger.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/presentation/bloc/auth_event.dart';
+import '../../../auth/presentation/bloc/auth_state.dart';
 import '../bloc/face_bloc.dart';
 import '../bloc/face_event.dart';
 import '../bloc/face_state.dart';
@@ -62,6 +63,7 @@ class _EnrollmentPageState extends State<EnrollmentPage>
   bool _checkingDuplicate = false; // sedang memanggil API check-duplicate
   bool _duplicateChecked = false; // sudah dicek untuk sesi wajah saat ini
   bool _isKnownFace = false; // true → wajah sudah terdaftar atas nama lain
+  String? _matchedName;
   late final SingleInflightFramePipeline<void> _framePipeline;
   final AttemptGeneration _attempts = AttemptGeneration();
   final LivenessContinuity _continuity = LivenessContinuity();
@@ -316,6 +318,7 @@ class _EnrollmentPageState extends State<EnrollmentPage>
             _faceDetected = false;
             if (_step == 0 && !_checkingDuplicate) {
               _isKnownFace = false;
+              _matchedName = null;
               _duplicateChecked = false;
               _statusMessage = 'Posisikan wajah Anda di dalam frame';
             }
@@ -444,6 +447,7 @@ class _EnrollmentPageState extends State<EnrollmentPage>
   /// gagal sehingga sebelumnya cek diam-diam error & tidak pernah jalan.
   Future<void> _runDetectionDuplicateCheck(int attemptId) async {
     final faceBloc = context.read<FaceBloc>();
+    final authBloc = context.read<AuthBloc>();
     if (mounted) {
       setState(() => _statusMessage = 'Memverifikasi wajah...');
     }
@@ -470,7 +474,10 @@ class _EnrollmentPageState extends State<EnrollmentPage>
         operation: (capture) async {
           _log.debug(
             'cek duplikat: foto siap diproses',
-            data: {'captureId': capture.captureId, 'bytes': capture.bytes.length},
+            data: {
+              'captureId': capture.captureId,
+              'bytes': capture.bytes.length,
+            },
           );
           final photoFaces = await _log.timed(
             'deteksi wajah pada foto',
@@ -516,23 +523,14 @@ class _EnrollmentPageState extends State<EnrollmentPage>
           if (!_isCurrent(capture.attemptId)) return;
 
           if (dup.isDuplicate) {
-            // Wajah milik mahasiswa lain → tahan di tahap 1, tampilkan identitas.
-            setState(() {
-              _checkingDuplicate = false;
-              _duplicateChecked = true;
-              _isKnownFace = true;
-              _statusMessage =
-                  'Data biometrik tidak dapat digunakan untuk pendaftaran.';
-            });
-            // Tetap jalankan stream agar border & status live, tapi karena
-            // _isKnownFace=true alur tidak akan lanjut ke liveness.
-            _startFaceDetection();
+            _handleBiometricConflict(dup, faceBloc, authBloc);
           } else {
             // Wajah baru: lanjut ke liveness tanpa pesan apa pun.
             setState(() {
               _checkingDuplicate = false;
               _duplicateChecked = true;
               _isKnownFace = false;
+              _matchedName = null;
               _statusMessage = 'Posisikan wajah Anda di dalam frame';
             });
             _startFaceDetection();
@@ -599,7 +597,10 @@ class _EnrollmentPageState extends State<EnrollmentPage>
   /// kembali hadap lurus & netral) sambil hitung mundur, baru ambil foto.
   /// Ini mencegah foto enrollment ter-capture saat kepala masih menoleh/nunduk.
   Future<void> _startCaptureCountdown(int attemptId) async {
-    _log.info('liveness lolos, mulai hitung mundur', data: {'attemptId': attemptId});
+    _log.info(
+      'liveness lolos, mulai hitung mundur',
+      data: {'attemptId': attemptId},
+    );
     // Hentikan stream agar tidak ada deteksi lagi selama jeda.
     try {
       await _stopImageStream();
@@ -644,6 +645,7 @@ class _EnrollmentPageState extends State<EnrollmentPage>
     // Ambil referensi bloc sebelum await agar tidak memakai BuildContext
     // melintasi async gap (lint use_build_context_synchronously).
     final faceBloc = context.read<FaceBloc>();
+    final authBloc = context.read<AuthBloc>();
     try {
       // stream sudah dihentikan di _startCaptureCountdown; aman bila sudah stop.
       final photo = await _takePicture();
@@ -728,9 +730,8 @@ class _EnrollmentPageState extends State<EnrollmentPage>
           if (!_isCurrent(capture.attemptId)) return;
 
           if (dup.isDuplicate) {
-            throw const _EnrollmentCaptureException(
-              'Data biometrik tidak dapat digunakan untuk pendaftaran.',
-            );
+            _handleBiometricConflict(dup, faceBloc, authBloc);
+            return;
           }
 
           final deviceInfo = DeviceInfoPlugin();
@@ -799,6 +800,49 @@ class _EnrollmentPageState extends State<EnrollmentPage>
 
   bool _isCurrent(int attemptId) =>
       mounted && _lifecycleActive && _attempts.isCurrent(attemptId);
+
+  void _handleBiometricConflict(
+    DuplicateCheckResult duplicate,
+    FaceBloc faceBloc,
+    AuthBloc authBloc,
+  ) {
+    final shouldLogout = duplicate.logoutRequired;
+    setState(() {
+      _step = 0;
+      _checkingDuplicate = false;
+      _duplicateChecked = true;
+      _isKnownFace = true;
+      _matchedName = duplicate.matchedName;
+      _isCapturing = false;
+      _countdownStarted = false;
+      _livenessPassed = false;
+      _livenessProgress = 0;
+      _statusMessage =
+          'Data biometrik tidak dapat digunakan untuk pendaftaran.';
+    });
+    _log.warn(
+      'konflik identitas biometrik',
+      data: {
+        'akanLogout': shouldLogout,
+        'memilikiNamaCocok': duplicate.matchedName != null,
+      },
+    );
+    _resetAttempt();
+    if (shouldLogout) {
+      _lifecycleActive = false;
+      _attempts.cancel();
+      authBloc.add(LogoutRequested());
+      return;
+    }
+    // Stream tetap aktif agar pengguna dapat mengganti wajah. Hasil konflik
+    // dipertahankan sampai wajah meninggalkan frame.
+    _startFaceDetection();
+  }
+
+  String get _expectedName {
+    final authState = context.read<AuthBloc>().state;
+    return authState is Authenticated ? authState.user.nama : 'akun ini';
+  }
 
   void _resetAttempt() {
     _attemptId = _attempts.begin();
@@ -956,6 +1000,53 @@ class _EnrollmentPageState extends State<EnrollmentPage>
                           borderRadius: BorderRadius.circular(150),
                         ),
                       ),
+
+                      if (_isKnownFace && _matchedName != null)
+                        Positioned(
+                          left: 16,
+                          right: 16,
+                          top: 16,
+                          child: Semantics(
+                            liveRegion: true,
+                            label:
+                                'Identitas wajah tidak sesuai. Kamu adalah $_matchedName. Silakan daftarkan wajah $_expectedName.',
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.72),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.white24),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Kamu adalah $_matchedName',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: AppColors.success,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Silakan daftarkan wajah $_expectedName',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: AppColors.danger,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
 
                       // Instruksi ditempel ke tepi bawah panggung kamera.
                       //

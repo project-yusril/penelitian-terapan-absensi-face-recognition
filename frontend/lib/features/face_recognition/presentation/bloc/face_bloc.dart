@@ -68,11 +68,21 @@ class FaceBloc extends Bloc<FaceEvent, FaceState> {
       return DuplicateCheckResult(isDuplicate: isDuplicate);
     } on ServerException catch (error, stack) {
       if (error.statusCode == 409 && error.code == 'BIOMETRIC_CONFLICT') {
+        final matchedName = error.details?['matched_name'];
         _log.warn(
           'checkDuplicate: backend menandai konflik biometrik (409)',
-          data: {'kode': error.code},
+          data: {
+            'kode': error.code,
+            'memilikiNamaCocok': matchedName is String,
+          },
         );
-        return const DuplicateCheckResult(isDuplicate: true);
+        return DuplicateCheckResult(
+          isDuplicate: true,
+          matchedName: matchedName is String && matchedName.isNotEmpty
+              ? matchedName
+              : null,
+          logoutRequired: error.details?['logout_required'] == true,
+        );
       }
       _log.error(
         'checkDuplicate gagal dengan ServerException',
@@ -147,10 +157,7 @@ class FaceBloc extends Bloc<FaceEvent, FaceState> {
         data: formData,
       );
 
-      _log.info(
-        'enrollment terkirim',
-        data: {'status': response.statusCode},
-      );
+      _log.info('enrollment terkirim', data: {'status': response.statusCode});
       emit(
         EnrollmentSubmitted(response.data['message'] ?? 'Enrollment berhasil'),
       );
@@ -252,5 +259,11 @@ class FaceVerificationResultState extends FaceState {
 /// Hasil pengecekan dini duplikat wajah saat enrollment.
 class DuplicateCheckResult {
   final bool isDuplicate;
-  const DuplicateCheckResult({required this.isDuplicate});
+  final String? matchedName;
+  final bool logoutRequired;
+  const DuplicateCheckResult({
+    required this.isDuplicate,
+    this.matchedName,
+    this.logoutRequired = false,
+  });
 }

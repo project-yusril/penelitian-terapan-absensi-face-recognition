@@ -13,8 +13,11 @@ use App\Services\BiometricLockService;
 use App\Services\PrivateFileUrlService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Sanctum\PersonalAccessToken;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class EnrollmentController extends Controller
@@ -127,15 +130,18 @@ class EnrollmentController extends Controller
 
         $user = $request->user();
         try {
-            $isDuplicate = $duplicates->isDuplicate($request->embedding, $user->id, $user->prodi_id);
-            $this->auditProbe($request, $isDuplicate ? 'duplicate' : 'clear');
+            $duplicate = $duplicates->findDuplicate($request->embedding, $user->id, $user->prodi_id);
+            $this->auditProbe($request, $duplicate ? 'duplicate' : 'clear');
         } catch (\Throwable $exception) {
             $this->auditProbe($request, 'unavailable');
             throw $exception;
         }
 
-        if ($isDuplicate) {
-            return $this->duplicateResponse();
+        if ($duplicate && $duplicate->user) {
+            return $this->duplicateResponse(
+                $duplicate->user->nama,
+                $this->registerSessionConflict($request),
+            );
         }
 
         return response()->json(['is_duplicate' => false])
@@ -245,12 +251,45 @@ class EnrollmentController extends Controller
         ])->withHeaders(['Cache-Control' => 'private, no-store, max-age=0', 'Pragma' => 'no-cache']);
     }
 
-    private function duplicateResponse(): JsonResponse
+    private function duplicateResponse(?string $matchedName = null, bool $logoutRequired = false): JsonResponse
     {
         return response()->json([
             'code' => 'BIOMETRIC_CONFLICT',
             'message' => self::DUPLICATE_MESSAGE,
+            ...($matchedName === null ? [] : ['matched_name' => $matchedName]),
+            ...($matchedName === null ? [] : ['logout_required' => $logoutRequired]),
         ], 409)->withHeaders(['Cache-Control' => 'private, no-store']);
+    }
+
+    private function registerSessionConflict(Request $request): bool
+    {
+        $accessToken = $request->user()->currentAccessToken();
+        $bearerToken = $request->bearerToken();
+        if ($accessToken instanceof PersonalAccessToken && $bearerToken !== null) {
+            $session = 'token-'.hash('sha256', $bearerToken);
+        } elseif ($request->hasSession()) {
+            $session = 'session-'.hash('sha256', $request->session()->getId());
+        } elseif (app()->runningUnitTests()) {
+            $session = 'transient-'.spl_object_id($request->user()->currentAccessToken());
+        } else {
+            abort(401, 'Unauthenticated');
+        }
+        $key = 'biometric:identity-conflicts:'.$session;
+        $decaySeconds = max(60, (int) config('sanctum.expiration', 10080) * 60);
+        RateLimiter::hit($key, $decaySeconds);
+
+        $logoutRequired = RateLimiter::attempts($key) >= 3;
+        if ($logoutRequired) {
+            if ($accessToken instanceof PersonalAccessToken) {
+                $accessToken->delete();
+            } elseif ($request->hasSession()) {
+                Auth::guard('web')->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
+        }
+
+        return $logoutRequired;
     }
 
     private function auditProbe(Request $request, string $outcome): void

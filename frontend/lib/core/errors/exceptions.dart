@@ -14,12 +14,14 @@ class ServerException implements Exception {
   final int? statusCode;
   final String? code;
   final Map<String, dynamic>? errors;
+  final Map<String, dynamic>? details;
 
   ServerException({
     required this.message,
     this.statusCode,
     this.code,
     this.errors,
+    this.details,
   });
 
   @override

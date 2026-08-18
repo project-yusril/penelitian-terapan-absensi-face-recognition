@@ -11,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
+use Laravel\Sanctum\PersonalAccessToken;
 use Tests\SeedsEssentialData;
 use Tests\TestCase;
 
@@ -77,7 +78,7 @@ class BiometricDuplicateContractTest extends TestCase
         $this->assertSame('contract-agent', $audit->user_agent);
     }
 
-    public function test_probe_conflict_is_anonymous_and_contains_no_sensitive_substrings(): void
+    public function test_probe_conflict_identifies_owner_by_name_without_other_sensitive_fields(): void
     {
         $owner = $this->user();
         $owner->update(['nama' => 'Sensitive Name', 'nim' => 'SECRET-NIM', 'kelas' => 'SEC']);
@@ -86,14 +87,96 @@ class BiometricDuplicateContractTest extends TestCase
 
         $response = $this->actingAs($student)->postJson('/api/mahasiswa/enrollment/check-duplicate', ['embedding' => $this->vector(0.2)]);
 
-        $response->assertConflict()->assertExactJson(self::CONFLICT);
+        $response->assertConflict()->assertExactJson([
+            ...self::CONFLICT,
+            'matched_name' => 'Sensitive Name',
+            'logout_required' => false,
+        ]);
         $this->assertStringContainsString('private', $response->headers->get('Cache-Control'));
         $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
         $content = strtolower($response->getContent());
-        foreach (['sensitive name', 'secret-nim', '"sec"', 'distance', 'threshold', 'matched', 'user_id', 'embedding'] as $sensitive) {
+        foreach (['secret-nim', '"sec"', 'distance', 'threshold', 'user_id', 'embedding'] as $sensitive) {
             $this->assertStringNotContainsString($sensitive, $content);
         }
         $this->assertSame('duplicate', AuditTrail::where('action', 'biometric_probe')->sole()->new_values['outcome']);
+    }
+
+    public function test_probe_identifies_the_closest_matching_owner(): void
+    {
+        $farther = $this->user();
+        $farther->update(['nama' => 'Pemilik Lebih Jauh']);
+        FaceEmbedding::create(['user_id' => $farther->id, 'embedding' => $this->vector(0.15), 'version' => 1, 'status' => 'approved']);
+
+        $closest = $this->user();
+        $closest->update(['nama' => 'Yusril']);
+        FaceEmbedding::create(['user_id' => $closest->id, 'embedding' => $this->vector(0.19), 'version' => 1, 'status' => 'approved']);
+
+        $student = $this->user();
+        $this->actingAs($student)
+            ->postJson('/api/mahasiswa/enrollment/check-duplicate', ['embedding' => $this->vector(0.2)])
+            ->assertConflict()
+            ->assertJsonPath('matched_name', 'Yusril');
+    }
+
+    public function test_probe_does_not_disclose_inactive_or_other_prodi_identity(): void
+    {
+        $inactive = $this->user();
+        $inactive->update(['nama' => 'Akun Nonaktif', 'status' => 'nonaktif']);
+        FaceEmbedding::create(['user_id' => $inactive->id, 'embedding' => $this->vector(0.2), 'version' => 1, 'status' => 'approved']);
+
+        $otherProdi = Prodi::where('kode', 'TE')->firstOrFail();
+        $outsider = User::factory()->create([
+            'nama' => 'Mahasiswa Prodi Lain',
+            'prodi_id' => $otherProdi->id,
+            'status' => 'aktif',
+            'enrollment_status' => 'approved',
+        ]);
+        FaceEmbedding::create(['user_id' => $outsider->id, 'embedding' => $this->vector(0.2), 'version' => 1, 'status' => 'approved']);
+
+        $this->actingAs($this->user())
+            ->postJson('/api/mahasiswa/enrollment/check-duplicate', ['embedding' => $this->vector(0.2)])
+            ->assertOk()
+            ->assertExactJson(['is_duplicate' => false]);
+    }
+
+    public function test_third_conflict_on_the_same_token_requires_logout(): void
+    {
+        $owner = $this->user();
+        FaceEmbedding::create(['user_id' => $owner->id, 'embedding' => $this->vector(0.2), 'version' => 1, 'status' => 'approved']);
+        $student = $this->user();
+        $token = $student->createToken('mobile-test')->plainTextToken;
+        $payload = ['embedding' => $this->vector(0.2)];
+
+        $this->withToken($token)->postJson('/api/mahasiswa/enrollment/check-duplicate', $payload)
+            ->assertConflict()->assertJsonPath('logout_required', false);
+        $this->withToken($token)->postJson('/api/mahasiswa/enrollment/check-duplicate', $payload)
+            ->assertConflict()->assertJsonPath('logout_required', false);
+        $this->withToken($token)->postJson('/api/mahasiswa/enrollment/check-duplicate', $payload)
+            ->assertConflict()->assertJsonPath('logout_required', true);
+        $this->assertNull(PersonalAccessToken::findToken($token));
+
+        $newToken = $student->createToken('mobile-test-new-session')->plainTextToken;
+        $this->withToken($newToken)->postJson('/api/mahasiswa/enrollment/check-duplicate', $payload)
+            ->assertConflict()->assertJsonPath('logout_required', false);
+    }
+
+    public function test_stateful_session_cannot_reset_conflicts_with_fake_bearer_headers(): void
+    {
+        $owner = $this->user();
+        FaceEmbedding::create(['user_id' => $owner->id, 'embedding' => $this->vector(0.2), 'version' => 1, 'status' => 'approved']);
+        $payload = ['embedding' => $this->vector(0.2)];
+
+        $this->actingAs($this->user())
+            ->withSession(['biometric-test' => true])
+            ->withToken('fake-token-one')
+            ->postJson('/api/mahasiswa/enrollment/check-duplicate', $payload)
+            ->assertConflict()->assertJsonPath('logout_required', false);
+        $this->withToken('fake-token-two')
+            ->postJson('/api/mahasiswa/enrollment/check-duplicate', $payload)
+            ->assertConflict()->assertJsonPath('logout_required', false);
+        $this->withToken('fake-token-three')
+            ->postJson('/api/mahasiswa/enrollment/check-duplicate', $payload)
+            ->assertConflict()->assertJsonPath('logout_required', true);
     }
 
     public function test_enrollment_conflict_has_probe_parity_and_creates_no_orphan(): void

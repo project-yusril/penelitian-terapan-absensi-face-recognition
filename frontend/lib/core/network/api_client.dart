@@ -126,6 +126,12 @@ class ApiClient {
         ? response.data as Map<String, dynamic>
         : null;
     final message = data?['message'] ?? 'Terjadi kesalahan';
+    final details = <String, dynamic>{
+      if (data?['matched_name'] is String)
+        'matched_name': (data!['matched_name'] as String).trim(),
+      if (data?['logout_required'] is bool)
+        'logout_required': data!['logout_required'] as bool,
+    };
 
     _log.error(
       'respons error dari backend',
@@ -145,7 +151,8 @@ class ApiClient {
     // diganti kalimat generik, sehingga semua 403 terlihat sama persis dan
     // user tidak tahu harus berbuat apa. Pakai pesan backend bila ada, dan
     // sediakan kalimat umum hanya sebagai cadangan.
-    final backendMessage = data?['message'] is String &&
+    final backendMessage =
+        data?['message'] is String &&
             (data!['message'] as String).trim().isNotEmpty
         ? (data['message'] as String).trim()
         : null;
@@ -186,6 +193,7 @@ class ApiClient {
           message: message,
           statusCode: response.statusCode,
           code: data?['code'] as String?,
+          details: details.isEmpty ? null : details,
         );
     }
   }

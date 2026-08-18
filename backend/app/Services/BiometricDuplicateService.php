@@ -12,6 +12,11 @@ class BiometricDuplicateService
 
     public function isDuplicate(array $candidate, int $userId, int $prodiId): bool
     {
+        return $this->findDuplicate($candidate, $userId, $prodiId) !== null;
+    }
+
+    public function findDuplicate(array $candidate, int $userId, int $prodiId): ?FaceEmbedding
+    {
         $candidate = $this->canonicalize($candidate);
         $threshold = (float) (ProdiSetting::where('prodi_id', $prodiId)->value('face_threshold') ?? 1.00);
 
@@ -19,8 +24,14 @@ class BiometricDuplicateService
             throw new RuntimeException('Biometric matching is unavailable');
         }
 
-        $isDuplicate = false;
-        foreach (FaceEmbedding::where('user_id', '!=', $userId)->whereIn('status', ['approved', 'pending'])->cursor() as $other) {
+        $match = null;
+        $closestDistance = INF;
+        foreach (FaceEmbedding::where('user_id', '!=', $userId)
+            ->whereIn('status', ['approved', 'pending'])
+            ->whereHas('user', fn ($query) => $query
+                ->where('prodi_id', $prodiId)
+                ->where('status', 'aktif'))
+            ->cursor() as $other) {
             $stored = $this->canonicalize($other->embedding);
             $sum = 0.0;
 
@@ -33,12 +44,14 @@ class BiometricDuplicateService
                 throw new RuntimeException('Biometric matching is unavailable');
             }
 
-            if (sqrt($sum) < $threshold) {
-                $isDuplicate = true;
+            $distance = sqrt($sum);
+            if ($distance < $threshold && $distance < $closestDistance) {
+                $match = $other;
+                $closestDistance = $distance;
             }
         }
 
-        return $isDuplicate;
+        return $match?->loadMissing('user:id,nama,prodi_id,status');
     }
 
     private function canonicalize(array $embedding): array

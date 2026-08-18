@@ -65,19 +65,21 @@ void main() {
     await bloc.close();
   });
 
-  test(
-    'anonymous 409 biometric code parses as duplicate without identity DTO',
-    () async {
-      final bloc = _bloc(
-        _ResponseAdapter(409, {
-          'code': 'BIOMETRIC_CONFLICT',
-          'message': 'Data biometrik tidak dapat digunakan untuk pendaftaran.',
-        }),
-      );
-      expect((await bloc.checkDuplicate(embedding)).isDuplicate, isTrue);
-      await bloc.close();
-    },
-  );
+  test('409 biometric conflict parses duplicate owner name', () async {
+    final bloc = _bloc(
+      _ResponseAdapter(409, {
+        'code': 'BIOMETRIC_CONFLICT',
+        'message': 'Data biometrik tidak dapat digunakan untuk pendaftaran.',
+        'matched_name': 'Yusril',
+        'logout_required': true,
+      }),
+    );
+    final result = await bloc.checkDuplicate(embedding);
+    expect(result.isDuplicate, isTrue);
+    expect(result.matchedName, 'Yusril');
+    expect(result.logoutRequired, isTrue);
+    await bloc.close();
+  });
 
   test('429 remains a cooldown error', () async {
     final bloc = _bloc(_ResponseAdapter(429, {}));
@@ -94,27 +96,17 @@ void main() {
     await bloc.close();
   });
 
-  test(
-    'enrollment UI contains no matched-person identity state or rendering',
-    () {
-      final source = File(
-        'lib/features/face_recognition/presentation/pages/enrollment_page.dart',
-      ).readAsStringSync();
+  test('enrollment camera stack renders matched and expected names at top', () {
+    final source = File(
+      'lib/features/face_recognition/presentation/pages/enrollment_page.dart',
+    ).readAsStringSync();
 
-      for (final forbidden in [
-        'matchedNama',
-        'matchedNim',
-        'matchedKelas',
-        '_knownNama',
-        '_knownNim',
-        '_knownKelas',
-      ]) {
-        expect(source, isNot(contains(forbidden)));
-      }
-      expect(
-        source,
-        contains('Data biometrik tidak dapat digunakan untuk pendaftaran.'),
-      );
-    },
-  );
+    expect(source, contains("top: 16"));
+    expect(source, contains(r"'Kamu adalah $_matchedName'"));
+    expect(source, contains(r"'Silakan daftarkan wajah $_expectedName'"));
+    expect(
+      source,
+      contains('Data biometrik tidak dapat digunakan untuk pendaftaran.'),
+    );
+  });
 }
