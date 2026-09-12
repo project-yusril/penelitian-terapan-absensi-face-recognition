@@ -38,6 +38,10 @@ Thumbs.db
 # Mutable local archives and test output
 docs.zip
 backend/tests/Load/load_test_results.json
+loadtest/r02_*.json
+e2e/test-results/
+e2e/playwright-report/
+e2e/package-lock.json
 
 # Database restore snapshots, debug probes, and biometric backup (Phase 0 RENCANA 2)
 backup_absensi_*/
