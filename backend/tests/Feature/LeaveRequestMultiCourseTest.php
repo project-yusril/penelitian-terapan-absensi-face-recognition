@@ -50,6 +50,9 @@ class LeaveRequestMultiCourseTest extends TestCase
     /** MK enrolled tetapi hanya punya jadwal Rabu. */
     private MataKuliah $rabu;
 
+    /** Kelas master mahasiswa (RENCANA 2). */
+    private \App\Models\Kelas $kelas;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -71,6 +74,13 @@ class LeaveRequestMultiCourseTest extends TestCase
             'prodi_id' => $this->prodi->id, 'status' => 'aktif',
         ]);
         ProdiSetting::create(['prodi_id' => $this->prodi->id, 'toleransi_masuk_menit' => 15]);
+
+        // RENCANA 2: kelas master + pivot mahasiswa_kelas (dipakai semua jadwal).
+        $this->kelas = \App\Models\Kelas::create([
+            'prodi_id' => $this->prodi->id, 'semester_id' => $this->semester->id,
+            'tingkat' => '4', 'nama' => 'A', 'status' => 'aktif',
+        ]);
+        $this->student->mahasiswaKelas()->create(['kelas_id' => $this->kelas->id, 'semester_id' => $this->semester->id]);
 
         $this->seninPagi = $this->course('LV101', 'Algoritma');
         $this->seninSiang = $this->course('LV102', 'Basis Data');
@@ -139,9 +149,8 @@ class LeaveRequestMultiCourseTest extends TestCase
         $historical = MataKuliah::create([
             'kode_mk' => 'LV090', 'nama' => 'Mata Kuliah Lama', 'sks' => 2,
             'semester_id' => $oldSemester->id, 'prodi_id' => $this->prodi->id,
-            'dosen_id' => $this->kaprodi->id, 'status' => 'aktif',
+            'status' => 'aktif',
         ]);
-        $historical->mahasiswas()->attach($this->student->id);
         $this->schedule($historical, 'Senin', '16:00', '18:00');
         $inactive = $this->course('LV104', 'Mata Kuliah Nonaktif');
         $inactive->update(['status' => 'nonaktif']);
@@ -400,11 +409,8 @@ class LeaveRequestMultiCourseTest extends TestCase
     {
         $course = MataKuliah::create([
             'kode_mk' => $kode, 'nama' => $nama, 'sks' => 2, 'semester_id' => $this->semester->id,
-            'prodi_id' => $this->prodi->id, 'dosen_id' => $this->kaprodi->id, 'status' => 'aktif',
+            'prodi_id' => $this->prodi->id, 'status' => 'aktif',
         ]);
-        if ($enroll) {
-            $course->mahasiswas()->attach($this->student->id);
-        }
 
         return $course;
     }
@@ -412,7 +418,7 @@ class LeaveRequestMultiCourseTest extends TestCase
     private function schedule(MataKuliah $course, string $hari, string $mulai, string $selesai): Jadwal
     {
         return Jadwal::create([
-            'mata_kuliah_id' => $course->id, 'geofence_id' => $this->geofence->id,
+            'mata_kuliah_id' => $course->id, 'kelas_id' => $this->kelas->id, 'geofence_id' => $this->geofence->id,
             'hari' => $hari, 'jam_mulai' => $mulai, 'jam_selesai' => $selesai,
             'durasi_menit' => 120, 'status' => 'aktif',
         ]);

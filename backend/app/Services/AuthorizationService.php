@@ -42,7 +42,9 @@ class AuthorizationService
         }
 
         if ($actor->hasRole('dosen')) {
-            return $query->whereHas('mataKuliahs', fn (Builder $mataKuliah) => $mataKuliah->where('dosen_id', $actor->id));
+            // RENCANA 2: dosen ter-scope ke mahasiswa yang berada di kelas
+            // yang diampunya (jadwals.dosen_id).
+            return $query->whereHas('mahasiswaKelas', fn (Builder $mk) => $mk->whereHas('kelas.jadwals', fn (Builder $jadwal) => $jadwal->where('dosen_id', $actor->id)));
         }
 
         return $this->denyAll($query);
@@ -61,7 +63,7 @@ class AuthorizationService
         }
 
         if ($actor->hasRole('dosen')) {
-            return $query->whereHas('mataKuliahs', fn (Builder $mataKuliah) => $mataKuliah->where('dosen_id', $actor->id));
+            return $query->whereHas('jadwals', fn (Builder $jadwal) => $jadwal->where('dosen_id', $actor->id));
         }
 
         return $this->denyAll($query);
@@ -80,7 +82,8 @@ class AuthorizationService
         }
 
         if ($actor->hasRole('dosen')) {
-            return $query->where('dosen_id', $actor->id);
+            // RENCANA 2: MK yang diampu dosen = MK pada jadwal dengan dosen_id dia.
+            return $query->whereHas('jadwals', fn (Builder $jadwal) => $jadwal->where('dosen_id', $actor->id));
         }
 
         return $this->denyAll($query);
@@ -99,7 +102,7 @@ class AuthorizationService
         }
 
         if ($actor->hasRole('dosen')) {
-            return $query->whereHas('mataKuliah', fn (Builder $mataKuliah) => $mataKuliah->where('dosen_id', $actor->id));
+            return $query->whereHas('jadwal', fn (Builder $jadwal) => $jadwal->where('dosen_id', $actor->id));
         }
 
         return $this->denyAll($query);

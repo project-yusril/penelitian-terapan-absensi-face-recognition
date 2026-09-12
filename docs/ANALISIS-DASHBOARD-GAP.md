@@ -94,12 +94,14 @@ dibandingkan dengan PRD-02, PRD-02B, dan `routes/api.php`.
 ### B.8 Mode Pengujian & Analisis (Super Admin) — PRD FR-TEST / penelitian
 | Fitur | FR | API tersedia | UI Web |
 |-------|----|-----|--------|
-| Toggle Test Mode + log + label | FR-TEST-001..003 | `api/admin/test-mode/*` | ❌ belum |
-| Analisis FAR/FRR (sweep θ, EER) | penelitian | `api/admin/analysis/face-verification` | ❌ belum |
-| Analisis Geofence | penelitian | `api/admin/analysis/geofence` | ❌ belum |
-| Analisis Latensi | penelitian | `api/admin/analysis/latency` | ❌ belum |
-| Uji Simultan | FR-TEST-004 | `api/admin/analysis/simultaneous-test` | ❌ belum |
-| Perbandingan konvensional | penelitian | `api/admin/analysis/conventional-comparison` | ❌ belum |
+| Toggle Test Mode + log + label | FR-TEST-001..003 | `api/admin/test-mode/*` | ✅ halaman `/test-mode` (web Inertia) |
+| Analisis FAR/FRR (sweep θ, EER) | penelitian | `api/admin/analysis/face-verification` | ✅ halaman `/analysis` (visualisasi donut/bar/gauge) |
+| Analisis Geofence | penelitian | `api/admin/analysis/geofence` | ✅ halaman `/analysis` |
+| Analisis Latensi | penelitian | `api/admin/analysis/latency` | ✅ halaman `/analysis` |
+| Uji Simultan | FR-TEST-004 | `api/admin/analysis/simultaneous-test` | ✅ halaman `/analysis` |
+| Perbandingan konvensional | penelitian | `api/admin/analysis/conventional-comparison` | ❌ belum (data konvensional masih manual — R-08) |
+
+> **Update 20 Agustus 2026:** halaman web `/analysis` & `/test-mode` sudah ada dan terisi data (seeder `attendance:seed-analysis-data`; UI visualisasi dirombak — lihat rencana2.md §6.7/6.8). Sisa: perbandingan konvensional (R-08) & data lapangan asli.
 
 ### B.9 Dashboard Per-Peran — PRD FR-REKAP-001..004
 | Dashboard | FR | API tersedia | UI Web |

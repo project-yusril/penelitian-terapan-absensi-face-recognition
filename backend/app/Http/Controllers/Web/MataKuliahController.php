@@ -23,13 +23,13 @@ class MataKuliahController extends Controller
         $direction = $request->string('direction', 'asc')->toString() === 'desc' ? 'desc' : 'asc';
         $perPage = $this->resolvePerPage($request, 10);
 
-        $allowedSorts = ['kode_mk', 'nama', 'sks', 'kelas', 'status'];
+        $allowedSorts = ['kode_mk', 'nama', 'sks', 'status'];
         if (! in_array($sort, $allowedSorts, true)) {
             $sort = 'kode_mk';
         }
 
-        $items = MataKuliah::with(['prodi:id,kode,nama', 'dosen:id,nama', 'semester:id,nama'])
-            ->withCount('mahasiswas')
+        // RENCANA 2: mata kuliah murni master kurikulum + tingkat (tanpa kelas/dosen).
+        $items = MataKuliah::with(['prodi:id,kode,nama', 'semester:id,nama'])
             ->when($search, function ($q) use ($search) {
                 $q->where(function ($sub) use ($search) {
                     $sub->where('nama', 'like', "%{$search}%")
@@ -45,16 +45,12 @@ class MataKuliahController extends Controller
                 'kode_mk' => $m->kode_mk,
                 'nama' => $m->nama,
                 'sks' => $m->sks,
-                'kelas' => $m->kelas,
                 'total_pertemuan' => $m->total_pertemuan,
                 'status' => $m->status,
                 'prodi' => $m->prodi?->nama,
                 'prodi_id' => $m->prodi_id,
-                'dosen' => $m->dosen?->nama,
-                'dosen_id' => $m->dosen_id,
                 'semester' => $m->semester?->nama,
                 'semester_id' => $m->semester_id,
-                'mahasiswas_count' => $m->mahasiswas_count,
             ]);
 
         return Inertia::render('MataKuliah/Index', [
@@ -68,8 +64,6 @@ class MataKuliahController extends Controller
             ],
             'prodis' => Prodi::select('id', 'kode', 'nama')->get(),
             'semesters' => Semester::select('id', 'nama')->orderByDesc('id')->get(),
-            'dosens' => User::whereHas('roles', fn ($q) => $q->where('name', 'dosen'))
-                ->select('id', 'nama')->orderBy('nama')->get(),
         ]);
     }
 
@@ -97,15 +91,21 @@ class MataKuliahController extends Controller
     }
 
     /**
-     * Data peserta MK + kandidat mahasiswa yang bisa di-enroll (1 prodi).
-     * Dipakai modal "Kelola Peserta".
+     * Data peserta MK (RENCANA 2): peserta = mahasiswa dari kelas yang
+     * terkait lewat jadwal. Enrollment manual ke pivot lama tidak lagi
+     * menjadi sumber kebenaran.
      */
     public function mahasiswa(MataKuliah $matkul): Response
     {
-        $enrolled = $matkul->mahasiswas()
-            ->select('users.id', 'users.nama', 'users.nim', 'users.kelas')
-            ->orderBy('users.nama')
-            ->get();
+        // Semua kelas yang mengampu MK ini (via jadwal).
+        $kelasIds = $matkul->jadwals()->pluck('kelas_id')->filter()->unique()->values();
+
+        $enrolled = $kelasIds->isEmpty()
+            ? collect()
+            : User::whereHas('mahasiswaKelas', fn ($q) => $q->whereIn('kelas_id', $kelasIds))
+                ->select('users.id', 'users.nama', 'users.nim', 'users.kelas')
+                ->orderBy('users.nama')
+                ->get();
 
         $enrolledIds = $enrolled->pluck('id');
 
@@ -122,32 +122,11 @@ class MataKuliahController extends Controller
                 'id' => $matkul->id,
                 'kode_mk' => $matkul->kode_mk,
                 'nama' => $matkul->nama,
-                'kelas' => $matkul->kelas,
                 'prodi' => $matkul->prodi?->nama,
             ],
             'enrolled' => $enrolled,
             'available' => $available,
         ]);
-    }
-
-    public function enroll(Request $request, MataKuliah $matkul): RedirectResponse
-    {
-        $data = $request->validate([
-            'mahasiswa_ids' => ['required', 'array', 'min:1'],
-            'mahasiswa_ids.*' => ['integer', 'exists:users,id'],
-        ]);
-
-        // syncWithoutDetaching agar tidak menggandakan peserta yang sudah ada.
-        $matkul->mahasiswas()->syncWithoutDetaching($data['mahasiswa_ids']);
-
-        return back()->with('success', count($data['mahasiswa_ids']).' mahasiswa berhasil di-enroll.');
-    }
-
-    public function unenroll(MataKuliah $matkul, User $mahasiswa): RedirectResponse
-    {
-        $matkul->mahasiswas()->detach($mahasiswa->id);
-
-        return back()->with('success', 'Mahasiswa berhasil dikeluarkan dari mata kuliah.');
     }
 
     private function validateData(Request $request, ?int $ignoreId = null): array
@@ -158,8 +137,6 @@ class MataKuliahController extends Controller
             'sks' => ['required', 'integer', 'min:1', 'max:6'],
             'semester_id' => ['required', 'exists:semesters,id'],
             'prodi_id' => ['required', 'exists:prodis,id'],
-            'dosen_id' => ['nullable', 'exists:users,id'],
-            'kelas' => ['nullable', 'string', 'max:10'],
             'total_pertemuan' => ['required', 'integer', 'min:1', 'max:32'],
             'status' => ['required', Rule::in(['aktif', 'nonaktif'])],
         ]);

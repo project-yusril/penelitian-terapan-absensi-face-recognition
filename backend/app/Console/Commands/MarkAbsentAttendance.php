@@ -26,7 +26,7 @@ class MarkAbsentAttendance extends Command
         $tanggalHariIni = today();
 
         // Cari semua jadwal hari ini yang aktif
-        $jadwals = Jadwal::with('mataKuliah.mahasiswas')
+        $jadwals = Jadwal::with('mataKuliah')
             ->where('hari', $hariIni)
             ->where('status', 'aktif')
             ->get();
@@ -50,9 +50,12 @@ class MarkAbsentAttendance extends Command
                 continue;
             }
 
-            // Ambil semua mahasiswa yang terdaftar di MK ini
-            $mahasiswaIds = $mataKuliah->mahasiswas()->pluck('users.id');
-
+            // RENCANA 2: peserta = mahasiswa dari kelas pada jadwal ini.
+            $mahasiswaIds = $jadwal->kelas_id
+                ? User::whereHas('mahasiswaKelas', fn ($q) => $q->where('kelas_id', $jadwal->kelas_id)
+                    ->whereHas('semester', fn ($s) => $s->where('status', 'aktif')))
+                    ->pluck('users.id')
+                : collect();
             foreach ($mahasiswaIds as $mahasiswaId) {
                 try {
                     $leave = LeaveRequest::where('user_id', $mahasiswaId)

@@ -10,8 +10,10 @@ Jika terdapat perbedaan, gunakan urutan berikut:
 2. **Dokumen current:** `CURRENT-ARCHITECTURE.md`, `CURRENT-API.md`, `SECURITY.md`, dan `DEPLOYMENT.md`.
 3. **Audit aktif:** `temuan.md` adalah satu-satunya backlog risiko dan evidence tracker authoritative.
 4. **PRD:** tujuan produk dan acceptance criteria. Detail endpoint/schema pada PRD harus menunjuk ke dokumen current, bukan mengalahkan implementasi.
-5. **Catatan implementasi:** rencana yang sudah selesai, seperti `rencana-izin.md`; bukan pengganti kontrak current.
+5. **Catatan implementasi:** rencana yang sudah selesai, seperti `rencana-izin.md` dan `rencana2.md`; bukan pengganti kontrak current.
 6. **Dokumen historis:** task plan, analisis lama, final-task, dan fix log hanya merekam kondisi pada tanggal pembuatannya.
+
+> **RENCANA 2 (Kelas Master, 20 Agustus 2026):** perubahan skema akademik (kelas master, `mahasiswa_kelas`, dosen/kelas di jadwal, penghapusan pivot `mahasiswa_mata_kuliah`) terdokumentasi end-to-end di `rencana2.md` (jalur implementasi + verifikasi) dan merupakan kontrak current di `CURRENT-ARCHITECTURE.md` → "Struktur Data Akademik (Kelas Master)", `CURRENT-API.md` → "Perubahan Kontrak RENCANA 2", `PRD-02` §5.3a, `PRD-03` §2.9a/2.9b/2.12, dan `PRD-04` §4. Ikuti README hierarki ini: executable truth > current > PRD > catatan implementasi.
 
 ## Referensi Current
 
@@ -25,6 +27,7 @@ Jika terdapat perbedaan, gunakan urutan berikut:
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Environment, CI, backend deployment, Android release/device matrix, rollback, dan restore |
 | [temuan.md](temuan.md) | Temuan aktif, status remediation, acceptance, dan evidence |
 | [PRD-INDEX.md](PRD-INDEX.md) | Indeks kebutuhan produk dan status implementasi |
+| rencana2.md | Catatan implementasi & verifikasi RENCANA 2 (kelas master) — selesai |
 
 ## Klasifikasi Dokumen
 
@@ -85,4 +88,4 @@ Dokumen historis tidak boleh digunakan untuk membuat endpoint, credential, deplo
 - `backend-ci.yml` dan `frontend-ci.yml` dikonfigurasi untuk setiap push/PR. `android-release.yml` dan `android-device-tests.yml` manual. Detail lihat [DEPLOYMENT.md](DEPLOYMENT.md).
 - Seluruh pekerjaan lokal sudah di-push ke `origin/main` pada 11 Agustus 2026 (`5e49bfe`, `b271326`, `d46f0b1`, `13fc302`), sehingga workflow push/PR terpicu pada revision tersebut. **Push hanya memicu workflow, bukan membuktikan hasilnya.** Green remote run, protected environments, dan required checks tetap belum boleh diklaim sampai evidence L-09 tersedia — GitHub CLI tidak tersedia di workspace ini.
 
-**Pembaruan terakhir:** 18 Agustus 2026 (resync hasil verifikasi tooling ke keadaan sekarang: `php artisan test` 224/819, `flutter test` 189, `flutter analyze` bersih, formatter lulus, `npm run build` lulus — lihat [temuan.md](temuan.md#hasil-verifikasi-tooling); termasuk izin multi-MK, UX konflik biometrik perangkat bersama, dan panduan debug LAN privat; command `serve:all` menjalankan dev server + scheduler sekaligus untuk development lokal).
+**Pembaruan terakhir:** 12 September 2026 (sinkronisasi lintas dokumen: state data akademik terkini — semester aktif `2026/2027-1` berisi kelas 1A–1E, 3A–3E, 5A–5E; kelas 1A–1E semester genap 2025/2026 hasil seeding keliru telah dibersihkan beserta pivotnya karena 100% duplikat angkatan 2026 dan tanpa jadwal/attendance; arsip genap 2025/2026 kini hanya 4A–4E dengan 62 attendance asli. Verifikasi tooling terakhir lihat [temuan.md](temuan.md#hasil-verifikasi-tooling): `php artisan test` 229/229, `flutter test` 189, `flutter analyze` bersih, `npm run build` lulus; termasuk RENCANA 2 kelas master, izin multi-MK, dan command `serve:all` menjalankan dev server + scheduler sekaligus).

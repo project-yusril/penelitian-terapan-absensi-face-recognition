@@ -19,14 +19,17 @@ class SendNotificationListener
         $attendance = $event->attendance;
         $mk = $attendance->mataKuliah;
 
-        if (! $mk || ! $mk->dosen_id) {
+        // RENCANA 2: dosen pengampu di-plot per jadwal (jadwals.dosen_id).
+        $dosenId = $attendance->jadwal?->dosen_id;
+
+        if (! $mk || ! $dosenId) {
             return;
         }
 
         $mahasiswa = $attendance->user;
 
         Notification::create([
-            'user_id' => $mk->dosen_id,
+            'user_id' => $dosenId,
             'type' => 'approval_needed',
             'title' => 'Approval kehadiran baru',
             'body' => "{$mahasiswa->nama} ({$mahasiswa->nim}) membutuhkan approval kehadiran untuk {$mk->nama}.",

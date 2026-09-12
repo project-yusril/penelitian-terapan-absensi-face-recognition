@@ -15,15 +15,13 @@ const props = defineProps({
     filters: { type: Object, default: () => ({}) },
     prodis: { type: Array, default: () => [] },
     semesters: { type: Array, default: () => [] },
-    dosens: { type: Array, default: () => [] },
 });
 
 const columns = [
     { key: 'kode_mk', label: 'Kode', sortable: true },
     { key: 'nama', label: 'Mata Kuliah', sortable: true },
     { key: 'sks', label: 'SKS', sortable: true, align: 'center' },
-    { key: 'kelas', label: 'Kelas', align: 'center' },
-    { key: 'dosen', label: 'Dosen' },
+    { key: 'semester', label: 'Semester' },
     { key: 'prodi', label: 'Prodi' },
     { key: 'status', label: 'Status', sortable: true },
     { key: 'aksi', label: '', align: 'right', width: '90px' },
@@ -42,7 +40,7 @@ const showForm = ref(false);
 const editingId = ref(null);
 const form = useForm({
     kode_mk: '', nama: '', sks: 2, semester_id: '', prodi_id: '',
-    dosen_id: '', kelas: '', total_pertemuan: 16, status: 'aktif',
+    total_pertemuan: 16, status: 'aktif',
 });
 
 const openCreate = () => {
@@ -63,8 +61,6 @@ const openEdit = (row) => {
     form.sks = row.sks;
     form.semester_id = row.semester_id ?? '';
     form.prodi_id = row.prodi_id ?? '';
-    form.dosen_id = row.dosen_id ?? '';
-    form.kelas = row.kelas ?? '';
     form.total_pertemuan = row.total_pertemuan ?? 16;
     form.status = row.status;
     showForm.value = true;
@@ -89,7 +85,7 @@ const doDelete = () => {
 <template>
     <Head title="Mata Kuliah" />
 
-    <PageHeader title="Mata Kuliah" subtitle="Kelola mata kuliah & pengampu">
+    <PageHeader title="Mata Kuliah" subtitle="Master kurikulum mata kuliah per program studi">
         <template #actions>
             <button class="btn-primary" @click="openCreate">
                 <Icon name="plus" class="h-4 w-4" /> Tambah Mata Kuliah
@@ -115,7 +111,7 @@ const doDelete = () => {
         <template #cell:kode_mk="{ row }">
             <span class="font-medium text-slate-700">{{ row.kode_mk }}</span>
         </template>
-        <template #cell:dosen="{ row }">{{ row.dosen ?? '—' }}</template>
+        <template #cell:semester="{ row }">{{ row.semester ?? '—' }}</template>
         <template #cell:status="{ row }"><StatusBadge :value="row.status" /></template>
         <template #cell:aksi="{ row }">
             <div class="flex items-center justify-end gap-1">
@@ -175,23 +171,9 @@ const doDelete = () => {
             </div>
 
             <div>
-                <label class="label">Dosen Pengampu</label>
-                <select v-model="form.dosen_id" class="input">
-                    <option value="">— Belum ditentukan —</option>
-                    <option v-for="d in dosens" :key="d.id" :value="d.id">{{ d.nama }}</option>
-                </select>
-                <InputError :message="form.errors.dosen_id" />
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <label class="label">Kelas</label>
-                    <input v-model="form.kelas" type="text" class="input" />
-                </div>
-                <div>
-                    <label class="label">Total Pertemuan</label>
-                    <input v-model.number="form.total_pertemuan" type="number" min="1" max="32" class="input" />
-                    <InputError :message="form.errors.total_pertemuan" />
-                </div>
+                <label class="label">Total Pertemuan</label>
+                <input v-model.number="form.total_pertemuan" type="number" min="1" max="32" class="input" />
+                <InputError :message="form.errors.total_pertemuan" />
             </div>
 
             <div>

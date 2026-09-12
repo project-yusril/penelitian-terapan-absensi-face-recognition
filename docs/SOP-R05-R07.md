@@ -5,11 +5,18 @@
 > Jangan menjalankan load test pada production. Sebelum SOP dipakai, sediakan
 > fixture/consent/script yang benar-benar ada, akun test terisolasi, permit per
 > action/UUID, dan pengukuran eksternal dari load-test runner. Residual research
-> validity mengikuti R-01 sampai R-05 di [temuan.md](temuan.md).
+> validity mengikuti R-01 sampai R-05 di temuan.md.
 > Production attendance fail-closed permanen untuk konteks penelitian (trusted
-> verifier di luar scope — [ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak);
+> verifier di luar scope — ADR-001 ditolak);
 > SOP hanya boleh dijalankan pada environment penelitian non-production yang
 > mengaktifkan compatibility mode secara eksplisit dan mengisolasi seluruh data test.
+>
+> **Update 20 Agustus 2026:** pipeline R-05/R-07 kini **terisi dataset awal**
+> (command `php artisan attendance:seed-analysis-data` — 920 log: 400 genuine,
+> 400 impostor, geofence/failed, 60 uji simultan; `--force` untuk regenerasi).
+> Endpoint analisis & halaman `/analysis` tidak lagi kosong. SOP ini tetap
+> berlaku untuk **pengambilan data lapangan asli** (≥30–50 per label, impostor =
+> orang hidup berbeda, load test eksternal k6/JMeter dengan HTTP response time).
 
 **Konteks:** Dua task riset di `docs/task-baru.md` belum bisa ditutup karena
 butuh sesi data lapangan, bukan koding:

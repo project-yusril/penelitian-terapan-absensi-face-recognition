@@ -134,13 +134,15 @@ disesuaikan):
 
 ## Sisa Pekerjaan (butuh sesi data, bukan kode)
 
+> **Update 20 Agustus 2026:** R-05 & R-07 kini punya dataset awal via `php artisan attendance:seed-analysis-data` (920 log: 400 genuine + 400 impostor + geofence/failed/simultan). Endpoint & halaman `/analysis` terisi (EER 0.75% @ θ optimal 0.6; uji simultan 60, level 1–20). Sisa di bawah adalah pengambilan **data lapangan asli**.
+
 | Task | Status | Yang dibutuhkan |
 |------|--------|-----------------|
-| R-05 | Infra siap | Jalankan test mode untuk merekam percobaan **genuine vs impostor** (label di `attendance_logs.metadata`), lalu endpoint `face-verification` + `sweepFarFrr` menghasilkan FAR/FRR & EER. |
-| R-07 | Infra siap | Jalankan **uji beban simultan** (20/30/40 pengguna), tulis `metadata->concurrent_level/success/latency_ms`; endpoint `simultaneous-test` menampilkan hasil. |
+| R-05 | Infra + dataset awal siap | Pengambilan data lapangan asli genuine vs impostor (≥30–50 per label, impostor = orang hidup berbeda), label via test mode / `X-Test-Label`; endpoint `face-verification` + `sweepFarFrr` menghasilkan FAR/FRR & EER. |
+| R-07 | Infra + dataset awal siap | Uji beban **eksternal asli** (20/30/40 pengguna, k6/JMeter) mengukur HTTP response time; tulis `metadata->concurrent_level/success/latency_ms`; endpoint `simultaneous-test` menampilkan hasil. |
 
 ## Ringkasan Progres
 
 - **CRITICAL:** 5/5 · **HIGH:** 6/6 · **MEDIUM:** 7/7 · **LOW & DOCS:** 7/7
-- **RESEARCH-CRITICAL:** 8/10 selesai (+2 infra siap, tinggal sesi data)
-- **TOTAL:** 33/35 (2 sisanya non-koding)
+- **RESEARCH-CRITICAL:** 8/10 selesai (+2 pipeline terisi dataset awal, tinggal data lapangan asli)
+- **TOTAL:** 33/35 (2 sisanya butuh sesi data lapangan/load test eksternal)

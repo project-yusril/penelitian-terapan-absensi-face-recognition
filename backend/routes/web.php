@@ -10,6 +10,7 @@ use App\Http\Controllers\Web\DashboardController;
 use App\Http\Controllers\Web\DosenAttendanceController;
 use App\Http\Controllers\Web\GeofenceController;
 use App\Http\Controllers\Web\JadwalController;
+use App\Http\Controllers\Web\KelasController;
 use App\Http\Controllers\Web\MaintenanceController;
 use App\Http\Controllers\Web\MataKuliahController;
 use App\Http\Controllers\Web\NotificationController;
@@ -97,10 +98,8 @@ Route::middleware(['auth', 'user.active', 'web.role:super_admin,ketua_jurusan,ad
                 Route::post('/mata-kuliah', [MataKuliahController::class, 'store'])->name('mata-kuliah.store');
                 Route::put('/mata-kuliah/{matkul}', [MataKuliahController::class, 'update'])->name('mata-kuliah.update');
                 Route::delete('/mata-kuliah/{matkul}', [MataKuliahController::class, 'destroy'])->name('mata-kuliah.destroy');
-                // Kelola peserta MK (enroll/unenroll mahasiswa)
+                // Kelola peserta MK (peserta = mahasiswa dari kelas terkait).
                 Route::get('/mata-kuliah/{matkul}/peserta', [MataKuliahController::class, 'mahasiswa'])->name('mata-kuliah.peserta');
-                Route::post('/mata-kuliah/{matkul}/enroll', [MataKuliahController::class, 'enroll'])->name('mata-kuliah.enroll');
-                Route::delete('/mata-kuliah/{matkul}/peserta/{mahasiswa}', [MataKuliahController::class, 'unenroll'])->name('mata-kuliah.unenroll');
 
                 Route::get('/jadwal', [JadwalController::class, 'index'])->name('jadwal.index');
 
@@ -122,6 +121,12 @@ Route::middleware(['auth', 'user.active', 'web.role:super_admin,ketua_jurusan,ad
                 Route::post('/geofence', [GeofenceController::class, 'store'])->name('geofence.store');
                 Route::put('/geofence/{geofence}', [GeofenceController::class, 'update'])->name('geofence.update');
                 Route::delete('/geofence/{geofence}', [GeofenceController::class, 'destroy'])->name('geofence.destroy');
+
+                // Kelas master — kombinasi semester → tingkat → huruf.
+                Route::get('/kelas', [KelasController::class, 'index'])->name('kelas.index');
+                Route::post('/kelas', [KelasController::class, 'store'])->name('kelas.store');
+                Route::put('/kelas/{kelas}', [KelasController::class, 'update'])->name('kelas.update');
+                Route::delete('/kelas/{kelas}', [KelasController::class, 'destroy'])->name('kelas.destroy');
             });
 
         // Persetujuan — Kaprodi (dan super admin).

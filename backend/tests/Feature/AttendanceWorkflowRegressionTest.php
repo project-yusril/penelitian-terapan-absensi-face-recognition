@@ -35,6 +35,8 @@ class AttendanceWorkflowRegressionTest extends TestCase
 
     private MataKuliah $course;
 
+    private \App\Models\Kelas $kelas;
+
     private Semester $semester;
 
     private Geofence $geofence;
@@ -57,9 +59,14 @@ class AttendanceWorkflowRegressionTest extends TestCase
         ]);
         $this->course = MataKuliah::create([
             'kode_mk' => 'WF101', 'nama' => 'Workflow', 'sks' => 2, 'semester_id' => $this->semester->id,
-            'prodi_id' => $prodi->id, 'dosen_id' => $this->dosen->id, 'status' => 'aktif',
+            'prodi_id' => $prodi->id, 'status' => 'aktif',
         ]);
-        $this->course->mahasiswas()->attach($this->student->id);
+        // RENCANA 2: mahasiswa di-enroll ke kelas master; jadwal memakai kelas ini.
+        $this->kelas = \App\Models\Kelas::create([
+            'prodi_id' => $prodi->id, 'semester_id' => $this->semester->id,
+            'tingkat' => '4', 'nama' => 'A', 'status' => 'aktif',
+        ]);
+        $this->student->mahasiswaKelas()->create(['kelas_id' => $this->kelas->id, 'semester_id' => $this->semester->id]);
         $this->geofence = Geofence::create([
             'nama' => 'Lab', 'latitude' => -6.2, 'longitude' => 106.8, 'radius' => 50,
             'prodi_id' => $prodi->id, 'status' => 'aktif',
@@ -297,7 +304,9 @@ class AttendanceWorkflowRegressionTest extends TestCase
     private function schedule(string $day, string $start, string $end, int $duration): Jadwal
     {
         return Jadwal::create([
-            'mata_kuliah_id' => $this->course->id, 'geofence_id' => $this->geofence->id,
+            'mata_kuliah_id' => $this->course->id, 'kelas_id' => $this->kelas->id,
+            'dosen_id' => $this->dosen->id,
+            'geofence_id' => $this->geofence->id,
             'hari' => $day, 'jam_mulai' => $start, 'jam_selesai' => $end,
             'durasi_menit' => $duration, 'status' => 'aktif',
         ]);

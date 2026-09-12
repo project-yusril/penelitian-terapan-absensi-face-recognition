@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
             GeofenceSeeder::class,
             JadwalSeeder::class,
             MahasiswaMataKuliahSeeder::class,
+            MahasiswaSemester1Seeder::class,
             ProdiSettingSeeder::class,
             SystemSettingSeeder::class,
         ];

@@ -65,18 +65,24 @@ class SpDetectionBehaviorTest extends TestCase
         ]);
         $course = MataKuliah::create([
             'kode_mk' => 'M0401', 'nama' => 'M-04', 'sks' => 2, 'semester_id' => $semester->id,
-            'prodi_id' => $ti->id, 'dosen_id' => $this->recipients['dosen']->id, 'status' => 'aktif',
+            'prodi_id' => $ti->id, 'status' => 'aktif',
         ]);
-        $course->mahasiswas()->attach($this->student->id);
+        $kelas = \App\Models\Kelas::create([
+            'prodi_id' => $ti->id, 'semester_id' => $semester->id,
+            'tingkat' => '4', 'nama' => 'A', 'status' => 'aktif',
+        ]);
+        $this->student->mahasiswaKelas()->create(['kelas_id' => $kelas->id, 'semester_id' => $semester->id]);
         $geofence = Geofence::create([
             'nama' => 'M-04', 'latitude' => -6.2, 'longitude' => 106.8,
             'radius' => 50, 'prodi_id' => $ti->id, 'status' => 'aktif',
         ]);
         $schedule = Jadwal::create([
-            'mata_kuliah_id' => $course->id, 'geofence_id' => $geofence->id,
+            'mata_kuliah_id' => $course->id, 'kelas_id' => $kelas->id, 'geofence_id' => $geofence->id,
             'hari' => 'Sabtu', 'jam_mulai' => '08:00', 'jam_selesai' => '10:00',
             'durasi_menit' => 120, 'status' => 'aktif',
         ]);
+        // RENCANA 2: dosen pengampu di-plot di jadwal.
+        $schedule->update(['dosen_id' => $this->recipients['dosen']->id]);
         $this->attendance = Attendance::create([
             'user_id' => $this->student->id, 'jadwal_id' => $schedule->id, 'mata_kuliah_id' => $course->id,
             'tanggal' => '2026-07-18', 'status' => 'alpha', 'alpha_menit' => 0,

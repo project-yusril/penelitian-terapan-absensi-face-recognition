@@ -2,8 +2,16 @@
 
 > **Status:** target penelitian. Angka contoh bukan hasil pengukuran produksi.
 > Protokol FAR/FRR/PAD/load-test mengikuti R-01 sampai R-05 di
-> [temuan.md](temuan.md); SOP saat ini masih draft non-executable. Data legacy
+> temuan.md; SOP saat ini masih draft non-executable. Data legacy
 > client-attested tidak boleh dipresentasikan sebagai evidence production.
+>
+> **Status implementasi (20 Agustus 2026):** halaman web `/analysis` sudah
+> diimplementasikan (Inertia, `Web\AnalysisController`) dengan visualisasi
+> donut/grouped bar/ring gauge + tooltip (lihat rencana2.md §6.8); endpoint
+> `/api/admin/analysis/*` setara. Dataset awal terisi via `php artisan
+> attendance:seed-analysis-data` (genuine/impostor, geofence, latensi, uji
+> simultan) sehingga halaman tidak lagi kosong; pengambilan data lapangan asli
+> & load test eksternal masih terbuka (R-02/R-05/R-07 di temuan.md).
 
 ## Akses: Hanya Super Admin
 ## Lokasi: Sidebar menu terpisah (di bawah garis pemisah)

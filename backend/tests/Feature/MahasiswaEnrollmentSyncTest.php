@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Geofence;
 use App\Models\Jadwal;
+use App\Models\Kelas;
 use App\Models\MataKuliah;
 use App\Models\Prodi;
 use App\Models\Role;
@@ -16,11 +17,9 @@ use Tests\SeedsEssentialData;
 use Tests\TestCase;
 
 /**
- * KRS harus mengikuti kelas mahasiswa.
- *
- * Jadwal yang dilihat mahasiswa diambil dari pivot `mahasiswa_mata_kuliah`,
- * bukan dari kolom `users.kelas`. Tanpa sinkronisasi, memindahkan mahasiswa
- * antar kelas membuat jadwalnya salah atau hilang sama sekali.
+ * RENCANA 2: KRS mahasiswa diturunkan dari pivot `mahasiswa_kelas`
+ * (kelas aktif → jadwal). Memindahkan mahasiswa antar kelas = mengubah
+ * pivot; snapshot `users.kelas` disinkronkan oleh UserObserver.
  */
 class MahasiswaEnrollmentSyncTest extends TestCase
 {
@@ -29,6 +28,9 @@ class MahasiswaEnrollmentSyncTest extends TestCase
     private Semester $semester;
 
     private Prodi $prodi;
+
+    /** @var array<string, Kelas> */
+    private array $kelasByNama = [];
 
     protected function setUp(): void
     {
@@ -55,7 +57,18 @@ class MahasiswaEnrollmentSyncTest extends TestCase
         $this->prodi = Prodi::where('kode', 'TI')->firstOrFail();
     }
 
-    private function makeMataKuliah(string $kelas, string $kodeMk = 'TI-401'): MataKuliah
+    private function makeKelas(string $nama): Kelas
+    {
+        return $this->kelasByNama[$nama] ??= Kelas::create([
+            'prodi_id' => $this->prodi->id,
+            'semester_id' => $this->semester->id,
+            'tingkat' => '4',
+            'nama' => $nama,
+            'status' => 'aktif',
+        ]);
+    }
+
+    private function makeMataKuliah(string $namaKelas, string $kodeMk = 'TI-401'): MataKuliah
     {
         return MataKuliah::create([
             'kode_mk' => $kodeMk,
@@ -63,20 +76,20 @@ class MahasiswaEnrollmentSyncTest extends TestCase
             'sks' => 3,
             'semester_id' => $this->semester->id,
             'prodi_id' => $this->prodi->id,
-            'kelas' => $kelas,
             'status' => 'aktif',
         ]);
     }
 
-    private function makeMahasiswa(string $kelas): User
+    private function makeMahasiswa(string $namaKelas): User
     {
         $user = User::factory()->create([
             'nama' => 'Mahasiswa Uji',
-            'email' => 'mahasiswa.uji@test.com',
+            'email' => 'mahasiswa.uji.'.uniqid().'@test.com',
             'password' => Hash::make('12345678'),
-            'nim' => '2024009001',
+            'nim' => '2024'.rand(100000, 999999),
             'prodi_id' => $this->prodi->id,
-            'kelas' => $kelas,
+            'kelas' => '4'.$namaKelas,
+            'semester' => 4,
             'status' => 'aktif',
             'enrollment_status' => 'belum',
         ]);
@@ -85,49 +98,30 @@ class MahasiswaEnrollmentSyncTest extends TestCase
         return $user;
     }
 
-    public function test_krs_pindah_ke_section_kelas_baru_saat_kelas_diubah(): void
+    public function test_snapshot_kelas_dan_semester_diselaraskan_saat_kelas_diubah(): void
     {
-        $kelasE = $this->makeMataKuliah('E');
-        $kelasB = $this->makeMataKuliah('B');
+        $this->makeKelas('B');
+        $user = $this->makeMahasiswa('B');
+        $user->mahasiswaKelas()->create(['kelas_id' => $this->makeKelas('B')->id, 'semester_id' => $this->semester->id]);
 
-        $user = $this->makeMahasiswa('E');
-        $user->mataKuliahs()->attach($kelasE->id);
+        // Kelas tujuan belum ada di master → pivot aktif dilepas, snapshot tetap.
+        $user->update(['kelas' => '4Z']);
+        $this->assertNull($user->fresh()->kelasAktif);
 
-        $user->update(['kelas' => 'B']);
-
-        $this->assertSame(
-            [$kelasB->id],
-            $user->fresh()->mataKuliahs()->pluck('mata_kuliahs.id')->all(),
-            'KRS harus menunjuk section kelas B setelah kelas mahasiswa diubah'
-        );
+        // Buat kelas master lalu set ulang → pivot + semester mengikuti.
+        $this->makeKelas('C');
+        $user->update(['kelas' => '4C']);
+        $this->assertSame($this->makeKelas('C')->id, $user->fresh()->kelasAktif?->kelas_id);
+        $this->assertSame(4, (int) $user->fresh()->semester);
     }
 
-    public function test_padanan_ditemukan_walau_kode_mk_antar_section_berbeda(): void
-    {
-        // Kasus nyata: section kelas B sempat diberi kode berbeda (TI-402)
-        // sementara section lain tetap TI-401. Pencocokan berbasis kode saja
-        // akan gagal menemukan padanannya.
-        $kelasE = $this->makeMataKuliah('E', 'TI-401');
-        $kelasB = $this->makeMataKuliah('B', 'TI-402');
-
-        $user = $this->makeMahasiswa('E');
-        $user->mataKuliahs()->attach($kelasE->id);
-
-        $user->update(['kelas' => 'B']);
-
-        $this->assertSame(
-            [$kelasB->id],
-            $user->fresh()->mataKuliahs()->pluck('mata_kuliahs.id')->all(),
-            'Pencocokan harus jatuh ke nama mata kuliah saat kode berbeda'
-        );
-    }
-
-    public function test_jadwal_hari_ini_ikut_berubah_setelah_kelas_diubah(): void
+    public function test_jadwal_hari_ini_ikut_berubah_setelah_pivot_kelas_diubah(): void
     {
         $hariIni = now()->locale('id')->isoFormat('dddd');
 
-        $kelasE = $this->makeMataKuliah('E');
-        $kelasB = $this->makeMataKuliah('B', 'TI-402');
+        $mkB = $this->makeMataKuliah('B', 'TI-402');
+        $kelasE = $this->makeKelas('E');
+        $kelasB = $this->makeKelas('B');
 
         $geofence = Geofence::create([
             'nama' => 'Lab Komputer 3',
@@ -138,9 +132,10 @@ class MahasiswaEnrollmentSyncTest extends TestCase
             'status' => 'aktif',
         ]);
 
-        // Hanya section kelas B yang punya jadwal hari ini.
+        // Hanya kelas B yang punya jadwal hari ini.
         Jadwal::create([
-            'mata_kuliah_id' => $kelasB->id,
+            'mata_kuliah_id' => $mkB->id,
+            'kelas_id' => $kelasB->id,
             'geofence_id' => $geofence->id,
             'hari' => $hariIni,
             'jam_mulai' => '13:00:00',
@@ -150,10 +145,10 @@ class MahasiswaEnrollmentSyncTest extends TestCase
         ]);
 
         $user = $this->makeMahasiswa('E');
-        $user->mataKuliahs()->attach($kelasE->id);
+        $user->mahasiswaKelas()->create(['kelas_id' => $kelasE->id, 'semester_id' => $this->semester->id]);
 
         $token = $this->postJson('/api/auth/login', [
-            'login' => '2024009001',
+            'login' => $user->nim,
             'password' => '12345678',
         ])->json('data.token');
 
@@ -162,69 +157,31 @@ class MahasiswaEnrollmentSyncTest extends TestCase
             ->assertOk()
             ->assertJsonCount(0, 'data');
 
-        $user->update(['kelas' => 'B']);
+        $user->mahasiswaKelas()->update(['kelas_id' => $kelasB->id]);
 
-        // Sesudah dipindah: jadwal section kelas B muncul.
+        // Sesudah dipindah: jadwal kelas B muncul.
         $this->withToken($token)->getJson('/api/mahasiswa/jadwal/today')
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.ruangan', 'Lab Komputer 3');
     }
 
-    public function test_krs_dibiarkan_saat_kelas_tidak_berubah(): void
-    {
-        $kelasB = $this->makeMataKuliah('B');
-        $user = $this->makeMahasiswa('B');
-        $user->mataKuliahs()->attach($kelasB->id);
-
-        $user->update(['nama' => 'Nama Baru']);
-
-        $this->assertSame(
-            [$kelasB->id],
-            $user->fresh()->mataKuliahs()->pluck('mata_kuliahs.id')->all()
-        );
-    }
-
-    public function test_krs_tidak_dihapus_saat_section_pengganti_tidak_ada(): void
-    {
-        // Kelas tujuan belum punya section; melepas KRS begitu saja akan
-        // menghilangkan mata kuliah dari kartu studi mahasiswa tanpa jejak.
-        $kelasE = $this->makeMataKuliah('E');
-
-        $user = $this->makeMahasiswa('E');
-        $user->mataKuliahs()->attach($kelasE->id);
-
-        $user->update(['kelas' => 'Z']);
-
-        $this->assertSame(
-            [$kelasE->id],
-            $user->fresh()->mataKuliahs()->pluck('mata_kuliahs.id')->all(),
-            'KRS lama harus dipertahankan bila tidak ada padanan'
-        );
-    }
-
     public function test_pengguna_non_mahasiswa_tidak_disentuh(): void
     {
-        $kelasE = $this->makeMataKuliah('E');
-        $this->makeMataKuliah('B');
-
+        $this->makeKelas('B');
         $dosen = User::factory()->create([
             'nama' => 'Dosen Uji',
-            'email' => 'dosen.uji@test.com',
+            'email' => 'dosen.uji.'.uniqid().'@test.com',
             'password' => Hash::make('12345678'),
             'prodi_id' => $this->prodi->id,
-            'kelas' => 'E',
+            'kelas' => '4B',
             'status' => 'aktif',
             'enrollment_status' => 'belum',
         ]);
         $dosen->roles()->attach(Role::where('name', 'dosen')->first()->id);
-        $dosen->mataKuliahs()->attach($kelasE->id);
 
-        $dosen->update(['kelas' => 'B']);
+        $dosen->update(['kelas' => '4C']);
 
-        $this->assertSame(
-            [$kelasE->id],
-            $dosen->fresh()->mataKuliahs()->pluck('mata_kuliahs.id')->all()
-        );
+        $this->assertSame(0, $dosen->fresh()->mahasiswaKelas()->count());
     }
 }

@@ -1,11 +1,13 @@
 # PRD-03: DATABASE DESIGN
 
-> **Status:** desain logis awal. Schema executable dan authoritative berada di
-> `backend/database/migrations/`. Ringkasan arsitektur data/security terkini ada
-> di [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md). Dokumen ini tidak boleh
+> **Status:** desain logis awal + **diperbarui untuk RENCANA 2 (kelas master, 20 Agustus 2026)**.
+> Schema executable dan authoritative berada di `backend/database/migrations/`.
+> Ringkasan arsitektur data/security terkini ada di
+> CURRENT-ARCHITECTURE.md. Dokumen ini tidak boleh
 > digunakan untuk membuat migration baru tanpa membandingkan seluruh migration
 > forward, termasuk attendance permits, encrypted biometrics, private files,
-> dan `activation_pending`.
+> `activation_pending`, kelas master (`kelas`/`mahasiswa_kelas`), dan penghapusan
+> pivot `mahasiswa_mata_kuliah`.
 
 **Nama Database**: `absensi_mahasiswa_elektro`
 
@@ -37,12 +39,20 @@
                     ┌─────────────┐     ┌─────────────────┐
                     │  jadwals    │     │  tahun_ajarans  │
                     └─────────────┘     └─────────────────┘
-                          │
-                          │
-                          ▼
-                    ┌─────────────┐
-                    │  geofences  │
-                    └─────────────┘
+                          │                     │
+                          │                     ▼
+                          ▼               ┌─────────────┐
+                    ┌─────────────┐       │   kelas     │
+                    │  geofences  │       └─────────────┘
+                    └─────────────┘             │
+                                               │
+                                        ┌─────────────┐
+                                        │mahasiswa_   │────> users (mahasiswa)
+                                        │kelas        │
+                                        └─────────────┘
+
+> **RENCANA 2:** `jadwals` kini memakai `kelas_id` (→ kelas) & `dosen_id` (→ users/dosen);
+> KRS = `users ↔ mahasiswa_kelas ↔ kelas ↔ jadwals ↔ mata_kuliahs`. Pivot `mahasiswa_mata_kuliah` dihapus.
 
 ┌─────────────┐     ┌──────────────────┐
 │   users     │────<│   attendances    │
@@ -120,9 +130,9 @@ CREATE TABLE users (
     jenis_kelamin ENUM('L', 'P') NULL,   -- L=Laki-laki, P=Perempuan
     alamat TEXT NULL,                     -- alamat lengkap
     prodi_id BIGINT UNSIGNED NULL,
-    kelas VARCHAR(10) NULL,               -- untuk mahasiswa (A, B, C)
+    kelas VARCHAR(10) NULL,               -- SNAPSHOT label kelas (mis. "4B"); sumber kebenaran = mahasiswa_kelas (RENCANA 2)
     angkatan YEAR NULL,                   -- untuk mahasiswa
-    semester INT NULL,                    -- semester aktif mahasiswa (1-8)
+    semester INT NULL,                    -- SNAPSHOT tingkat semester; diselaraskan dari kelas master (RENCANA 2)
     jabatan_fungsional VARCHAR(50) NULL,   -- untuk dosen
     pendidikan_terakhir VARCHAR(50) NULL,  -- untuk dosen (S1, S2, S3)
     bidang_keahlian VARCHAR(255) NULL,     -- untuk dosen (misal: "Mobile Development, AI")
@@ -244,8 +254,6 @@ CREATE TABLE mata_kuliahs (
     sks INT NOT NULL DEFAULT 2,
     semester_id BIGINT UNSIGNED NOT NULL,
     prodi_id BIGINT UNSIGNED NOT NULL,
-    dosen_id BIGINT UNSIGNED NULL,        -- dosen pengampu
-    kelas VARCHAR(10) NULL,               -- A, B, C
     total_pertemuan INT DEFAULT 16,
     status ENUM('aktif', 'nonaktif') DEFAULT 'aktif',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -253,27 +261,50 @@ CREATE TABLE mata_kuliahs (
     
     FOREIGN KEY (semester_id) REFERENCES semesters(id) ON DELETE CASCADE,
     FOREIGN KEY (prodi_id) REFERENCES prodis(id) ON DELETE CASCADE,
-    FOREIGN KEY (dosen_id) REFERENCES users(id) ON DELETE SET NULL,
     INDEX idx_mk_semester (semester_id),
     INDEX idx_mk_prodi (prodi_id),
-    INDEX idx_mk_dosen (dosen_id),
-    UNIQUE KEY unique_mk_semester_kelas (kode_mk, semester_id, kelas)
+    UNIQUE KEY unique_mk_semester (kode_mk, semester_id, prodi_id)
 );
 ```
 
-### 2.10 Tabel: `mahasiswa_mata_kuliah` (Pivot)
+> **RENCANA 2 (20 Agustus 2026):** kolom `dosen_id` & `kelas` (beserta generated `kelas_key`) DIHAPUS — mata kuliah murni master kurikulum. Dosen & kelas di-plot per jadwal. Unique berubah dari `unique_mk_semester_kelas` (kode, semester, kelas) menjadi `unique_mk_semester` (kode, semester, prodi). Lihat `CURRENT-ARCHITECTURE.md` → "Struktur Data Akademik (Kelas Master)".
+
+### 2.9a Tabel: `kelas` (Master — RENCANA 2)
 ```sql
-CREATE TABLE mahasiswa_mata_kuliah (
+CREATE TABLE kelas (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT UNSIGNED NOT NULL,     -- mahasiswa
-    mata_kuliah_id BIGINT UNSIGNED NOT NULL,
+    prodi_id BIGINT UNSIGNED NOT NULL,
+    semester_id BIGINT UNSIGNED NOT NULL,
+    tingkat ENUM('1','2','3','4','5') NOT NULL,
+    nama ENUM('A','B','C','D','E') NOT NULL,
+    status ENUM('aktif', 'nonaktif') DEFAULT 'aktif',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (mata_kuliah_id) REFERENCES mata_kuliahs(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_mhs_mk (user_id, mata_kuliah_id)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (prodi_id) REFERENCES prodis(id) ON DELETE CASCADE,
+    FOREIGN KEY (semester_id) REFERENCES semesters(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_kelas_prodi_semester_tingkat_nama (prodi_id, semester_id, tingkat, nama)
 );
 ```
+
+### 2.9b Tabel: `mahasiswa_kelas` (Pivot riwayat — RENCANA 2)
+```sql
+CREATE TABLE mahasiswa_kelas (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,      -- mahasiswa
+    kelas_id BIGINT UNSIGNED NOT NULL,
+    semester_id BIGINT UNSIGNED NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (kelas_id) REFERENCES kelas(id) ON DELETE CASCADE,
+    FOREIGN KEY (semester_id) REFERENCES semesters(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_mahasiswa_kelas_user_semester (user_id, semester_id)
+);
+```
+
+> **RENCANA 2:** tabel ini menggantikan pivot `mahasiswa_mata_kuliah` (dihapus migration `2026_08_20_000002`). KRS mahasiswa = `mahasiswa_kelas` → kelas → jadwal → mata kuliah; riwayat mutasi antar kelas tersimpan per semester. `users.kelas`/`users.semester` dipertahankan sebagai snapshot (display & mobile), diselaraskan `UserObserver` + `MahasiswaEnrollmentSynchronizer`.
 
 ### 2.11 Tabel: `geofences`
 ```sql
@@ -300,6 +331,8 @@ CREATE TABLE geofences (
 CREATE TABLE jadwals (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     mata_kuliah_id BIGINT UNSIGNED NOT NULL,
+    kelas_id BIGINT UNSIGNED NOT NULL,      -- RENCANA 2: kelas master
+    dosen_id BIGINT UNSIGNED NULL,          -- RENCANA 2: dosen pengampu di sini
     geofence_id BIGINT UNSIGNED NOT NULL,
     hari ENUM('Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu') NOT NULL,
     jam_mulai TIME NOT NULL,
@@ -311,11 +344,17 @@ CREATE TABLE jadwals (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     
     FOREIGN KEY (mata_kuliah_id) REFERENCES mata_kuliahs(id) ON DELETE CASCADE,
+    FOREIGN KEY (kelas_id) REFERENCES kelas(id) ON DELETE CASCADE,
+    FOREIGN KEY (dosen_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (geofence_id) REFERENCES geofences(id) ON DELETE CASCADE,
     INDEX idx_jadwal_mk (mata_kuliah_id),
+    INDEX idx_jadwal_kelas (kelas_id),
+    INDEX idx_jadwal_dosen (dosen_id),
     INDEX idx_jadwal_hari (hari)
 );
 ```
+
+> **RENCANA 2:** `kelas_id` & `dosen_id` ditambahkan (migration `2026_08_19_000003`); dosen & kelas di-plot per jadwal, bukan per mata kuliah. Anti-bentrok dosen/kelas/ruangan divalidasi di aplikasi (interval setengah terbuka).
 
 ### 2.13 Tabel: `attendances`
 ```sql
@@ -655,11 +694,21 @@ CREATE TABLE audit_trails (
 | users | hasMany | notifications | - |
 | tahun_ajarans | hasMany | semesters | - |
 | semesters | hasMany | mata_kuliahs | - |
+| semesters | hasMany | kelas | - |
 | prodis | hasMany | mata_kuliahs | - |
 | prodis | hasOne | prodi_settings | - |
-| mata_kuliahs | belongsTo | users (dosen) | dosen_id |
-| mata_kuliahs | belongsToMany | users (mhs) | via mahasiswa_mata_kuliah |
-| mata_kuliahs | hasMany | jadwals | - |
+| mata_kuliahs | belongsTo | semesters | semester_id |
+| mata_kuliahs | belongsTo | prodis | prodi_id |
+| kelas | belongsTo | semesters | semester_id |
+| kelas | belongsTo | prodis | prodi_id |
+| kelas | hasMany | mahasiswa_kelas | - |
+| kelas | hasMany | jadwals | - |
+| mahasiswa_kelas | belongsTo | users | user_id |
+| mahasiswa_kelas | belongsTo | kelas | kelas_id |
+| mahasiswa_kelas | belongsTo | semesters | semester_id |
+| jadwals | belongsTo | mata_kuliahs | mata_kuliah_id |
+| jadwals | belongsTo | kelas | kelas_id |
+| jadwals | belongsTo | users (dosen) | dosen_id |
 | jadwals | belongsTo | geofences | geofence_id |
 | attendances | belongsTo | users | user_id |
 | attendances | belongsTo | jadwals | jadwal_id |
@@ -668,6 +717,8 @@ CREATE TABLE audit_trails (
 | alpha_accumulations | belongsTo | semesters | semester_id |
 | sp_records | belongsTo | users | user_id, generated_by, signed_* |
 | users (orang_tua) | belongsToMany | users (mahasiswa) | via parent_student |
+
+> **RENCANA 2:** relasi `mata_kuliahs ↔ users(mhs)` via `mahasiswa_mata_kuliah` DIHAPUS bersama tabelnya. KRS = `users ↔ mahasiswa_kelas ↔ kelas ↔ jadwals ↔ mata_kuliahs`. Dosen pengampu = `jadwals.dosen_id → users`.
 
 ---
 
@@ -801,15 +852,28 @@ status nonaktif, dan one-time activation melalui email terverifikasi.
 | 2025/2026 | Genap | Januari 2026 - Juni 2026 | aktif |
 | 2025/2026 | Ganjil | Juli 2025 - Desember 2025 | nonaktif |
 
-### 4.7 Mata Kuliah (Contoh: Pemrograman Mobile — Semester 4 TI)
+### 4.7 Mata Kuliah & Jadwal (Contoh: Pemrograman Mobile — Semester 4 TI)
 
-| kode_mk | nama | sks | semester_id | prodi | dosen | kelas |
-|---------|------|-----|-------------|-------|-------|-------|
-| TI-401 | Pemrograman Mobile | 3 | Genap 2025/2026 | TI | Yusril | B |
-| TI-401 | Pemrograman Mobile | 3 | Genap 2025/2026 | TI | Adam | A |
-| TI-401 | Pemrograman Mobile | 3 | Genap 2025/2026 | TI | Adam | C |
-| TI-401 | Pemrograman Mobile | 3 | Genap 2025/2026 | TI | Fitri | D |
-| TI-401 | Pemrograman Mobile | 3 | Genap 2025/2026 | TI | Fitri | E |
+> **RENCANA 2:** mata kuliah master TANPA kelas/dosen; kelas & dosen di-plot per jadwal.
+
+**Master mata kuliah (1 baris per kode+semester+prodi):**
+
+| kode_mk | nama | sks | semester_id | prodi |
+|---------|------|-----|-------------|-------|
+| TI-401 | Pemrograman Mobile | 3 | Genap 2025/2026 | TI |
+| TI-402 | Pemrograman Web | 2 | Genap 2025/2026 | TI |
+| TI-301 | Basis Data | 3 | Genap 2025/2026 | TI |
+
+**Jadwal (dosen & kelas di sini):**
+
+| mata_kuliah | kelas | dosen | hari | jam_mulai | jam_selesai | ruangan |
+|-------------|-------|-------|------|-----------|-------------|---------|
+| TI-401 | A | Adam | Selasa | 13:00 | 15:30 | Lab Komputer 3 |
+| TI-401 | C | Adam | Rabu | 08:00 | 10:30 | Lab Komputer 4 |
+| TI-401 | D | Fitri | Kamis | 08:00 | 10:30 | Lab Komputer 5 |
+| TI-401 | E | Fitri | Jumat | 08:00 | 10:30 | Lab Komputer 5 |
+| TI-402 | B | Yusril | Senin | 08:00 | 10:30 | Lab Komputer 1 |
+| TI-301 | B | Yusril | Rabu | 13:00 | 15:00 | Lab Komputer 2 |
 
 ### 4.8 Geofences (Contoh Lokasi Ruangan)
 
@@ -823,25 +887,30 @@ status nonaktif, dan one-time activation melalui email terverifikasi.
 | Ruang Teori 1 | -0.023600 | 109.345800 | 50 | Gedung A | 3 | TE |
 | Ruang Teori 2 | -0.023700 | 109.346200 | 50 | Gedung A | 3 | TL |
 
-### 4.9 Jadwal (Contoh: Pemrograman Mobile)
+### 4.9 Jadwal (Contoh: Pemrograman Mobile — RENCANA 2)
 
-| mata_kuliah (dosen-kelas) | geofence | hari | jam_mulai | jam_selesai | ruangan |
-|--------------------------|----------|------|-----------|-------------|---------|
-| TI-401 Yusril - Kelas B | Lab Komputer 1 | Senin | 08:00 | 10:30 | Lab Komputer 1 |
-| TI-401 Adam - Kelas A | Lab Komputer 2 | Senin | 08:00 | 10:30 | Lab Komputer 2 |
-| TI-401 Adam - Kelas C | Lab Komputer 3 | Selasa | 13:00 | 15:30 | Lab Komputer 3 |
-| TI-401 Fitri - Kelas D | Lab Komputer 4 | Rabu | 08:00 | 10:30 | Lab Komputer 4 |
-| TI-401 Fitri - Kelas E | Lab Komputer 5 | Rabu | 13:00 | 15:30 | Lab Komputer 5 |
+> Dosen & kelas di-plot per jadwal; satu MK master dapat memiliki banyak baris jadwal.
 
-### 4.10 Mahasiswa ↔ Mata Kuliah (Enrollment MK)
+| mata_kuliah | kelas | dosen | geofence | hari | jam_mulai | jam_selesai | ruangan |
+|-------------|-------|-------|----------|------|-----------|-------------|---------|
+| TI-401 | B | Yusril | Lab Komputer 1 | Senin | 08:00 | 10:30 | Lab Komputer 1 |
+| TI-401 | A | Adam | Lab Komputer 2 | Senin | 08:00 | 10:30 | Lab Komputer 2 |
+| TI-401 | C | Adam | Lab Komputer 3 | Selasa | 13:00 | 15:30 | Lab Komputer 3 |
+| TI-401 | D | Fitri | Lab Komputer 4 | Rabu | 08:00 | 10:30 | Lab Komputer 4 |
+| TI-401 | E | Fitri | Lab Komputer 5 | Rabu | 13:00 | 15:30 | Lab Komputer 5 |
 
-| Mahasiswa | Mata Kuliah | Kelas |
-|-----------|-------------|-------|
-| Ahmad, Budi, Citra (kelas B) | TI-401 Pemrograman Mobile (Yusril) | B |
-| Dani, Eka, Fajar (kelas A) | TI-401 Pemrograman Mobile (Adam) | A |
-| Gita, Hadi, Indra (kelas C) | TI-401 Pemrograman Mobile (Adam) | C |
-| Jihan, Kiki, Lukman (kelas D) | TI-401 Pemrograman Mobile (Fitri) | D |
-| Mira, Nanda, Oki (kelas E) | TI-401 Pemrograman Mobile (Fitri) | E |
+### 4.10 Mahasiswa ↔ Kelas (Enrollment via Kelas Master — RENCANA 2)
+
+> KRS mahasiswa diturunkan dari `mahasiswa_kelas` → kelas → jadwal → mata kuliah.
+> Tabel pivot `mahasiswa_mata_kuliah` TIDAK ADA lagi.
+
+| Mahasiswa | Kelas | Mata Kuliah KRS (via jadwal kelas) |
+|-----------|-------|------------------------------------|
+| Ahmad, Budi, Citra (kelas B) | 4B | TI-401 (Yusril), TI-301 (Yusril) |
+| Dani, Eka, Fajar (kelas A) | 4A | TI-401 (Adam) |
+| Gita, Hadi, Indra (kelas C) | 4C | TI-401 (Adam) |
+| Jihan, Kiki, Lukman (kelas D) | 4D | TI-401 (Fitri) |
+| Mira, Nanda, Oki (kelas E) | 4E | TI-401 (Fitri) |
 
 ### 4.11 Prodi Settings
 

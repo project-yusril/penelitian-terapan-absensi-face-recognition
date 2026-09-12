@@ -15,8 +15,14 @@
 > adalah opt-in dan default off. Implementasi saat ini dijelaskan di
 > [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md), kontrak API di
 > [CURRENT-API.md](CURRENT-API.md), residual risk di [SECURITY.md](SECURITY.md),
-> dan status acceptance di [temuan.md](temuan.md).
-
+> dan status acceptance di temuan.md.
+>
+> **RENCANA 2 (kelas master, 20 Agustus 2026):** model akademik berubah - kelas
+> jadi entitas master (kelas + mahasiswa_kelas), dosen/kelas di-plot per
+> jadwal, pivot mahasiswa_mata_kuliah dihapus, users.kelas/semester =
+> snapshot. Detail & verifikasi: rencana2.md; kontrak:
+> CURRENT-ARCHITECTURE.md ke "Struktur Data Akademik (Kelas Master)" &
+> CURRENT-API.md ke "Perubahan Kontrak RENCANA 2".
 ---
 
 ## DAFTAR ISI PRD
@@ -86,28 +92,28 @@ Super Admin (Owner/Peneliti)
 └── Ketua Jurusan (Teknik Elektro)
     │   → Decision maker, approve SP/DO, tanda tangan digital
     │
-    ├── Admin Jurusan
+    ┤── Admin Jurusan
     │   → Rekap administrasi lintas prodi, CRUD data level jurusan
     │
-    ├── Prodi Teknik Listrik
-    │   ├── Kaprodi → Monitoring prodi, tanda tangan SP
-    │   ├── Admin Prodi → CRUD data akademik prodi
-    │   ├── Dosen → Approve pending, override kehadiran
-    │   ├── Mahasiswa → Absensi, riwayat, enrollment
+    ┤── Prodi Teknik Listrik
+    │   ┤── Kaprodi → Monitoring prodi, tanda tangan SP
+    │   ┤── Admin Prodi → CRUD data akademik prodi
+    │   ┤── Dosen → Approve pending, override kehadiran
+    │   ┤── Mahasiswa → Absensi, riwayat, enrollment
     │   └── Orang Tua/Wali → Monitoring kehadiran anak
     │
-    ├── Prodi Teknik Informatika
-    │   ├── Kaprodi
-    │   ├── Admin Prodi
-    │   ├── Dosen
-    │   ├── Mahasiswa
+    ┤── Prodi Teknik Informatika
+    │   ┤── Kaprodi
+    │   ┤── Admin Prodi
+    │   ┤── Dosen
+    │   ┤── Mahasiswa
     │   └── Orang Tua/Wali
     │
     └── Prodi Teknik Elektro
-        ├── Kaprodi
-        ├── Admin Prodi
-        ├── Dosen
-        ├── Mahasiswa
+        ┤── Kaprodi
+        ┤── Admin Prodi
+        ┤── Dosen
+        ┤── Mahasiswa
         └── Orang Tua/Wali
 ```
 
@@ -303,11 +309,11 @@ Super Admin (Owner/Peneliti)
 │  │ Geolocator│  │ ML Kit   │  │MobileFace│  │  Camera + Live-  ││
 │  │ + safe_  │  │ Face     │  │Net TFLite│  │  ness Detection  ││
 │  │ device   │  │ Detection│  │ (192-dim)│  │  (Challenge)     ││
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────────┬─────────┘│
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────────┬─────────│
 │       │              │              │                  │          │
 │       └──────────────┴──────────────┴──────────────────┘          │
 │                              │                                    │
-│                    ┌─────────▼─────────┐                         │
+│                    ┌──────────────────┐                         │
 │                    │   Dio HTTP Client  │                         │
 │                    └─────────┬─────────┘                         │
 └──────────────────────────────┼───────────────────────────────────┘

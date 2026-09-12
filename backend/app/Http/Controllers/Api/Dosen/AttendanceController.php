@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\Dosen;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Models\Jadwal;
 use App\Models\MataKuliah;
+use App\Models\User;
 use App\Services\AttendanceWorkflowService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,16 +14,24 @@ use Illuminate\Http\Request;
 class AttendanceController extends Controller
 {
     /**
+     * RENCANA 2: jadwal yang diampu dosen (dosen_id di jadwals, bukan mata_kuliahs).
+     */
+    private function diampuJadwalIds(User $user): array
+    {
+        return Jadwal::where('dosen_id', $user->id)->pluck('id')->all();
+    }
+
+    /**
      * List attendance (pending approvals & recent)
      */
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        $mkIds = MataKuliah::where('dosen_id', $user->id)->pluck('id');
+        $jadwalIds = $this->diampuJadwalIds($user);
 
-        $query = Attendance::with(['user:id,nama,nim,kelas', 'mataKuliah:id,kode_mk,nama,kelas', 'jadwal'])
-            ->whereIn('mata_kuliah_id', $mkIds);
+        $query = Attendance::with(['user:id,nama,nim,kelas', 'mataKuliah:id,kode_mk,nama', 'jadwal.kelas:id,tingkat,nama', 'jadwal.dosen:id,nama'])
+            ->whereIn('jadwal_id', $jadwalIds);
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -47,9 +57,9 @@ class AttendanceController extends Controller
     public function approve(Request $request, int $id, AttendanceWorkflowService $workflow): JsonResponse
     {
         $user = $request->user();
-        $mkIds = MataKuliah::where('dosen_id', $user->id)->pluck('id');
+        $jadwalIds = $this->diampuJadwalIds($user);
 
-        $attendance = Attendance::whereIn('mata_kuliah_id', $mkIds)
+        $attendance = Attendance::whereIn('jadwal_id', $jadwalIds)
             ->findOrFail($id);
 
         $oldStatus = $attendance->status;
@@ -72,9 +82,9 @@ class AttendanceController extends Controller
         ]);
 
         $user = $request->user();
-        $mkIds = MataKuliah::where('dosen_id', $user->id)->pluck('id');
+        $jadwalIds = $this->diampuJadwalIds($user);
 
-        $attendance = Attendance::whereIn('mata_kuliah_id', $mkIds)
+        $attendance = Attendance::whereIn('jadwal_id', $jadwalIds)
             ->findOrFail($id);
 
         $oldStatus = $attendance->status;
@@ -93,10 +103,10 @@ class AttendanceController extends Controller
     public function classToday(Request $request): JsonResponse
     {
         $user = $request->user();
-        $mkIds = MataKuliah::where('dosen_id', $user->id)->pluck('id');
+        $jadwalIds = $this->diampuJadwalIds($user);
 
-        $query = Attendance::with(['user:id,nama,nim,kelas', 'mataKuliah:id,kode_mk,nama,kelas'])
-            ->whereIn('mata_kuliah_id', $mkIds)
+        $query = Attendance::with(['user:id,nama,nim,kelas', 'mataKuliah:id,kode_mk,nama', 'jadwal.kelas:id,tingkat,nama'])
+            ->whereIn('jadwal_id', $jadwalIds)
             ->whereDate('tanggal', today());
 
         if ($request->filled('mata_kuliah_id')) {
@@ -121,18 +131,23 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Rekap kehadiran per mata kuliah
+     * Rekap kehadiran per mata kuliah (kelas yang diampu dosen)
      */
     public function rekap(Request $request, int $mataKuliahId): JsonResponse
     {
         $user = $request->user();
 
-        $mk = MataKuliah::where('id', $mataKuliahId)
-            ->where('dosen_id', $user->id)
-            ->firstOrFail();
+        $kelasIds = Jadwal::where('dosen_id', $user->id)
+            ->where('mata_kuliah_id', $mataKuliahId)
+            ->pluck('kelas_id')->filter()->unique()->values();
 
-        $mahasiswas = $mk->mahasiswas()
+        abort_if($kelasIds->isEmpty(), 404, 'Mata kuliah tidak ditemukan atau tidak diampu dosen ini.');
+
+        $mk = MataKuliah::findOrFail($mataKuliahId);
+
+        $mahasiswas = User::whereHas('mahasiswaKelas', fn ($q) => $q->whereIn('kelas_id', $kelasIds))
             ->select('users.id', 'users.nama', 'users.nim', 'users.kelas')
+            ->orderBy('users.nama')
             ->get();
 
         $rekap = $mahasiswas->map(function ($mhs) use ($mk) {
@@ -164,7 +179,7 @@ class AttendanceController extends Controller
         });
 
         return $this->success([
-            'mata_kuliah' => $mk->only(['id', 'kode_mk', 'nama', 'kelas']),
+            'mata_kuliah' => $mk->only(['id', 'kode_mk', 'nama']),
             'total_pertemuan' => $mk->total_pertemuan,
             'rekap' => $rekap,
         ]);
@@ -181,9 +196,9 @@ class AttendanceController extends Controller
         ]);
 
         $user = $request->user();
-        $mkIds = MataKuliah::where('dosen_id', $user->id)->pluck('id');
+        $jadwalIds = $this->diampuJadwalIds($user);
 
-        $attendance = Attendance::whereIn('mata_kuliah_id', $mkIds)
+        $attendance = Attendance::whereIn('jadwal_id', $jadwalIds)
             ->findOrFail($id);
 
         $oldStatus = $attendance->status;

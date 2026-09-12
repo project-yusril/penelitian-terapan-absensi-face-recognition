@@ -2,106 +2,72 @@
 
 namespace App\Services;
 
-use App\Models\MataKuliah;
+use App\Models\Kelas;
+use App\Models\MahasiswaKelas;
+use App\Models\Semester;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 /**
- * Menjaga KRS mahasiswa tetap selaras dengan kelasnya.
+ * Menjaga konsistensi "kelas mahasiswa" antar jalur penyimpanan.
  *
- * Jadwal yang dilihat mahasiswa di aplikasi diambil murni dari pivot
- * `mahasiswa_mata_kuliah` (lihat JadwalController), bukan dari kolom
- * `users.kelas`. Akibatnya, memindahkan mahasiswa antar kelas lewat panel
- * admin tidak mengubah apa pun yang dia lihat: KRS-nya tetap menunjuk section
- * kelas lama, sehingga jadwalnya salah — atau kosong sama sekali bila hari
- * jadwal kedua section itu berbeda.
+ * RENCANA 2: KRS mahasiswa diturunkan dari pivot `mahasiswa_kelas`
+ * (kelas aktif → jadwal → mata kuliah), bukan dari pivot
+ * `mahasiswa_mata_kuliah` maupun kolom string `users.kelas`.
  *
- * Konvensi penautan mengikuti MahasiswaMataKuliahSeeder: mahasiswa mengambil
- * section mata kuliah yang `kelas`-nya sama dengan kelas dia.
+ * Snapshot `users.kelas` (label "4B") & `users.semester` (tingkat)
+ * tetap dipertahankan untuk UI cepat dan kompatibilitas mobile; sumber
+ * kebenaran kelas adalah pivot. Service ini menyelaraskan keduanya.
  */
 class MahasiswaEnrollmentSynchronizer
 {
     /**
-     * Pindahkan KRS mahasiswa ke section yang sesuai kelas barunya.
+     * Selaraskan pivot `mahasiswa_kelas` + snapshot dari label kelas.
      *
-     * Hanya memindahkan mata kuliah yang SUDAH ada di KRS-nya; tidak pernah
-     * mendaftarkan mata kuliah baru. Pilihan ini disengaja supaya perubahan
-     * kelas tidak diam-diam menambah beban studi — penambahan mata kuliah
-     * tetap lewat halaman peserta mata kuliah.
+     * Dipanggil oleh UserObserver setiap kali `kelas`/`prodi_id` user
+     * berubah (lewat panel web, API admin, import, atau mass update).
      *
-     * @return array{moved: list<array{from: int, to: int}>, unmatched: list<int>}
+     * @return array{kelas_id: int|null, semester_id: int|null, label: string|null}
      */
     public function syncAfterClassChange(User $user): array
     {
-        $moved = [];
-        $unmatched = [];
-
-        $kelas = $user->kelas;
-        if ($kelas === null || $kelas === '') {
-            return ['moved' => $moved, 'unmatched' => $unmatched];
-        }
-
         if (! $user->roles()->where('name', 'mahasiswa')->exists()) {
-            return ['moved' => $moved, 'unmatched' => $unmatched];
+            return ['kelas_id' => null, 'semester_id' => null, 'label' => $user->kelas];
         }
 
-        $enrolled = $user->mataKuliahs()->get();
+        $semesterAktif = Semester::where('status', 'aktif')->first();
+        if (! $semesterAktif) {
+            return ['kelas_id' => null, 'semester_id' => null, 'label' => $user->kelas];
+        }
 
-        foreach ($enrolled as $mataKuliah) {
-            if ($mataKuliah->kelas === $kelas) {
-                continue;
+        $label = $user->kelas;
+        $kelas = $label !== null && $label !== ''
+            ? Kelas::whereRaw('CONCAT(tingkat, nama) = ?', [$label])
+                ->where('prodi_id', $user->prodi_id)
+                ->where('semester_id', $semesterAktif->id)
+                ->first()
+            : null;
+
+        if ($kelas) {
+            MahasiswaKelas::updateOrCreate(
+                ['user_id' => $user->id, 'semester_id' => $semesterAktif->id],
+                ['kelas_id' => $kelas->id]
+            );
+
+            // Snapshot semester mengikuti tingkat kelas master. saveQuietly
+            // menghindari loop observer (event updated tidak dipicu).
+            if ((int) $user->semester !== (int) $kelas->tingkat) {
+                $user->forceFill(['semester' => (int) $kelas->tingkat])->saveQuietly();
             }
 
-            $target = $this->findSiblingSection($mataKuliah, $kelas, $user->prodi_id);
-
-            if ($target === null) {
-                $unmatched[] = $mataKuliah->id;
-
-                continue;
-            }
-
-            // Lewati bila mahasiswa sudah terdaftar di section tujuan; cukup
-            // lepas tautan lama agar tidak tersisa KRS ganda.
-            DB::transaction(function () use ($user, $mataKuliah, $target): void {
-                $user->mataKuliahs()->detach($mataKuliah->id);
-                $user->mataKuliahs()->syncWithoutDetaching([$target->id]);
-            });
-
-            $moved[] = ['from' => $mataKuliah->id, 'to' => $target->id];
+            return ['kelas_id' => $kelas->id, 'semester_id' => $semesterAktif->id, 'label' => $label];
         }
 
-        if ($moved !== [] || $unmatched !== []) {
-            Log::info('KRS disinkronkan setelah kelas mahasiswa berubah', [
-                'user_id' => $user->id,
-                'kelas_baru' => $kelas,
-                'dipindahkan' => $moved,
-                'tanpa_padanan' => $unmatched,
-            ]);
-        }
+        // Label tidak cocok dengan kelas master di semester aktif: jangan
+        // sentuh riwayat semester lain, cukup lepas tautan semester aktif.
+        MahasiswaKelas::where('user_id', $user->id)
+            ->where('semester_id', $semesterAktif->id)
+            ->delete();
 
-        return ['moved' => $moved, 'unmatched' => $unmatched];
-    }
-
-    /**
-     * Cari section kelas [$kelas] yang sepadan dengan [$source].
-     *
-     * Pencocokan bertingkat: `kode_mk` lebih dulu karena itu identitas resmi
-     * mata kuliah. Bila tidak ketemu, jatuh ke `nama` — di data nyata section
-     * mata kuliah yang sama bisa punya kode berbeda (mis. TI-401 untuk kelas
-     * A/C/D/E tetapi TI-402 untuk kelas B), sehingga pencocokan kode saja akan
-     * gagal menemukan padanannya.
-     */
-    private function findSiblingSection(MataKuliah $source, string $kelas, ?int $prodiId): ?MataKuliah
-    {
-        $base = fn () => MataKuliah::query()
-            ->where('kelas', $kelas)
-            ->where('status', 'aktif')
-            ->where('semester_id', $source->semester_id)
-            ->where('prodi_id', $prodiId ?? $source->prodi_id)
-            ->whereKeyNot($source->id);
-
-        return $base()->where('kode_mk', $source->kode_mk)->first()
-            ?? $base()->where('nama', $source->nama)->first();
+        return ['kelas_id' => null, 'semester_id' => $semesterAktif->id, 'label' => $label];
     }
 }

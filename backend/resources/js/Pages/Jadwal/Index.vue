@@ -14,6 +14,8 @@ const props = defineProps({
     filters: { type: Object, default: () => ({}) },
     hariOptions: { type: Array, default: () => [] },
     mataKuliahs: { type: Array, default: () => [] },
+    kelasOptions: { type: Array, default: () => [] },
+    dosens: { type: Array, default: () => [] },
     geofences: { type: Array, default: () => [] },
 });
 
@@ -21,6 +23,8 @@ const columns = [
     { key: 'hari', label: 'Hari', sortable: true },
     { key: 'waktu', label: 'Waktu' },
     { key: 'mata_kuliah', label: 'Mata Kuliah' },
+    { key: 'kelas', label: 'Kelas' },
+    { key: 'dosen', label: 'Dosen' },
     { key: 'ruangan', label: 'Ruangan', sortable: true },
     { key: 'geofence', label: 'Lokasi' },
     { key: 'status', label: 'Status', sortable: true },
@@ -30,10 +34,12 @@ const columns = [
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 const hariFilter = ref(props.filters.hari ?? '');
+const kelasFilter = ref(props.filters.kelas_id ?? '');
 const applyFilters = () => {
     router.get(route('jadwal.index'), {
         search: props.filters.search || undefined,
         hari: hariFilter.value || undefined,
+        kelas_id: kelasFilter.value || undefined,
         per_page: props.filters.per_page,
     }, { preserveState: true, preserveScroll: true, replace: true });
 };
@@ -41,7 +47,7 @@ const applyFilters = () => {
 const showForm = ref(false);
 const editingId = ref(null);
 const form = useForm({
-    mata_kuliah_id: '', geofence_id: '', hari: 'senin',
+    mata_kuliah_id: '', kelas_id: '', dosen_id: '', geofence_id: '', hari: 'senin',
     jam_mulai: '', jam_selesai: '', ruangan: '', status: 'aktif',
 });
 
@@ -58,6 +64,8 @@ const openEdit = (row) => {
     editingId.value = row.id;
     form.clearErrors();
     form.mata_kuliah_id = row.mata_kuliah_id ?? '';
+    form.kelas_id = row.kelas_id ?? '';
+    form.dosen_id = row.dosen_id ?? '';
     form.geofence_id = row.geofence_id ?? '';
     form.hari = row.hari;
     form.jam_mulai = row.jam_mulai;
@@ -86,7 +94,7 @@ const doDelete = () => {
 <template>
     <Head title="Jadwal" />
 
-    <PageHeader title="Jadwal Perkuliahan" subtitle="Atur jadwal & lokasi geofence per mata kuliah">
+    <PageHeader title="Jadwal Perkuliahan" subtitle="Dosen mengajar: pilih dosen, mata kuliah, kelas, hari & jam">
         <template #actions>
             <button class="btn-primary" @click="openCreate">
                 <Icon name="plus" class="h-4 w-4" /> Tambah Jadwal
@@ -99,13 +107,17 @@ const doDelete = () => {
         :rows="items"
         :filters="filters"
         route-name="jadwal.index"
-        search-placeholder="Cari ruangan atau mata kuliah..."
-        :extra-params="{ hari: hariFilter || undefined }"
+        search-placeholder="Cari ruangan, mata kuliah, atau dosen..."
+        :extra-params="{ hari: hariFilter || undefined, kelas_id: kelasFilter || undefined }"
     >
         <template #filters>
             <select v-model="hariFilter" class="input w-auto py-2" @change="applyFilters">
                 <option value="">Semua Hari</option>
                 <option v-for="h in hariOptions" :key="h" :value="h">{{ cap(h) }}</option>
+            </select>
+            <select v-model="kelasFilter" class="input w-auto py-2" @change="applyFilters">
+                <option value="">Semua Kelas</option>
+                <option v-for="k in kelasOptions" :key="k.id" :value="k.id">{{ k.label }}</option>
             </select>
         </template>
 
@@ -124,6 +136,11 @@ const doDelete = () => {
                 <p class="text-xs text-slate-400">{{ row.kode_mk }}</p>
             </div>
         </template>
+        <template #cell:kelas="{ row }">
+            <span v-if="row.kelas" class="badge bg-brand-50 text-brand-700">{{ row.kelas }}</span>
+            <span v-else class="text-slate-400">—</span>
+        </template>
+        <template #cell:dosen="{ row }">{{ row.dosen ?? '—' }}</template>
         <template #cell:geofence="{ row }">{{ row.geofence ?? '—' }}</template>
         <template #cell:status="{ row }"><StatusBadge :value="row.status" /></template>
         <template #cell:aksi="{ row }">
@@ -140,6 +157,27 @@ const doDelete = () => {
 
     <Modal :show="showForm" max-width="xl" :title="editingId ? 'Edit Jadwal' : 'Tambah Jadwal'" @close="showForm = false">
         <form id="jadwal-form" class="space-y-4" @submit.prevent="submit">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <label class="label">Dosen Pengampu</label>
+                    <select v-model="form.dosen_id" class="input">
+                        <option value="">— Belum ditentukan —</option>
+                        <option v-for="d in dosens" :key="d.id" :value="d.id">{{ d.nama }}</option>
+                    </select>
+                    <InputError :message="form.errors.dosen_id" />
+                </div>
+                <div>
+                    <label class="label">Kelas</label>
+                    <select v-model="form.kelas_id" class="input">
+                        <option value="">Pilih kelas</option>
+                        <option v-for="k in kelasOptions" :key="k.id" :value="k.id">
+                            {{ k.label }}{{ k.semester ? ` — ${k.semester}` : '' }}
+                        </option>
+                    </select>
+                    <InputError :message="form.errors.kelas_id" />
+                </div>
+            </div>
+
             <div>
                 <label class="label">Mata Kuliah</label>
                 <select v-model="form.mata_kuliah_id" class="input">

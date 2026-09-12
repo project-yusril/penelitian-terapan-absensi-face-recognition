@@ -116,13 +116,15 @@ dan rencana kerja di `docs/task-baru.md`.
 
 ## 3. RESEARCH-CRITICAL — STATUS INFRA
 
+> **Update 20 Agustus 2026:** R-05/R-07 kini punya **dataset awal terisi** (seeder `attendance:seed-analysis-data`) sehingga endpoint & halaman `/analysis` tidak lagi kosong. Pengambilan data lapangan asli tetap terbuka. Lihat temuan.md.
+
 | Kode | Status | Catatan |
 |------|--------|---------|
-| R-05 (FAR/FRR genuine/impostor) | **Infra siap** | `TestModeController` + `AnalysisController::faceVerification` + route sudah lengkap. Perlu **sesi pengambilan data** uji genuine/impostor untuk mengisi angka. |
-| R-07 (uji simultan `concurrent_level`) | **Infra siap** | `AnalysisController::simultaneousTest` + pencatatan metadata siap. Perlu menjalankan beban 20/30/40 user (k6/JMeter). |
+| R-05 (FAR/FRR genuine/impostor) | **Infra + dataset awal siap** | `TestModeController` + `AnalysisController::faceVerification` + route lengkap; seeder 400 genuine/400 impostor → FAR/FRR/EER terisi (EER 0.75% @ θ 0.6). Data lapangan asli menunggu sesi pengambilan. |
+| R-07 (uji simultan `concurrent_level`) | **Infra + dataset awal siap** | `AnalysisController::simultaneousTest` + pencatatan metadata siap; seeder 60 uji (level 1/5/10/15/20). Beban asli 20/30/40 user (k6/JMeter) tetap terbuka. |
 | R-08 (perbandingan konvensional) | Menunggu data | Tergantung C-02 (sudah) + akumulasi `checkout_time` dari pemakaian nyata. |
 | R-09 (durasi efektif check-out) | Terbuka di UI | Backend siap + H-03 & C-02 sudah; tinggal pemicu check-out di Home + uji end-to-end. |
-| R-02 / R-10 | Terbuka | Sinkronisasi θ lintas komponen & definisi early-warning SP — perlu keputusan + sweep θ (butuh data R-05). |
+| R-02 / R-10 | Terbuka | Sinkronisasi θ lintas komponen & definisi early-warning SP — perlu keputusan + sweep θ (data R-05 awal kini tersedia). |
 
 ---
 

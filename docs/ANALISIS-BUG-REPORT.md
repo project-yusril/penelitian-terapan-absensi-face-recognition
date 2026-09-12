@@ -341,9 +341,9 @@ Bagian ini membandingkan **klaim/metodologi pada proposal** dengan **implementas
 | Privasi: "simpan embedding, BUKAN citra wajah mentah" | ❌ DILANGGAR — foto wajah disimpan ke disk | 🟣 R-01 |
 | Mitigasi spoofing lokasi (mock GPS via `safe_device`) | ❌ Mock selalu `false` (hardcoded), deteksi tak jalan | 🟣 R-03 |
 | Mitigasi spoofing wajah (liveness/anti-spoofing) | ⚠️ Liveness ada tapi tak diverifikasi nyata ke embedding (C-01) | 🟣 R-04 |
-| Evaluasi FAR/FRR untuk tuning threshold | ❌ Tak ada pelabelan genuine/impostor → FAR/FRR selalu null | 🟣 R-05 |
-| Pengukuran latensi inferensi (avg, P95, per-device) | ❌ `inference_time_ms` tak pernah masuk ke `attendance_logs` | 🟣 R-06 |
-| Uji simultan 20/30/40 mahasiswa (response time, success rate) | ❌ `concurrent_level` tak pernah ditulis → endpoint kosong | 🟣 R-07 |
+| Evaluasi FAR/FRR untuk tuning threshold | ⚠️ Infra + dataset awal siap (seeder 400 genuine/400 impostor, 20 Agustus 2026); data lapangan asli belum | 🟣 R-05 |
+| Pengukuran latensi inferensi (avg, P95, per-device) | ⚠️ `inference_time_ms` kini tercatat (produksi + seeder); evaluasi asli menunggu R-02 | 🟣 R-06 |
+| Uji simultan 20/30/40 mahasiswa (response time, success rate) | ⚠️ Infra + dataset awal siap (seeder 60 uji level 1/5/10/15/20); uji beban eksternal asli belum | 🟣 R-07 |
 | Perbandingan dengan presensi konvensional | ⚠️ Endpoint ada, tapi input manual & `avg_duration` rawan null | 🟣 R-08 |
 | Check-in & check-out untuk durasi kehadiran efektif | ⚠️ Logika ada, tapi check-out tak bisa dipicu dari UI (H-03) | 🟣 R-09 |
 | Early warning SP (SP1/SP2/SP3) real-time | ⚠️ Ada, tapi akurasi terganggu bug H-01 (alpha pulang awal) | 🟣 R-10 |
@@ -415,11 +415,16 @@ Foto enrollment **disimpan permanen** di `storage/app/public/enrollment`, bahkan
 AttendanceLog::whereJsonContains('metadata->label', 'genuine')->get();
 AttendanceLog::whereJsonContains('metadata->label', 'impostor')->get();
 ```
-Namun **tidak ada satu pun kode yang menulis `metadata->label = 'genuine'/'impostor'`** ke `attendance_logs`. Pencatatan log absensi (`logAttempt`) tidak pernah menambahkan label ini, dan tidak ada endpoint/skenario uji yang meng-input data impostor.
+Awalnya **tidak ada satu pun kode** yang menulis `metadata->label = 'genuine'/'impostor'` — pencatatan log absensi (`logAttempt`) tidak pernah menambahkan label ini, dan tidak ada endpoint/skenario uji yang meng-input data impostor.
 
-**Dampak:** Endpoint FAR/FRR **selalu mengembalikan `far=null, frr=null`**. Artinya **data inti untuk bab evaluasi penelitian tidak bisa diperoleh** dari sistem apa adanya.
+**Dampak (asli):** Endpoint FAR/FRR **selalu mengembalikan `far=null, frr=null`** — data inti bab evaluasi tidak bisa diperoleh.
 
-**Perbaikan:** Bangun mode/skenario uji khusus (mis. "test mode" yang sudah ada `Admin/TestModeController.php`) untuk merekam percobaan genuine vs impostor beserta `face_distance` dan label, lalu hitung kurva FAR/FRR pada rentang θ untuk menentukan θ optimal (EER).
+**Status 20 Agustus 2026 — pipeline tertutup + dataset awal terisi:**
+- Pencatatan label kini aktif: `AttendanceController::buildResearchMetadata` membaca header `X-Test-Label`/`metadata.label` → `logAttempt` menulis `test_type` (enum) + `metadata.label` + `is_test_mode`; `TestModeController` (web & API) membiarkan admin melabeli log.
+- Command `php artisan attendance:seed-analysis-data` mengisi **920 log uji** (genuine=400 μ≈0.35, impostor=400 μ≈1.05, checkin_failed=20, geofence=40, simultan=60); `test_mode_enabled=1`.
+- Hasil: halaman `/analysis` & `face-verification` kini menampilkan FAR/FRR, kurva sweep, EER **0.75% @ θ optimal 0.6** (dari 23 titik sweep).
+- Regression: `SeedAnalysisDataTest` (3 test) — suite **232/232 PASS**.
+- **Tetap terbuka:** pengambilan data lapangan asli (≥30–50 genuine/impostor, impostor = orang hidup berbeda, artefak mentah diaudit) untuk laporan final.
 
 ---
 
@@ -427,22 +432,19 @@ Namun **tidak ada satu pun kode yang menulis `metadata->label = 'genuine'/'impos
 **Proposal (2.2.5.1–2.2.5.2, 3.4.c):** ukur waktu inferensi (avg, min, max, P95) per perangkat.
 **Kode:**
 - Frontend **mengirim** `inference_time_ms` di payload (`attendance_page.dart` baris 316) — bagus.
-- Tetapi backend `AttendanceController::checkIn/checkOut` **tidak menyimpan** `inference_time_ms` ke `attendances` maupun ke `attendance_logs` (lihat `logAttempt` — metadata tak memuatnya). Kolom `attendance_logs.inference_time_ms` & `device_model` **ada di migrasi** tapi **tak pernah diisi**.
-- `Admin/AnalysisController.php::latency` baris 122 query `whereNotNull('inference_time_ms')` → **selalu kosong**.
+- Awalnya backend `AttendanceController::checkIn/checkOut` **tidak menyimpan** `inference_time_ms` ke `attendance_logs` (kolom ada di migrasi tapi tak pernah diisi) → `Admin/AnalysisController.php::latency` selalu kosong.
 
-**Dampak:** Endpoint latensi **selalu mengembalikan data kosong**. Padahal latensi on-device adalah **klaim performa utama** MobileFaceNet di proposal.
-
-**Perbaikan:** Pada `checkIn/checkOut`, validasi & simpan `inference_time_ms` + `device_model` ke `attendance_logs` (dan/atau ke `attendances`). Baru endpoint latency bisa menghasilkan avg/P95/per-device.
+**Status 20 Agustus 2026:** `AttendanceController::logAttempt` kini menerima `inference_time_ms`/`device_model`/dll via `$columns` dan menyimpannya ke `attendance_logs`. Data produksi nyata (4 log) **sudah berisi** `inference_time_ms` (306–812 ms, avg ≈ 522 ms), ditambah 920 log seeder. Kartu latensi (avg/P95/max/per-device) di halaman `/analysis` terisi.
+- **Tetap terbuka:** evaluasi latensi **asli** berskala (R-02 runner eksternal) untuk klaim performa lapangan.
 
 ---
 
 ### [R-07] Uji simultan (20/30/40 mhs) tak menghasilkan data — `concurrent_level` tak pernah ditulis 🟣
 **Proposal (3.4.e, 3.5.f):** uji simultan untuk mengukur response time & success rate pada beban 20, 30, 40 pengguna.
-**Kode:** `Admin/AnalysisController.php::simultaneousTest` baris 221 membaca `metadata->concurrent_level`, `metadata->latency_ms`, `metadata->success` dari `attendance_logs`. **Tidak ada kode** yang pernah menulis `concurrent_level`/`success` ke metadata log.
+**Kode:** `Admin/AnalysisController.php::simultaneousTest` membaca `metadata->concurrent_level`, `metadata->latency_ms`, `metadata->success` dari `attendance_logs`. Awalnya **tidak ada kode** yang menulis `concurrent_level`/`success`.
 
-**Dampak:** Endpoint uji simultan **selalu kosong**. Skenario evaluasi skalabilitas (bagian penting metode) tidak punya pipeline data.
-
-**Perbaikan:** Tambahkan mekanisme (header/param uji atau test mode) agar setiap request absensi pada sesi uji mencatat `concurrent_level` + `success` + `latency_ms` ke metadata, atau lakukan load test terpisah (mis. k6/JMeter) dan simpan hasilnya. Pertimbangkan juga bahwa H-05 (double recalculation) memperberat beban saat uji simultan.
+**Status 20 Agustus 2026:** `buildResearchMetadata` kini menyalin `concurrent_level`/`success`/`latency_ms` dari payload metadata client; seeder mengisi 60 log (level 1/5/10/15/20 × 12, success 83–100%, avg latensi naik 294→693 ms). Kartu uji simultan di `/analysis` terisi.
+- **Tetap terbuka:** uji beban **eksternal asli** (k6/JMeter) 20/30/40 user yang mengukur **HTTP response time** (bukan `inference_time_ms`) — lihat Rekomendasi Validitas di temuan.md poin 2, 8; R-02.
 
 ---
 

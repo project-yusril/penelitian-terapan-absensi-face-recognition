@@ -25,7 +25,8 @@
 #### FR-AUTH-002: Registrasi Mahasiswa
 - **Deskripsi**: Admin Prodi mendaftarkan mahasiswa ke sistem
 - **Detail**:
-  - Admin input: NIM, nama lengkap, email, prodi, kelas/angkatan
+  - Admin input: NIM, nama lengkap, email, prodi, angkatan
+  - **RENCANA 2:** kelas dipilih dari master (`kelas_id`) — semester otomatis mengikuti tingkat kelas; snapshot `users.kelas`/`semester` ditulis untuk UI/mobile
   - Sistem generate password default (NIM + 4 digit random)
   - Mahasiswa wajib ganti password saat login pertama
   - Setelah ganti password, diarahkan ke enrollment wajah
@@ -317,19 +318,32 @@
 #### FR-AKAD-003: CRUD Mata Kuliah
 - **Deskripsi**: Admin mengelola data mata kuliah
 - **Detail**:
-  - Field: kode_mk, nama_mk, sks, semester_id, prodi_id, dosen_id (pengampu), kelas
-  - Satu mata kuliah bisa diampu oleh 1 dosen
-  - Satu mata kuliah bisa punya beberapa kelas (A, B, C)
+  - Field: kode_mk, nama_mk, sks, semester_id, prodi_id, total_pertemuan, status
+  - **RENCANA 2:** mata kuliah murni master kurikulum — TANPA `dosen_id` & TANPA `kelas`. Dosen & kelas di-plot per jadwal (`jadwals.dosen_id`, `jadwals.kelas_id`).
+  - Satu kode MK per semester per prodi (unique `kode_mk + semester_id + prodi_id`).
+
+### 5.3a Kelas Master (RENCANA 2)
+
+#### FR-AKAD-003b: CRUD Kelas
+- **Deskripsi**: Admin mengelola kelas master (dipakai sebagai acuan semua entitas akademik)
+- **Detail**:
+  - Field: semester_id, prodi_id, tingkat (1–5), nama (A–E), status
+  - Kombinasi semester → tingkat → huruf menghasilkan label kelas, mis. "4A", "5E"
+  - Anti-duplikat: unique `(prodi_id, semester_id, tingkat, nama)`
+  - Hapus kelas ditolak bila masih memiliki mahasiswa (`mahasiswa_kelas`) atau jadwal
+  - Mahasiswa di-assign ke kelas melalui pivot `mahasiswa_kelas` (per semester, menyimpan riwayat mutasi)
 
 ### 5.4 Jadwal Perkuliahan
 
 #### FR-AKAD-004: CRUD Jadwal Perkuliahan
-- **Deskripsi**: Admin mengelola jadwal perkuliahan
+- **Deskripsi**: Admin mengelola jadwal perkuliahan (dosen mengajar)
 - **Detail**:
-  - Field: mata_kuliah_id, hari (Senin-Sabtu), jam_mulai, jam_selesai, ruangan_id, geofence_id
-  - Validasi: tidak boleh ada jadwal bentrok (dosen/ruangan/kelas yang sama di waktu yang sama)
+  - Field: mata_kuliah_id, **kelas_id**, **dosen_id**, hari (Senin-Sabtu), jam_mulai, jam_selesai, ruangan, geofence_id
+  - **RENCANA 2:** dosen & kelas dipilih dari master, di-plot di jadwal
+  - Validasi anti-bentrok: dosen/kelas/ruangan yang sama di hari & jam yang sama ditolak (interval setengah terbuka `[start, end)` — back-to-back diizinkan)
   - Durasi otomatis dihitung: jam_selesai - jam_mulai (dalam menit)
   - Total pertemuan per semester (default 16 pertemuan)
+  - **Peserta mata kuliah** = mahasiswa dari kelas pada jadwal MK tersebut (bukan enrollment manual)
 
 ### 5.5 Lokasi Geofence
 
@@ -346,10 +360,11 @@
 #### FR-AKAD-006: CRUD Data Mahasiswa
 - **Deskripsi**: Admin mengelola data mahasiswa
 - **Detail**:
-  - Field: NIM, nama, email, no_hp, prodi_id, kelas, angkatan, status (aktif/nonaktif/DO)
+  - Field: NIM, nama, email, no_hp, prodi_id, angkatan, status (aktif/nonaktif/DO)
+  - **RENCANA 2:** kelas dipilih dari master (`kelas_id`), bukan string bebas; semester otomatis mengikuti tingkat kelas; snapshot `users.kelas`/`users.semester` tetap ditulis untuk UI/mobile
   - Import bulk via Excel (template disediakan)
   - Export data mahasiswa ke Excel
-  - Assign mahasiswa ke mata kuliah/kelas
+  - Assign mahasiswa ke kelas master (pivot `mahasiswa_kelas`)
 
 ### 5.7 Manajemen Dosen
 

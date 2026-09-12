@@ -187,8 +187,6 @@ class AttendancePermitService
             'Jadwal, mata kuliah, atau lokasi geofence sedang nonaktif.');
         abort_unless($jadwal->mataKuliah->prodi_id === $user->prodi_id, 403,
             'Mata kuliah ini bukan milik program studi Anda.');
-        abort_unless($user->mataKuliahs()->where('mata_kuliah_id', $jadwal->mata_kuliah_id)->exists(), 403,
-            'Mata kuliah ini tidak ada di KRS Anda.');
 
         $semester = $jadwal->mataKuliah->semester;
         $tahunAjaran = $semester?->tahunAjaran;
@@ -206,6 +204,15 @@ class AttendancePermitService
         abort_unless($occurrence->betweenIncluded($tahunAjaran->tanggal_mulai->startOfDay(), $tahunAjaran->tanggal_selesai->endOfDay()), 422,
             "Tanggal {$occurrence->format('d/m/Y')} di luar periode tahun ajaran {$tahunAjaran->nama} "
             ."({$tahunAjaran->tanggal_mulai->format('d/m/Y')} – {$tahunAjaran->tanggal_selesai->format('d/m/Y')}).");
+
+        // RENCANA 2: KRS diturunkan dari kelas jadwal (pivot mahasiswa_kelas)
+        // pada semester yang sama dengan mata kuliah.
+        abort_unless($jadwal->kelas_id
+            && $user->mahasiswaKelas()
+                ->where('kelas_id', $jadwal->kelas_id)
+                ->where('semester_id', $semester->id)
+                ->exists(), 403,
+            'Mata kuliah ini tidak ada di KRS Anda.');
 
         $setting = ProdiSetting::where('prodi_id', $user->prodi_id)->first();
         if ($offline) {

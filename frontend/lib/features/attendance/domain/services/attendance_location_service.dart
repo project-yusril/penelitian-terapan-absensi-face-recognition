@@ -95,6 +95,14 @@ class AttendanceLocationService {
   /// Jam perangkat — jam yang sama dengan yang menstempel `position.timestamp`.
   DateTime _nowOnDevice() => (_deviceNow ?? DateTime.now)().toUtc();
 
+  /// Satu sinyal positif cukup untuk menolak lokasi. `Position.isMocked`
+  /// berasal langsung dari flag `Location.isMock()` Android, sedangkan sinyal
+  /// perangkat menjadi lapisan tambahan untuk provider yang berbeda.
+  static bool isMockDetected({
+    required bool positionIsMocked,
+    required bool deviceMockDetected,
+  }) => positionIsMocked || deviceMockDetected;
+
   Future<AttendanceLocationFix> acquire({
     required AttendanceLocationPolicy policy,
     required double geofenceLat,
@@ -139,7 +147,10 @@ class AttendanceLocationService {
     final sourceAge = rawAge.isNegative ? Duration.zero : rawAge;
     final capturedAt = receivedAtTicks - sourceAge;
     final deviceMock = await _provider.isDeviceMockLocation();
-    if (position.isMocked || deviceMock) {
+    if (isMockDetected(
+      positionIsMocked: position.isMocked,
+      deviceMockDetected: deviceMock,
+    )) {
       throw const AttendanceLocationException('mock_location_detected');
     }
     if (!policy.accepts(

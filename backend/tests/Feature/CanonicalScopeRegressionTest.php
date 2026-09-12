@@ -86,7 +86,12 @@ class CanonicalScopeRegressionTest extends TestCase
             'prodi_id' => $prodi->id,
             'status' => 'aktif',
         ]);
-        $student->mataKuliahs()->attach($course->id);
+        // RENCANA 2: mahasiswa terdaftar via kelas master.
+        $kelas = \App\Models\Kelas::create([
+            'prodi_id' => $prodi->id, 'semester_id' => $semester->id,
+            'tingkat' => '4', 'nama' => 'A', 'status' => 'aktif',
+        ]);
+        $student->mahasiswaKelas()->create(['kelas_id' => $kelas->id, 'semester_id' => $semester->id]);
         $geofence = Geofence::create([
             'nama' => 'Geo '.$prodiCode,
             'latitude' => -0.0263,
@@ -97,6 +102,7 @@ class CanonicalScopeRegressionTest extends TestCase
         ]);
         $schedule = Jadwal::create([
             'mata_kuliah_id' => $course->id,
+            'kelas_id' => $kelas->id,
             'geofence_id' => $geofence->id,
             'hari' => 'Sabtu',
             'jam_mulai' => '08:00',

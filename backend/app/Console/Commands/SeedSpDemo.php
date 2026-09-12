@@ -54,33 +54,32 @@ class SeedSpDemo extends Command
         $handled = 0;
 
         foreach ($targets as $kelas => $target) {
-            $mk = MataKuliah::where('kode_mk', 'TI-401')
-                ->where('kelas', $kelas)
-                ->where('semester_id', $semester->id)
+            // RENCANA 2: cari jadwal MK TI-401 untuk kelas (huruf) pada semester.
+            $jadwal = Jadwal::whereHas('mataKuliah', fn ($q) => $q
+                    ->where('kode_mk', 'TI-401')
+                    ->where('semester_id', $semester->id))
+                ->whereHas('kelas', fn ($q) => $q
+                    ->where('nama', $kelas)
+                    ->where('semester_id', $semester->id))
+                ->where('status', 'aktif')
                 ->first();
 
-            if (! $mk) {
-                $this->warn("MK TI-401 kelas {$kelas} tidak ditemukan, dilewati.");
+            if (! $jadwal) {
+                $this->warn("Jadwal TI-401 kelas {$kelas} tidak ditemukan, dilewati.");
 
                 continue;
             }
-
-            $jadwal = $this->ensureJadwal($mk);
-            if (! $jadwal) {
-                $this->error("Gagal membuat jadwal untuk TI-401-{$kelas}.");
-
-                return Command::FAILURE;
-            }
+            $mk = $jadwal->mataKuliah;
 
             // Idempotent per kelas: bila kelas ini SUDAH punya kandidat SP,
             // jangan tambah mahasiswa baru (cegah duplikat saat run ulang).
-            if ($this->kelasSudahTerSeed($mk)) {
+            if ($this->kelasSudahTerSeed($jadwal)) {
                 $this->warn("Kelas TI-401-{$kelas} sudah punya kandidat SP, dilewati.");
 
                 continue;
             }
 
-            $mahasiswa = $this->pickMahasiswa($mk);
+            $mahasiswa = $this->pickMahasiswa($jadwal);
             if (! $mahasiswa) {
                 $this->warn("Tidak ada mahasiswa kelas {$kelas} di MK TI-401, dilewati.");
 
@@ -155,13 +154,30 @@ class SeedSpDemo extends Command
      * Cek apakah kelas MK ini sudah punya minimal satu kandidat SP
      * (alpha_accumulation sp_status != aman) pada semester aktif.
      */
-    protected function kelasSudahTerSeed(MataKuliah $mk): bool
+    protected function kelasSudahTerSeed(Jadwal $jadwal): bool
     {
-        $mahasiswaIds = $mk->mahasiswas()->pluck('users.id');
+        $mahasiswaIds = $this->mahasiswaIdsForJadwal($jadwal);
 
         return AlphaAccumulation::whereIn('user_id', $mahasiswaIds)
             ->where('sp_status', '!=', 'aman')
             ->exists();
+    }
+
+    /**
+     * RENCANA 2: mahasiswa dari kelas pada jadwal (pivot mahasiswa_kelas).
+     *
+     * @return \Illuminate\Support\Collection<int, int>
+     */
+    protected function mahasiswaIdsForJadwal(Jadwal $jadwal): \Illuminate\Support\Collection
+    {
+        if (! $jadwal->kelas_id) {
+            return collect();
+        }
+
+        return \App\Models\MahasiswaKelas::where('kelas_id', $jadwal->kelas_id)
+            ->whereHas('semester', fn ($q) => $q->where('status', 'aktif'))
+            ->pluck('user_id')
+            ->values();
     }
 
     /**
@@ -170,11 +186,10 @@ class SeedSpDemo extends Command
      * kelas ter-seed, run berikutnya memilih mahasiswa yang sama dan tidak
      * menambah duplikat.
      */
-    protected function pickMahasiswa(MataKuliah $mk): ?User
+    protected function pickMahasiswa(Jadwal $jadwal): ?User
     {
-        $ids = $mk->mahasiswas()
-            ->whereHas('roles', fn ($q) => $q->where('name', 'mahasiswa'))
-            ->pluck('users.id');
+        $ids = $this->mahasiswaIdsForJadwal($jadwal)
+            ->filter(fn ($id) => User::whereKey($id)->whereHas('roles', fn ($q) => $q->where('name', 'mahasiswa'))->exists());
 
         if ($ids->isEmpty()) {
             return null;

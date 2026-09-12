@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
+use App\Models\Kelas;
+use App\Models\MahasiswaKelas;
 use App\Models\Prodi;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\AuthorizationService;
+use App\Services\PrivateFileUrlService;
 use App\Services\UserSessionService;
 use App\Support\SafeErrorMessage;
 use Illuminate\Http\RedirectResponse;
@@ -41,7 +44,7 @@ class UserController extends Controller
             $sort = 'created_at';
         }
 
-        $query = $authorization->scopeUsers(User::with(['roles:id,name,display_name', 'prodi:id,kode,nama']), $request->user())
+        $query = $authorization->scopeUsers(User::with(['roles:id,name,display_name', 'prodi:id,kode,nama', 'kelasAktif.kelas']), $request->user())
             ->when($search, function ($q) use ($search) {
                 $q->where(function ($sub) use ($search) {
                     $sub->where('nama', 'like', "%{$search}%")
@@ -55,25 +58,34 @@ class UserController extends Controller
             ->orderBy($sort, $direction);
 
         $users = $query->paginate($perPage)->withQueryString()
-            ->through(fn (User $u) => [
-                'id' => $u->id,
-                'nama' => $u->nama,
-                'email' => $u->email,
-                'nim' => $u->nim,
-                'nidn' => $u->nidn,
-                'nip' => $u->nip,
-                'no_hp' => $u->no_hp,
-                'kelas' => $u->kelas,
-                'angkatan' => $u->angkatan,
-                'semester' => $u->semester,
-                'status' => $u->status,
-                'enrollment_status' => $u->enrollment_status,
-                'prodi' => $u->prodi?->nama,
-                'prodi_id' => $u->prodi_id,
-                'roles' => $u->roles->pluck('display_name'),
-                'role_names' => $u->roles->pluck('name'),
-                'created_at' => $u->created_at?->format('d M Y'),
-            ]);
+            ->through(function (User $u) {
+                $kelas = $u->kelasAktif;
+
+                return [
+                    'id' => $u->id,
+                    'nama' => $u->nama,
+                    'email' => $u->email,
+                    'nim' => $u->nim,
+                    'nidn' => $u->nidn,
+                    'nip' => $u->nip,
+                    'no_hp' => $u->no_hp,
+                    'kelas' => $kelas?->kelas_id ? $kelas->kelas->tingkat.$kelas->kelas->nama : ($u->kelas ?? null),
+                    'kelas_id' => $kelas?->kelas_id,
+                    'angkatan' => $u->angkatan,
+                    'semester' => $u->semester,
+                    'status' => $u->status,
+                    'enrollment_status' => $u->enrollment_status,
+                    // Foto wajah terdaftar — signed URL privat (10 menit), mengikuti pola ApprovalController.
+                    'foto_wajah_url' => $u->foto_enrollment
+                        ? app(PrivateFileUrlService::class)->enrollmentPhoto($u, true)
+                        : null,
+                    'prodi' => $u->prodi?->nama,
+                    'prodi_id' => $u->prodi_id,
+                    'roles' => $u->roles->pluck('display_name'),
+                    'role_names' => $u->roles->pluck('name'),
+                    'created_at' => $u->created_at?->format('d M Y'),
+                ];
+            });
 
         return Inertia::render('Users/Index', [
             'users' => $users,
@@ -87,6 +99,19 @@ class UserController extends Controller
             ],
             'roles' => Role::select('id', 'name', 'display_name')->whereIn('name', $authorization->assignableRoleNames($request->user()))->get(),
             'prodis' => Prodi::select('id', 'kode', 'nama')->when($request->user()->hasRole('admin_prodi'), fn ($q) => $q->whereKey($request->user()->prodi_id))->get(),
+            // RENCANA 2: kelas dipilih dari master (bukan string bebas).
+            'kelasOptions' => Kelas::with('semester:id,nama')
+                ->where('status', 'aktif')
+                ->when($request->user()->hasRole('admin_prodi'), fn ($q) => $q->where('prodi_id', $request->user()->prodi_id))
+                ->orderBy('tingkat')->orderBy('nama')
+                ->get()
+                ->map(fn (Kelas $k) => [
+                    'id' => $k->id,
+                    'label' => $k->tingkat.$k->nama,
+                    'tingkat' => $k->tingkat,
+                    'semester_id' => $k->semester_id,
+                    'semester' => $k->semester?->nama,
+                ]),
         ]);
     }
 
@@ -102,13 +127,18 @@ class UserController extends Controller
             'nip' => ['nullable', 'string', 'max:50'],
             'no_hp' => ['nullable', 'string', 'max:20'],
             'prodi_id' => ['nullable', 'exists:prodis,id'],
-            'kelas' => ['nullable', 'string', 'max:10'],
+            // RENCANA 2: kelas wajib dari master (nullable utk non-mahasiswa).
+            'kelas_id' => ['nullable', 'exists:kelas,id'],
             'angkatan' => ['nullable', 'integer'],
             'semester' => ['nullable', 'integer'],
             'status' => ['required', Rule::in(['aktif', 'nonaktif'])],
         ]);
         $role = Role::findOrFail($data['role_id']);
         $authorization->assertCanCreateUser($request->user(), [$role->name], $data['prodi_id'] ?? null);
+
+        $kelas = $data['kelas_id'] ? Kelas::find($data['kelas_id']) : null;
+        $snapshotKelas = $kelas?->tingkat.$kelas?->nama;
+        $semester = $data['semester'] ?? $kelas?->tingkat;
 
         $user = User::create([
             'nama' => $data['nama'],
@@ -119,15 +149,23 @@ class UserController extends Controller
             'nip' => $data['nip'] ?? null,
             'no_hp' => $data['no_hp'] ?? null,
             'prodi_id' => $data['prodi_id'] ?? null,
-            'kelas' => $data['kelas'] ?? null,
+            'kelas' => $snapshotKelas,
             'angkatan' => $data['angkatan'] ?? null,
-            'semester' => $data['semester'] ?? null,
+            'semester' => $semester,
             'status' => $data['status'],
             'enrollment_status' => 'belum',
             'must_change_password' => true,
         ]);
 
         $user->roles()->sync([$data['role_id']]);
+
+        // RENCANA 2: pivot mahasiswa_kelas di semester aktif kelas tsb.
+        if ($kelas && $kelas->semester_id && $user->hasRole('mahasiswa')) {
+            MahasiswaKelas::firstOrCreate([
+                'user_id' => $user->id,
+                'semester_id' => $kelas->semester_id,
+            ], ['kelas_id' => $kelas->id]);
+        }
 
         return back()->with('success', 'Pengguna berhasil ditambahkan.');
     }
@@ -144,7 +182,7 @@ class UserController extends Controller
             'nip' => ['nullable', 'string', 'max:50'],
             'no_hp' => ['nullable', 'string', 'max:20'],
             'prodi_id' => ['nullable', 'exists:prodis,id'],
-            'kelas' => ['nullable', 'string', 'max:10'],
+            'kelas_id' => ['nullable', 'exists:kelas,id'],
             'angkatan' => ['nullable', 'integer'],
             'semester' => ['nullable', 'integer'],
             'status' => ['required', Rule::in(['aktif', 'nonaktif'])],
@@ -152,6 +190,7 @@ class UserController extends Controller
         $role = Role::findOrFail($data['role_id']);
         $authorization->assertCanUpdateUser($request->user(), $user, [$role->name], $data['prodi_id'] ?? null, true);
 
+        $kelas = $data['kelas_id'] ? Kelas::find($data['kelas_id']) : null;
         $oldStatus = $user->status;
         $user->update([
             'nama' => $data['nama'],
@@ -161,11 +200,21 @@ class UserController extends Controller
             'nip' => $data['nip'] ?? null,
             'no_hp' => $data['no_hp'] ?? null,
             'prodi_id' => $data['prodi_id'] ?? null,
-            'kelas' => $data['kelas'] ?? null,
+            'kelas' => $kelas ? $kelas->tingkat.$kelas->nama : null,
             'angkatan' => $data['angkatan'] ?? null,
-            'semester' => $data['semester'] ?? null,
+            'semester' => $data['semester'] ?? $kelas?->tingkat,
             'status' => $data['status'],
         ]);
+
+        // RENCANA 2: pivot mahasiswa_kelas mengikuti pilihan kelas master.
+        if ($user->hasRole('mahasiswa') && $kelas && $kelas->semester_id) {
+            MahasiswaKelas::updateOrCreate(
+                ['user_id' => $user->id, 'semester_id' => $kelas->semester_id],
+                ['kelas_id' => $kelas->id]
+            );
+        } elseif ($user->hasRole('mahasiswa') && ! $kelas) {
+            MahasiswaKelas::where('user_id', $user->id)->delete();
+        }
 
         if (! empty($data['password'])) {
             $user->update(['password' => Hash::make($data['password'])]);

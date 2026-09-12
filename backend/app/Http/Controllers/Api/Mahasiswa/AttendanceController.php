@@ -69,8 +69,12 @@ class AttendanceController extends Controller
             return $this->error('Enrollment wajah belum disetujui', 403);
         }
 
-        // 2. Validasi mahasiswa terdaftar di MK
-        $enrolled = $user->mataKuliahs()->where('mata_kuliah_id', $jadwal->mata_kuliah_id)->exists();
+        // 2. Validasi mahasiswa terdaftar di MK (RENCANA 2: lewat kelas jadwal)
+        $enrolled = $jadwal->kelas_id
+            && $user->mahasiswaKelas()
+                ->where('kelas_id', $jadwal->kelas_id)
+                ->where('semester_id', $jadwal->mataKuliah?->semester_id)
+                ->exists();
         if (! $enrolled) {
             return $this->error('Anda tidak terdaftar di mata kuliah ini', 403);
         }
@@ -242,10 +246,10 @@ class AttendanceController extends Controller
                     'status' => $status, 'client_uuid' => $request->client_uuid,
                 ]);
 
-                if ($status === 'pending' && $jadwal->mataKuliah?->dosen_id) {
+                if ($status === 'pending' && $jadwal->dosen_id) {
                     app(NotificationOutboxService::class)->enqueue(
-                        "attendance:{$attendance->id}:pending:{$jadwal->mataKuliah->dosen_id}",
-                        $jadwal->mataKuliah->dosen_id,
+                        "attendance:{$attendance->id}:pending:{$jadwal->dosen_id}",
+                        $jadwal->dosen_id,
                         'approval_needed',
                         'Approval kehadiran baru',
                         "{$user->nama} ({$user->nim}) membutuhkan approval kehadiran untuk {$jadwal->mataKuliah->nama}.",

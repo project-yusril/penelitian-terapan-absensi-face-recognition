@@ -13,7 +13,7 @@ class MataKuliahController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = MataKuliah::with(['semester', 'prodi', 'dosen']);
+        $query = MataKuliah::with(['semester', 'prodi']);
 
         if ($request->filled('semester_id')) {
             $query->where('semester_id', $request->semester_id);
@@ -24,11 +24,8 @@ class MataKuliahController extends Controller
         }
 
         if ($request->filled('dosen_id')) {
-            $query->where('dosen_id', $request->dosen_id);
-        }
-
-        if ($request->filled('kelas')) {
-            $query->where('kelas', $request->kelas);
+            // RENCANA 2: dosen bukan kolom MK lagi — filter via jadwal.
+            $query->whereHas('jadwals', fn ($q) => $q->where('dosen_id', $request->dosen_id));
         }
 
         if ($request->filled('status')) {
@@ -50,7 +47,7 @@ class MataKuliahController extends Controller
 
     public function show(Request $request, int $id): JsonResponse
     {
-        $mk = MataKuliah::with(['semester', 'prodi', 'dosen', 'mahasiswas', 'jadwals'])
+        $mk = MataKuliah::with(['semester', 'prodi', 'jadwals.kelas:id,tingkat,nama', 'jadwals.dosen:id,nama'])
             ->findOrFail($id);
 
         return $this->success($mk);
@@ -64,18 +61,16 @@ class MataKuliahController extends Controller
             'sks' => 'required|integer|min:1|max:6',
             'semester_id' => 'required|exists:semesters,id',
             'prodi_id' => 'required|exists:prodis,id',
-            'dosen_id' => 'required|exists:users,id',
-            'kelas' => 'required|string|max:10',
             'total_pertemuan' => 'nullable|integer|min:1|max:32',
             'status' => 'nullable|in:aktif,nonaktif',
         ]);
 
         $mk = MataKuliah::create(array_merge(
-            $request->all(),
+            $request->only(['kode_mk', 'nama', 'sks', 'semester_id', 'prodi_id', 'total_pertemuan', 'status']),
             ['total_pertemuan' => $request->total_pertemuan ?? 16]
         ));
 
-        $mk->load(['semester', 'prodi', 'dosen']);
+        $mk->load(['semester', 'prodi']);
 
         return $this->created($mk, 'Mata kuliah berhasil dibuat');
     }
@@ -90,14 +85,12 @@ class MataKuliahController extends Controller
             'sks' => 'sometimes|integer|min:1|max:6',
             'semester_id' => 'sometimes|exists:semesters,id',
             'prodi_id' => 'sometimes|exists:prodis,id',
-            'dosen_id' => 'sometimes|exists:users,id',
-            'kelas' => 'sometimes|string|max:10',
             'total_pertemuan' => 'sometimes|integer|min:1|max:32',
             'status' => 'sometimes|in:aktif,nonaktif',
         ]);
 
-        $mk->update($request->all());
-        $mk->load(['semester', 'prodi', 'dosen']);
+        $mk->update($request->only(['kode_mk', 'nama', 'sks', 'semester_id', 'prodi_id', 'total_pertemuan', 'status']));
+        $mk->load(['semester', 'prodi']);
 
         return $this->success($mk, 'Mata kuliah berhasil diperbarui');
     }
@@ -110,7 +103,6 @@ class MataKuliahController extends Controller
             return $this->error('Tidak dapat menghapus mata kuliah yang sudah memiliki data kehadiran', 422);
         }
 
-        $mk->mahasiswas()->detach();
         $mk->jadwals()->delete();
         $mk->delete();
 
@@ -118,61 +110,40 @@ class MataKuliahController extends Controller
     }
 
     /**
-     * Enroll mahasiswa ke mata kuliah
+     * RENCANA 2: enrollment manual ke pivot lama dihapus — peserta mengikuti
+     * kelas pada jadwal. Endpoint dipertahankan agar klien lama tidak 500,
+     * tetapi tidak lagi mengubah apa pun.
      */
     public function enrollMahasiswa(Request $request, int $id): JsonResponse
     {
         $mk = MataKuliah::findOrFail($id);
 
-        $request->validate([
-            'mahasiswa_ids' => 'required|array|min:1',
-            'mahasiswa_ids.*' => 'exists:users,id',
-        ]);
-
-        // Verify all are mahasiswa
-        $validMahasiswas = User::whereIn('id', $request->mahasiswa_ids)
-            ->whereHas('roles', fn ($q) => $q->where('name', 'mahasiswa'))
-            ->pluck('id');
-
-        $mk->mahasiswas()->syncWithoutDetaching($validMahasiswas);
-
         return $this->success([
-            'enrolled_count' => $validMahasiswas->count(),
-            'total_mahasiswa' => $mk->mahasiswas()->count(),
-        ], 'Mahasiswa berhasil di-enroll');
+            'enrolled_count' => 0,
+            'total_mahasiswa' => $this->pesertaViaKelas($mk)->count(),
+        ], 'Peserta mata kuliah otomatis mengikuti kelas pada jadwal');
     }
 
     /**
-     * Remove mahasiswa dari mata kuliah
+     * RENCANA 2: sama seperti enroll — tidak ada lagi operasi manual.
      */
     public function removeMahasiswa(Request $request, int $id): JsonResponse
     {
         $mk = MataKuliah::findOrFail($id);
 
-        $request->validate([
-            'mahasiswa_ids' => 'required|array|min:1',
-            'mahasiswa_ids.*' => 'exists:users,id',
-        ]);
+        return $this->success([
+            'removed_count' => 0,
+            'total_mahasiswa' => $this->pesertaViaKelas($mk)->count(),
+        ], 'Peserta mata kuliah otomatis mengikuti kelas pada jadwal');
+    }
 
-        // Check if any have existing attendance
-        $withAttendance = Attendance::where('mata_kuliah_id', $id)
-            ->whereIn('user_id', $request->mahasiswa_ids)
-            ->distinct()
-            ->pluck('user_id');
-
-        if ($withAttendance->isNotEmpty()) {
-            return $this->error(
-                'Tidak dapat menghapus mahasiswa yang sudah memiliki data kehadiran. '
-                .'ID mahasiswa dengan kehadiran: '.$withAttendance->implode(', '),
-                422
-            );
+    private function pesertaViaKelas(MataKuliah $mk): \Illuminate\Support\Collection
+    {
+        $kelasIds = $mk->jadwals()->pluck('kelas_id')->filter()->unique()->values();
+        if ($kelasIds->isEmpty()) {
+            return collect();
         }
 
-        $mk->mahasiswas()->detach($request->mahasiswa_ids);
-
-        return $this->success([
-            'removed_count' => count($request->mahasiswa_ids),
-            'total_mahasiswa' => $mk->mahasiswas()->count(),
-        ], 'Mahasiswa berhasil dihapus dari mata kuliah');
+        return User::whereHas('mahasiswaKelas', fn ($q) => $q->whereIn('kelas_id', $kelasIds))->get();
     }
 }

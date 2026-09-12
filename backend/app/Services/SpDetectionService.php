@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\SpLevel;
 use App\Models\AlphaAccumulation;
+use App\Models\Jadwal;
 use App\Models\MataKuliah;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -253,9 +254,9 @@ class SpDetectionService
             ->get();
         $recipients = array_merge($recipients, $kaprodi->all());
 
-        // SP1: + Dosen pengampu MK terkait + Admin Prodi
+        // SP1: + Dosen pengampu MK terkait (via jadwal) + Admin Prodi
         if ($level === SpLevel::Sp1) {
-            $dosenIds = MataKuliah::whereHas('mahasiswas', fn ($q) => $q->where('users.id', $mahasiswa->id))
+            $dosenIds = Jadwal::whereHas('mahasiswaKelas', fn ($q) => $q->where('user_id', $mahasiswa->id))
                 ->whereNotNull('dosen_id')
                 ->pluck('dosen_id')
                 ->unique();

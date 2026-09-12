@@ -65,9 +65,9 @@
         </tr>
         <tr>
             <td><strong>Kelas</strong></td>
-            <td>: {{ $mata_kuliah->kelas }}</td>
+            <td>: {{ $mata_kuliah->jadwals->pluck('kelas')->filter()->map(fn($k) => $k->tingkat . $k->nama)->implode(', ') ?: '-' }}</td>
             <td><strong>Dosen</strong></td>
-            <td>: {{ $mata_kuliah->dosen?->nama ?? '-' }}</td>
+            <td>: {{ $mata_kuliah->jadwals->pluck('dosen')->filter()->pluck('nama')->unique()->implode(', ') ?: '-' }}</td>
         </tr>
         <tr>
             <td><strong>SKS</strong></td>
@@ -136,7 +136,7 @@
     <div class="footer">
         <p>Palembang, {{ $tanggal }}</p>
         <br><br><br>
-        <p>{{ $mata_kuliah->dosen?->nama ?? '________________' }}</p>
+        <p>{{ $mata_kuliah->jadwals->pluck('dosen')->filter()->pluck('nama')->unique()->implode(', ') ?: '________________' }}</p>
     </div>
 </body>
 </html>

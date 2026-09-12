@@ -353,6 +353,8 @@ Prefix `/mahasiswa/attendance`. Check-in/out & sync butuh middleware `enrollment
 | GET | `/mahasiswa/jadwal/today` | Jadwal + status absensi hari ini | Mahasiswa | ✅ |
 | GET | `/mahasiswa/jadwal/active` | Jadwal yang sedang berlangsung | Mahasiswa | ✅ |
 
+> **RENCANA 2:** KRS diturunkan dari `mahasiswa_kelas` → kelas → `jadwals.kelas_id` (bukan pivot `mahasiswa_mata_kuliah` yang dihapus). Response jadwal menyertakan `kelas` (`{id, tingkat, nama}`) dan `dosen` (`{id, nama}`) di **level jadwal**; mobile membaca `dosen` dari level jadwal (fallback lama dipertahankan). Validasi KRS (permit/check-in) memakai `mahasiswa_kelas` pada semester mata kuliah.
+
 ---
 
 ## 5. LEAVE REQUEST ENDPOINTS (Izin/Sakit)
@@ -389,11 +391,20 @@ Middleware role: `super_admin,admin_jurusan,admin_prodi`. Sebagian besar memakai
 | POST | `/admin/mata-kuliah/{id}/enroll` | 🟡 (dulu `/assign-mahasiswa`) |
 | DELETE | `/admin/mata-kuliah/{id}/remove-mahasiswa` | ✅ |
 
+> **RENCANA 2 (20 Agustus 2026):** `POST .../enroll` & `DELETE .../remove-mahasiswa` menjadi **no-op** — peserta mata kuliah = mahasiswa dari kelas pada jadwal MK (`mahasiswa_kelas` → kelas → jadwal). Response hanya mengembalikan `total_mahasiswa` via kelas. Payload `dosen_id`/`kelas` pada create/update mata kuliah **tidak lagi diterima**; filter `dosen_id` pada index dialihkan via jadwal.
+
+### Kelas Master (RENCANA 2)
+| Method | Endpoint | Status |
+|--------|----------|--------|
+| GET/POST/PUT/DELETE | `/admin/kelas` | 🆕 (baru, web Inertia; API admin mengikuti resource yang sama) |
+
 ### Jadwal & Geofence
 | Method | Endpoint | Status |
 |--------|----------|--------|
 | apiResource | `/admin/jadwal` | 🟡 |
 | apiResource | `/admin/geofence` | 🟡 (dulu `/academic/geofences`) |
+
+> **RENCANA 2:** `POST/PUT /admin/jadwal` wajib `kelas_id` (exists `kelas`), opsional `dosen_id`; anti-bentrok dosen/kelas/ruangan di hari & jam overlap → `422`. Dosen "mata kuliah diampu" = jadwal dengan `dosen_id` = dia (lihat `/dosen/*`).
 
 ### Prodi & Settings
 | Method | Endpoint | Status |
@@ -438,6 +449,8 @@ Middleware role: `dosen,super_admin`.
 | PUT | `/dosen/attendance/{id}/reject` | Reject pending | 🟡 |
 | PUT | `/dosen/attendance/{id}/override` | Override manual | 🟡 (dulu `POST /dosen/attendance/override`) |
 | GET | `/dosen/dashboard` | Dashboard dosen | 🟡 |
+
+> **RENCANA 2:** "mata kuliah diampu" = jadwal dengan `dosen_id` = dosen tersebut (bukan kolom `mata_kuliahs.dosen_id` yang dihapus). Setiap entri `/dosen/mata-kuliah` membawa `kelas` (tingkat+huruf) & `jadwal`; list mahasiswa diambil dari kelas pada jadwal MK (`mahasiswa_kelas`).
 
 ---
 

@@ -50,6 +50,10 @@ class MahasiswaExport
         $no = 1;
 
         foreach ($mahasiswas as $mhs) {
+            // RENCANA 2: label kelas dari pivot master bila tersedia.
+            $kelasAktif = $mhs->mahasiswaKelas->first(fn ($mk) => $mk->semester?->status === 'aktif')?->kelas;
+            $labelKelas = $kelasAktif ? $kelasAktif->tingkat.$kelasAktif->nama : $mhs->kelas;
+
             $writer->addRow(Row::fromValues([
                 $no++,
                 $mhs->nim,
@@ -57,7 +61,7 @@ class MahasiswaExport
                 $mhs->email,
                 $mhs->no_hp ?? '-',
                 $mhs->prodi?->nama ?? '-',
-                $mhs->kelas ?? '-',
+                $labelKelas ?? '-',
                 $mhs->angkatan ?? '-',
                 $mhs->semester ?? '-',
                 $mhs->jenis_kelamin ?? '-',
@@ -75,9 +79,11 @@ class MahasiswaExport
     {
         return User::whereHas('roles', fn ($q) => $q->where('roles.name', 'mahasiswa'))
             ->when($this->prodiId, fn ($q) => $q->where('prodi_id', $this->prodiId))
-            ->when($this->kelas, fn ($q) => $q->where('kelas', $this->kelas))
+            // RENCANA 2: filter kelas via pivot master (label "4B").
+            ->when($this->kelas, fn ($q) => $q->whereHas('mahasiswaKelas.kelas', fn ($k) => $k
+                ->whereRaw("CONCAT(tingkat, nama) = ?", [$this->kelas])))
             ->when($this->angkatan, fn ($q) => $q->where('angkatan', $this->angkatan))
-            ->with('prodi:id,kode,nama')
+            ->with(['prodi:id,kode,nama', 'mahasiswaKelas.semester:id,status', 'mahasiswaKelas.kelas:id,tingkat,nama'])
             ->orderBy('nim')
             ->get();
     }

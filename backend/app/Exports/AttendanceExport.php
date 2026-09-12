@@ -106,7 +106,7 @@ class AttendanceExport
                 $no++,
                 $mhs->nim,
                 $mhs->nama,
-                $mhs->kelas,
+                $this->kelasLabel($mhs),
                 $stats['total'],
                 $stats['hadir'],
                 $stats['terlambat'],
@@ -137,7 +137,9 @@ class AttendanceExport
         )
             ->when($this->semesterId, fn ($q) => $q->whereHas('mataKuliah', fn ($q2) => $q2->where('semester_id', $this->semesterId)))
             ->when($this->mataKuliahId, fn ($q) => $q->where('mata_kuliah_id', $this->mataKuliahId))
-            ->when($this->kelas, fn ($q) => $q->whereHas('user', fn ($q2) => $q2->where('kelas', $this->kelas)))
+            // RENCANA 2: filter kelas via pivot master (label "4B").
+            ->when($this->kelas, fn ($q) => $q->whereHas('user.mahasiswaKelas.kelas', fn ($k) => $k
+                ->whereRaw('CONCAT(tingkat, nama) = ?', [$this->kelas])))
             ->when($this->prodiId, fn ($q) => $q->whereHas('user', fn ($q2) => $q2->where('prodi_id', $this->prodiId)))
             ->when($this->userId, fn ($q) => $q->where('user_id', $this->userId))
             ->orderBy('tanggal')
@@ -223,11 +225,24 @@ class AttendanceExport
         return $this->authorization()->scopeUsers(User::query(), $this->actor)
             ->whereHas('roles', fn ($q) => $q->where('roles.name', 'mahasiswa'))
             ->when($this->prodiId, fn ($q) => $q->where('prodi_id', $this->prodiId))
-            ->when($this->kelas, fn ($q) => $q->where('kelas', $this->kelas))
+            // RENCANA 2: filter kelas via pivot master (label "4B").
+            ->when($this->kelas, fn ($q) => $q->whereHas('mahasiswaKelas.kelas', fn ($k) => $k
+                ->whereRaw('CONCAT(tingkat, nama) = ?', [$this->kelas])))
             ->when($this->userId, fn ($q) => $q->where('id', $this->userId))
             ->where('status', 'aktif')
+            ->with(['mahasiswaKelas.semester:id,status', 'mahasiswaKelas.kelas:id,tingkat,nama'])
             ->orderBy('nim')
             ->get();
+    }
+
+    /**
+     * RENCANA 2: label kelas dari pivot master bila tersedia.
+     */
+    protected function kelasLabel(User $mhs): ?string
+    {
+        $kelas = $mhs->mahasiswaKelas->first(fn ($mk) => $mk->semester?->status === 'aktif')?->kelas;
+
+        return $kelas ? $kelas->tingkat.$kelas->nama : $mhs->kelas;
     }
 
     /**

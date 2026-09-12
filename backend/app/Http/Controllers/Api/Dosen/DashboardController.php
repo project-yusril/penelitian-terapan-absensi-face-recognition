@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api\Dosen;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\Jadwal;
-use App\Models\MataKuliah;
 use App\Models\Semester;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,17 +17,37 @@ class DashboardController extends Controller
         $user = $request->user();
         $semesterAktif = Semester::where('status', 'aktif')->first();
 
-        // Mata kuliah yang diampu
-        $mataKuliahs = MataKuliah::where('dosen_id', $user->id)
-            ->where('semester_id', $semesterAktif?->id)
-            ->where('status', 'aktif')
-            ->withCount('mahasiswas')
-            ->get();
+        // RENCANA 2: mata kuliah diampu = jadwal dengan dosen_id = dia.
+        $query = Jadwal::with(['mataKuliah', 'kelas:id,tingkat,nama', 'geofence'])
+            ->where('dosen_id', $user->id)
+            ->where('status', 'aktif');
 
-        $mkIds = $mataKuliahs->pluck('id');
+        if ($semesterAktif) {
+            $query->whereHas('mataKuliah', fn ($m) => $m->where('semester_id', $semesterAktif->id));
+        }
 
-        // Kehadiran hari ini
-        $todayStats = Attendance::whereIn('mata_kuliah_id', $mkIds)
+        $jadwalDiampu = $query->orderBy('jam_mulai')->get();
+
+        // Ringkasan per MK: MK + daftar kelas + jumlah peserta (dari kelas).
+        $mataKuliahs = $jadwalDiampu->groupBy('mata_kuliah_id')->map(function ($items) {
+            $mk = $items->first()->mataKuliah;
+            $kelasIds = $items->pluck('kelas_id')->filter()->unique()->values();
+
+            return [
+                'id' => $mk->id,
+                'kode_mk' => $mk->kode_mk,
+                'nama' => $mk->nama,
+                'sks' => $mk->sks,
+                'kelas' => $items->map(fn ($j) => $j->kelas ? $j->kelas->tingkat.$j->kelas->nama : null)->filter()->values(),
+                'mahasiswas_count' => $kelasIds->isEmpty()
+                    ? 0
+                    : \App\Models\User::whereHas('mahasiswaKelas', fn ($q) => $q->whereIn('kelas_id', $kelasIds))->count(),
+            ];
+        })->values();
+
+        // Kehadiran hari ini (jadwal diampu)
+        $jadwalIds = $jadwalDiampu->pluck('id');
+        $todayStats = Attendance::whereIn('jadwal_id', $jadwalIds)
             ->whereDate('tanggal', today())
             ->selectRaw("
                 COUNT(*) as total,
@@ -39,18 +58,15 @@ class DashboardController extends Controller
             ->first();
 
         // Pending approvals
-        $pendingCount = Attendance::whereIn('mata_kuliah_id', $mkIds)
+        $pendingCount = Attendance::whereIn('jadwal_id', $jadwalIds)
             ->where('status', 'pending')
             ->count();
 
         // Jadwal hari ini
         $hariIni = Carbon::now()->locale('id')->isoFormat('dddd');
-        $jadwalHariIni = Jadwal::with(['mataKuliah', 'geofence'])
-            ->whereIn('mata_kuliah_id', $mkIds)
-            ->where('hari', $hariIni)
-            ->where('status', 'aktif')
-            ->orderBy('jam_mulai')
-            ->get();
+        $jadwalHariIni = $jadwalDiampu
+            ->filter(fn ($j) => $j->hari === $hariIni)
+            ->values();
 
         return $this->success([
             'mata_kuliah' => $mataKuliahs,

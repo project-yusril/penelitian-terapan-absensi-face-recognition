@@ -2,8 +2,11 @@
 
 > **ARSIP HISTORIS.** Versi framework, universal-password seeder, route, dan
 > attendance flow di dokumen ini telah berubah. Gunakan
-> [CURRENT-API.md](CURRENT-API.md), [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md),
+> CURRENT-API.md, CURRENT-ARCHITECTURE.md,
 > serta migrations/tests sebagai sumber current.
+> **RENCANA 2 (kelas master, 20 Agustus 2026)** juga mengubah skema akademik:
+> pivot `mahasiswa_mata_kuliah` (baris 50 di bawah) sudah DIHAPUS — lihat
+> rencana2.md.
 # Sistem Absensi Mahasiswa - Laravel API Tasks (Low-Level Detail)
 
 ---

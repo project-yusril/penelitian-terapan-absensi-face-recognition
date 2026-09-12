@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Exports\AttendanceExport;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Models\Kelas;
 use App\Models\MataKuliah;
 use App\Models\Prodi;
 use App\Models\Semester;
@@ -80,11 +81,16 @@ class ReportController extends Controller
         ]);
 
         $mataKuliah = $this->authorization->scopeMataKuliahs(
-            MataKuliah::with('dosen:id,nama'),
+            MataKuliah::query(),
             $request->user(),
         )->findOrFail($request->mata_kuliah_id);
 
-        $mahasiswas = $mataKuliah->mahasiswas()->select('users.id', 'users.nama', 'users.nim', 'users.kelas')->get();
+        // RENCANA 2: peserta MK = mahasiswa dari kelas pada jadwal MK ini.
+        $kelasIds = $mataKuliah->jadwals()->pluck('kelas_id')->filter()->unique()->values();
+        $mahasiswas = $kelasIds->isEmpty()
+            ? collect()
+            : User::whereHas('mahasiswaKelas', fn ($q) => $q->whereIn('kelas_id', $kelasIds))
+                ->select('users.id', 'users.nama', 'users.nim', 'users.kelas')->get();
 
         $matrix = $mahasiswas->map(function ($mhs) use ($mataKuliah, $request) {
             $attendances = $this->authorization->scopeAttendances(Attendance::query(), $request->user())
@@ -107,14 +113,13 @@ class ReportController extends Controller
         });
 
         return $this->success([
-            'mata_kuliah' => $mataKuliah->only(['id', 'kode_mk', 'nama', 'kelas', 'sks']),
-            'dosen' => $mataKuliah->dosen?->only(['id', 'nama']),
+            'mata_kuliah' => $mataKuliah->only(['id', 'kode_mk', 'nama', 'sks']),
             'data' => $matrix,
         ]);
     }
 
     /**
-     * Rekap per kelas
+     * Rekap per kelas (RENCANA 2: kelas master via pivot mahasiswa_kelas)
      */
     public function byKelas(Request $request): JsonResponse
     {
@@ -126,13 +131,21 @@ class ReportController extends Controller
 
         $semesterId = $request->semester_id ?? Semester::where('status', 'aktif')->value('id');
 
+        // Terjemahkan label "4B" ke kelas master (tingkat + nama) pada semester.
+        $kelasMaster = Kelas::where('semester_id', $semesterId)
+            ->when($request->filled('prodi_id'), fn ($q) => $q->where('prodi_id', $request->prodi_id))
+            ->get()
+            ->first(fn (Kelas $k) => $k->tingkat.$k->nama === $request->kelas);
+
         $query = $this->authorization->scopeUsers(User::query(), $request->user())
             ->whereHas('roles', fn ($q) => $q->where('name', 'mahasiswa'))
-            ->where('kelas', $request->kelas)
             ->where('status', 'aktif');
 
-        if ($request->filled('prodi_id')) {
-            $query->where('prodi_id', $request->prodi_id);
+        if ($kelasMaster) {
+            $query->whereHas('mahasiswaKelas', fn ($q) => $q->where('kelas_id', $kelasMaster->id)->where('semester_id', $semesterId));
+        } else {
+            // Fallback snapshot (kelas string) bila master tidak ditemukan.
+            $query->where('kelas', $request->kelas);
         }
 
         $mahasiswas = $query->select('id', 'nama', 'nim', 'kelas', 'prodi_id')->get();
@@ -181,6 +194,7 @@ class ReportController extends Controller
             ->whereHas('roles', fn ($q) => $q->where('name', 'mahasiswa'))
             ->where('prodi_id', $prodi->id)
             ->where('status', 'aktif')
+            ->with('mahasiswaKelas.semester:id,status', 'mahasiswaKelas.kelas:id,tingkat,nama')
             ->select('id', 'nama', 'nim', 'kelas')
             ->get();
 
@@ -188,7 +202,13 @@ class ReportController extends Controller
         $totalAlpha = 0;
         $totalRecords = 0;
 
-        $perKelas = $mahasiswas->groupBy('kelas')->map(function ($kelasGroup) use ($request, $semesterId, &$totalHadir, &$totalAlpha, &$totalRecords) {
+        // RENCANA 2: grup per kelas master (label tingkat+huruf), fallback snapshot.
+        $perKelas = $mahasiswas->groupBy(function (User $mhs) {
+            $kelas = $mhs->mahasiswaKelas->first(fn ($mk) => $mk->semester?->status === 'aktif')?->kelas;
+            $label = $kelas ? $kelas->tingkat.$kelas->nama : null;
+
+            return $label ?: ($mhs->kelas ?: '-');
+        })->map(function ($kelasGroup) use ($request, $semesterId, &$totalHadir, &$totalAlpha, &$totalRecords) {
             $kelasHadir = 0;
             $kelasAlpha = 0;
             $kelasTotal = 0;
@@ -241,11 +261,16 @@ class ReportController extends Controller
         ]);
 
         $mataKuliah = $this->authorization->scopeMataKuliahs(
-            MataKuliah::with(['dosen:id,nama', 'semester.tahunAjaran', 'prodi:id,kode,nama']),
+            MataKuliah::with('semester.tahunAjaran', 'prodi:id,kode,nama', 'jadwals.kelas:id,tingkat,nama', 'jadwals.dosen:id,nama'),
             $request->user(),
         )->findOrFail($request->mata_kuliah_id);
 
-        $mahasiswas = $mataKuliah->mahasiswas()->select('users.id', 'users.nama', 'users.nim', 'users.kelas')->get();
+        // RENCANA 2: peserta MK dari kelas pada jadwal.
+        $kelasIds = $mataKuliah->jadwals()->pluck('kelas_id')->filter()->unique()->values();
+        $mahasiswas = $kelasIds->isEmpty()
+            ? collect()
+            : User::whereHas('mahasiswaKelas', fn ($q) => $q->whereIn('kelas_id', $kelasIds))
+                ->select('users.id', 'users.nama', 'users.nim', 'users.kelas')->get();
 
         $data = $mahasiswas->map(function ($mhs) use ($mataKuliah, $request) {
             $attendances = $this->authorization->scopeAttendances(Attendance::query(), $request->user())
@@ -272,7 +297,7 @@ class ReportController extends Controller
 
         $pdf->setPaper('A4', 'landscape');
 
-        return $pdf->download("Rekap_Kehadiran_{$mataKuliah->kode_mk}_{$mataKuliah->kelas}.pdf");
+        return $pdf->download("Rekap_Kehadiran_{$mataKuliah->kode_mk}.pdf");
     }
 
     /**

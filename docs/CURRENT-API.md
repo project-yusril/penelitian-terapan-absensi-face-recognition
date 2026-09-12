@@ -272,6 +272,8 @@ manajemen; halaman web `/analysis` dibatasi `super_admin`.
 | `GET /admin/analysis/simultaneous-test` | Hasil uji simultan per concurrent level |
 | `GET /admin/analysis/conventional-comparison` | Perbandingan pencatatan konvensional vs sistem |
 
+**Mode pengujian (R-05/R-07):** halaman web `/test-mode` (Inertia) men-toggle `test_mode_enabled` dan melabeli log verifikasi sebagai `genuine`/`impostor`; API `GET /admin/test-mode/*` setara. Label juga dapat dikirim saat check-in via header `X-Test-Label` atau `metadata.label` — ditulis ke `attendance_logs.test_type` + `metadata.label`. Command `php artisan attendance:seed-analysis-data` mengisi dataset awal (920 log; `--force` untuk regenerasi). Detail: rencana2.md §6.7/6.8.
+
 ### Parameter `prodi_id` (canonical — R-04)
 
 - `prodi_id` mempersempit **dataset**, bukan hanya memilih `face_threshold`. Sebelum R-04, filter hanya mengganti ambang sementara dataset genuine/impostor tetap global sehingga setiap prodi menghasilkan FAR/FRR yang identik.
@@ -309,5 +311,18 @@ Semantik lengkap beserta implikasinya untuk laporan penelitian ada di
 
 - Gunakan public `/api/health` untuk liveness sederhana.
 - `/api/healthz` mengandung readiness detail dan belum boleh diekspos langsung ke internet sampai M-15 ditutup; batasi pada jaringan/operator terpercaya.
+
+## Perubahan Kontrak RENCANA 2 (Kelas Master) — 20 Agustus 2026
+
+Skema akademik memakai kelas master; kontrak berikut ikut berubah:
+
+- **KRS mahasiswa** (`GET /api/mahasiswa/jadwal`, `.../jadwal/today`, `.../jadwal/active`, dan dashboard) diturunkan dari `mahasiswa_kelas` → kelas → `jadwals.kelas_id`, bukan pivot `mahasiswa_mata_kuliah`. Response jadwal kini menyertakan `kelas` (`{id, tingkat, nama}`) dan `dosen` (`{id, nama}`) di level jadwal.
+- **Validasi KRS** (permit & check-in/out): mahasiswa dianggap terdaftar bila memiliki `mahasiswa_kelas` dengan `kelas_id` jadwal pada semester mata kuliah.
+- **Admin jadwal** (`POST/PUT /api/admin/jadwal`): wajib `kelas_id` (exists:kelas,id), opsional `dosen_id`; anti-bentrok dosen/kelas/ruangan di hari & jam overlap → `422`.
+- **Admin mata kuliah** (`/api/admin/mata-kuliah`): `dosen_id` dan `kelas` TIDAK lagi diterima/dikembalikan; filter `dosen_id` dialihkan via jadwal. `POST .../enroll` & `DELETE .../remove-mahasiswa` menjadi no-op (peserta mengikuti kelas) dan hanya mengembalikan jumlah peserta via kelas.
+- **Dosen** (`/api/dosen/mata-kuliah`, `/mata-kuliah/{id}/mahasiswa`, `/attendance/*`, `/dashboard`): mata kuliah diampu = jadwal dengan `dosen_id` = dosen; tiap entri membawa `kelas` (tingkat+huruf) dan `jadwal`.
+- **Laporan** (`/api/admin/reports/by-kelas`, `by-prodi`, `by-mata-kuliah`, export PDF/Excel): label kelas ("4B") diterjemahkan ke kelas master pada semester terkait (fallback snapshot `users.kelas`); peserta MK = mahasiswa dari kelas pada jadwal MK.
+- **Auth**: `POST /api/auth/login` & `GET /api/auth/me` tetap mengirim snapshot `kelas`, `angkatan`, `semester` dari `users` (kompatibilitas mobile).
+- **Web (Inertia)**: route baru `GET/POST/PUT/DELETE /kelas` (CRUD kelas master); `GET /mata-kuliah/{matkul}/peserta` menampilkan peserta dari kelas terkait (route enroll/unenroll dihapus).
 
 PRD-04 menyimpan katalog endpoint yang lebih luas, tetapi file ini dan executable truth mengalahkan contoh payload lama.

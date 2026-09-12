@@ -29,6 +29,8 @@ class JadwalConflictRegressionTest extends TestCase
 
     private MataKuliah $course;
 
+    private \App\Models\Kelas $kelas;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -53,13 +55,17 @@ class JadwalConflictRegressionTest extends TestCase
             'kode_mk' => 'JC101', 'nama' => 'Jadwal Conflict', 'sks' => 2,
             'semester_id' => $semester->id, 'prodi_id' => $prodi->id, 'status' => 'aktif',
         ]);
+        $this->kelas = \App\Models\Kelas::create([
+            'prodi_id' => $prodi->id, 'semester_id' => $semester->id,
+            'tingkat' => '4', 'nama' => 'A', 'status' => 'aktif',
+        ]);
         $this->geofence = Geofence::create([
             'nama' => 'JC Lab', 'latitude' => -0.0263, 'longitude' => 109.3425,
             'radius' => 100, 'prodi_id' => $prodi->id, 'status' => 'aktif',
         ]);
 
         Jadwal::create([
-            'mata_kuliah_id' => $this->course->id, 'geofence_id' => $this->geofence->id,
+            'mata_kuliah_id' => $this->course->id, 'kelas_id' => $this->kelas->id, 'geofence_id' => $this->geofence->id,
             'hari' => 'Senin', 'jam_mulai' => '08:00', 'jam_selesai' => '09:00', 'status' => 'aktif',
         ]);
     }
@@ -68,6 +74,7 @@ class JadwalConflictRegressionTest extends TestCase
     {
         return [
             'mata_kuliah_id' => $this->course->id,
+            'kelas_id' => $this->kelas->id,
             'geofence_id' => $this->geofence->id,
             'hari' => 'Senin',
             'jam_mulai' => $jamMulai,
@@ -107,7 +114,7 @@ class JadwalConflictRegressionTest extends TestCase
     public function test_partial_update_cannot_produce_reversed_time_range(): void
     {
         $schedule = Jadwal::create([
-            'mata_kuliah_id' => $this->course->id, 'geofence_id' => $this->geofence->id,
+            'mata_kuliah_id' => $this->course->id, 'kelas_id' => $this->kelas->id, 'geofence_id' => $this->geofence->id,
             'hari' => 'Selasa', 'jam_mulai' => '13:00', 'jam_selesai' => '15:00', 'status' => 'aktif',
         ]);
 

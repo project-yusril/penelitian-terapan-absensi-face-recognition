@@ -48,14 +48,23 @@ class SeedSpDemoTest extends TestCase
 
         Geofence::create(['nama' => 'Lab Test', 'latitude' => 0, 'longitude' => 0, 'radius' => 100, 'status' => 'aktif']);
 
+        // RENCANA 2: satu MK master TI-401; kelas A/C/D via kelas master + jadwal.
+        $mk = MataKuliah::create([
+            'kode_mk' => 'TI-401', 'nama' => 'Pemrograman Mobile', 'sks' => 3,
+            'semester_id' => $this->semester->id, 'prodi_id' => $prodi->id,
+            'status' => 'aktif',
+        ]);
+
         foreach (['A', 'C', 'D'] as $kelas) {
-            $mk = MataKuliah::create([
-                'kode_mk' => 'TI-401', 'nama' => 'Pemrograman Mobile', 'sks' => 3,
-                'semester_id' => $this->semester->id, 'prodi_id' => $prodi->id,
-                'kelas' => $kelas, 'status' => 'aktif',
+            $kelasMaster = \App\Models\Kelas::create([
+                'prodi_id' => $prodi->id, 'semester_id' => $this->semester->id,
+                'tingkat' => '4', 'nama' => $kelas, 'status' => 'aktif',
             ]);
             $students = [$this->mahasiswa($prodi, $kelas), $this->mahasiswa($prodi, $kelas)];
-            $mk->mahasiswas()->attach(array_map(fn ($s) => $s->id, $students));
+            foreach ($students as $s) {
+                $s->mahasiswaKelas()->create(['kelas_id' => $kelasMaster->id, 'semester_id' => $this->semester->id]);
+            }
+            $this->jadwal($mk, $kelasMaster);
             $this->studentsByKelas[$kelas] = $students;
         }
     }
@@ -98,11 +107,15 @@ class SeedSpDemoTest extends TestCase
         $mkB = MataKuliah::create([
             'kode_mk' => 'TI-402', 'nama' => 'MK Valid', 'sks' => 3,
             'semester_id' => $this->semester->id, 'prodi_id' => $prodi->id,
-            'kelas' => 'B', 'status' => 'aktif',
+            'status' => 'aktif',
         ]);
-        $mkB->mahasiswas()->attach($other->id);
+        $kelasB = \App\Models\Kelas::create([
+            'prodi_id' => $prodi->id, 'semester_id' => $this->semester->id,
+            'tingkat' => '4', 'nama' => 'B', 'status' => 'aktif',
+        ]);
+        $other->mahasiswaKelas()->create(['kelas_id' => $kelasB->id, 'semester_id' => $this->semester->id]);
         Attendance::create([
-            'user_id' => $other->id, 'jadwal_id' => $this->jadwal($mkB)->id,
+            'user_id' => $other->id, 'jadwal_id' => $this->jadwal($mkB, $kelasB)->id,
             'mata_kuliah_id' => $mkB->id, 'tanggal' => '2026-08-01', 'status' => 'hadir', 'alpha_menit' => 0,
         ]);
 
@@ -112,12 +125,12 @@ class SeedSpDemoTest extends TestCase
         $this->assertDatabaseHas('attendances', ['user_id' => $other->id, 'status' => 'hadir']);
     }
 
-    private function jadwal(MataKuliah $mk): Jadwal
+    private function jadwal(MataKuliah $mk, \App\Models\Kelas $kelas): Jadwal
     {
         $geofence = Geofence::firstOrFail();
 
         return Jadwal::create([
-            'mata_kuliah_id' => $mk->id, 'geofence_id' => $geofence->id,
+            'mata_kuliah_id' => $mk->id, 'kelas_id' => $kelas->id, 'geofence_id' => $geofence->id,
             'hari' => 'Senin', 'jam_mulai' => '08:00', 'jam_selesai' => '10:30',
             'durasi_menit' => 150, 'status' => 'aktif',
         ]);

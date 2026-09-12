@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Models\Jadwal;
+use App\Models\Kelas;
 use App\Models\MataKuliah;
 use App\Services\AttendanceWorkflowService;
 use Illuminate\Http\RedirectResponse;
@@ -19,24 +21,27 @@ use Inertia\Response;
  */
 class DosenAttendanceController extends Controller
 {
-    private function dosenMkIds(Request $request)
+    /**
+     * RENCANA 2: jadwal yang diampu dosen (dosen_id di jadwals).
+     */
+    private function diampuJadwalIds(Request $request)
     {
         $user = $request->user();
         if ($user->hasRole('super_admin')) {
-            return MataKuliah::pluck('id');
+            return Jadwal::pluck('id');
         }
 
-        return MataKuliah::where('dosen_id', $user->id)->pluck('id');
+        return Jadwal::where('dosen_id', $user->id)->pluck('id');
     }
 
     public function index(Request $request): Response
     {
-        $mkIds = $this->dosenMkIds($request);
+        $jadwalIds = $this->diampuJadwalIds($request);
         $status = $request->string('status', 'pending')->toString();
         $perPage = $this->resolvePerPage($request, 10);
 
-        $items = Attendance::with(['user:id,nama,nim,kelas', 'mataKuliah:id,kode_mk,nama,kelas', 'jadwal'])
-            ->whereIn('mata_kuliah_id', $mkIds)
+        $items = Attendance::with(['user:id,nama,nim,kelas', 'mataKuliah:id,kode_mk,nama', 'jadwal.kelas:id,tingkat,nama', 'jadwal.dosen:id,nama'])
+            ->whereIn('jadwal_id', $jadwalIds)
             ->when($status, fn ($q) => $q->where('status', $status))
             ->when($request->filled('mata_kuliah_id'), fn ($q) => $q->where('mata_kuliah_id', $request->mata_kuliah_id))
             ->when($request->filled('search'), fn ($q) => $q->whereHas('user', fn ($u) => $u->where('nama', 'like', "%{$request->search}%")->orWhere('nim', 'like', "%{$request->search}%")))
@@ -48,12 +53,14 @@ class DosenAttendanceController extends Controller
                 'nama' => $a->user?->nama,
                 'nim' => $a->user?->nim,
                 'mata_kuliah' => $a->mataKuliah?->nama,
-                'kelas' => $a->mataKuliah?->kelas,
+                'kelas' => $a->jadwal?->kelas ? $a->jadwal->kelas->tingkat.$a->jadwal->kelas->nama : null,
                 'tanggal' => $a->tanggal?->format('d M Y'),
                 'checkin_time' => $a->checkin_time ? Carbon::parse($a->checkin_time)->format('H:i') : null,
                 'status' => $a->status,
                 'is_overridden' => (bool) $a->is_overridden,
             ]);
+
+        $mataKuliahIds = Jadwal::whereIn('id', $jadwalIds)->pluck('mata_kuliah_id')->unique()->values();
 
         return Inertia::render('Dosen/Attendance', [
             'items' => $items,
@@ -63,7 +70,7 @@ class DosenAttendanceController extends Controller
                 'mata_kuliah_id' => $request->integer('mata_kuliah_id') ?: '',
                 'per_page' => $perPage,
             ],
-            'mataKuliahs' => MataKuliah::whereIn('id', $mkIds)->select('id', 'kode_mk', 'nama')->get(),
+            'mataKuliahs' => MataKuliah::whereIn('id', $mataKuliahIds)->select('id', 'kode_mk', 'nama')->get(),
         ]);
     }
 
@@ -73,17 +80,25 @@ class DosenAttendanceController extends Controller
      */
     public function rekap(Request $request): Response
     {
-        $mkIds = $this->dosenMkIds($request);
+        $jadwalIds = $this->diampuJadwalIds($request);
         $selectedMkId = $request->integer('mata_kuliah_id') ?: null;
 
-        // Ringkasan agregat per MK.
-        $summary = MataKuliah::whereIn('id', $mkIds)
-            ->select('id', 'kode_mk', 'nama', 'kelas', 'total_pertemuan')
-            ->withCount('mahasiswas')
+        $mataKuliahIds = Jadwal::whereIn('id', $jadwalIds)->pluck('mata_kuliah_id')->unique()->values();
+
+        // Ringkasan agregat per MK yang diampu (via jadwal).
+        $summary = MataKuliah::whereIn('id', $mataKuliahIds)
+            ->select('id', 'kode_mk', 'nama', 'total_pertemuan')
             ->orderBy('kode_mk')
             ->get()
-            ->map(function (MataKuliah $mk) {
-                $stats = Attendance::where('mata_kuliah_id', $mk->id)
+            ->map(function (MataKuliah $mk) use ($jadwalIds) {
+                $kelasIds = Jadwal::whereIn('id', $jadwalIds)->where('mata_kuliah_id', $mk->id)
+                    ->pluck('kelas_id')->filter()->unique()->values();
+                $kelasLabels = Kelas::whereIn('id', $kelasIds)
+                    ->get()
+                    ->map(fn (Kelas $k) => $k->tingkat.$k->nama)
+                    ->implode(', ');
+
+                $stats = Attendance::whereIn('jadwal_id', $jadwalIds)->where('mata_kuliah_id', $mk->id)
                     ->selectRaw("
                         COUNT(*) as total,
                         SUM(CASE WHEN status IN ('hadir','hadir_terlambat') THEN 1 ELSE 0 END) as hadir,
@@ -96,8 +111,10 @@ class DosenAttendanceController extends Controller
                     'id' => $mk->id,
                     'kode_mk' => $mk->kode_mk,
                     'nama' => $mk->nama,
-                    'kelas' => $mk->kelas,
-                    'peserta' => $mk->mahasiswas_count,
+                    'kelas' => $kelasLabels,
+                    'peserta' => $kelasIds->isEmpty()
+                        ? 0
+                        : \App\Models\User::whereHas('mahasiswaKelas', fn ($q) => $q->whereIn('kelas_id', $kelasIds))->count(),
                     'total_absensi' => $total,
                     'alpha' => (int) ($stats->alpha ?? 0),
                     'pending' => (int) ($stats->pending ?? 0),
@@ -107,12 +124,22 @@ class DosenAttendanceController extends Controller
 
         // Detail per mahasiswa bila satu MK dipilih.
         $detail = null;
-        if ($selectedMkId && $mkIds->contains($selectedMkId)) {
-            $mk = MataKuliah::with('mahasiswas:id,nama,nim,kelas')->find($selectedMkId);
+        if ($selectedMkId && $mataKuliahIds->contains($selectedMkId)) {
+            $mk = MataKuliah::find($selectedMkId);
+            $kelasIds = Jadwal::whereIn('id', $jadwalIds)->where('mata_kuliah_id', $selectedMkId)
+                ->pluck('kelas_id')->filter()->unique()->values();
+
+            $mahasiswas = $kelasIds->isEmpty()
+                ? collect()
+                : \App\Models\User::whereHas('mahasiswaKelas', fn ($q) => $q->whereIn('kelas_id', $kelasIds))
+                    ->select('users.id', 'users.nama', 'users.nim', 'users.kelas')
+                    ->orderBy('users.nama')
+                    ->get();
+
             $detail = [
                 'mata_kuliah' => "{$mk->kode_mk} — {$mk->nama}",
                 'total_pertemuan' => $mk->total_pertemuan,
-                'rows' => $mk->mahasiswas->map(function ($mhs) use ($mk) {
+                'rows' => $mahasiswas->map(function ($mhs) use ($mk) {
                     $stats = Attendance::where('user_id', $mhs->id)
                         ->where('mata_kuliah_id', $mk->id)
                         ->selectRaw("
@@ -186,6 +213,6 @@ class DosenAttendanceController extends Controller
 
     private function authorizeMk(Request $request, Attendance $attendance): void
     {
-        abort_unless($this->dosenMkIds($request)->contains($attendance->mata_kuliah_id), 403);
+        abort_unless($this->diampuJadwalIds($request)->contains($attendance->jadwal_id), 403);
     }
 }

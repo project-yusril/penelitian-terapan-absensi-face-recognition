@@ -80,26 +80,30 @@ class DomainInvariantConstraintTest extends TestCase
         ]);
     }
 
-    public function test_mata_kuliah_null_kelas_cannot_duplicate(): void
+    /**
+     * RENCANA 2: unique `kelas` di mata_kuliahs dihapus bersama kolom.
+     * Anti-duplikat kombinasi kelas kini dijaga di tabel `kelas`
+     * (unique_kelas_prodi_semester_tingkat_nama).
+     */
+    public function test_kelas_master_rejects_duplicate_prodi_semester_tingkat_nama(): void
     {
-        $semesterId = DB::table('tahun_ajarans')->insertGetId([
-            'kode' => 'MK-INV', 'nama' => '2026/2027', 'tanggal_mulai' => '2026-01-01',
+        $tahunId = DB::table('tahun_ajarans')->insertGetId([
+            'kode' => 'KL-INV', 'nama' => '2026/2027', 'tanggal_mulai' => '2026-01-01',
             'tanggal_selesai' => '2026-12-31', 'status' => 'aktif',
         ]);
         $semesterId = DB::table('semesters')->insertGetId([
-            'tahun_ajaran_id' => $semesterId, 'nama' => 'Ganjil', 'kode' => 'MK-INV-G',
+            'tahun_ajaran_id' => $tahunId, 'nama' => 'Ganjil', 'kode' => 'KL-INV-G',
             'tanggal_mulai' => '2026-01-01', 'tanggal_selesai' => '2026-12-31', 'status' => 'aktif',
         ]);
 
         $row = [
-            'kode_mk' => 'DUP101', 'nama' => 'Duplikat', 'sks' => 2,
-            'semester_id' => $semesterId, 'prodi_id' => $this->prodiId(),
-            'kelas' => null, 'total_pertemuan' => 16, 'status' => 'aktif',
+            'prodi_id' => $this->prodiId(), 'semester_id' => $semesterId,
+            'tingkat' => '4', 'nama' => 'A', 'status' => 'aktif',
         ];
 
-        DB::table('mata_kuliahs')->insert($row);
+        DB::table('kelas')->insert($row);
 
         $this->expectException(QueryException::class);
-        DB::table('mata_kuliahs')->insert($row);
+        DB::table('kelas')->insert($row);
     }
 }

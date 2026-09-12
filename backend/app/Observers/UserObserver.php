@@ -6,13 +6,12 @@ use App\Models\User;
 use App\Services\MahasiswaEnrollmentSynchronizer;
 
 /**
- * Menjaga invarian "KRS mahasiswa selalu mengikuti kelasnya".
+ * Menjaga invarian "kelas mahasiswa selalu konsisten" lewat semua jalur:
+ * panel admin (Web\UserController), API admin (Api\Admin\UserController),
+ * pembaruan massal, dan import Excel. Satu titik penjaga untuk semuanya.
  *
- * Dipasang di level model, bukan di controller, karena `kelas` bisa berubah
- * lewat beberapa jalur yang terpisah: panel admin (Web\UserController),
- * API admin (Api\Admin\UserController), pembaruan massal, dan import CSV.
- * Menambal satu per satu berarti setiap jalur baru berpotensi melewatkannya
- * lagi; observer menutup semuanya di satu tempat.
+ * RENCANA 2: mutasi kolom snapshot `users.kelas` disinkronkan ke pivot
+ * `mahasiswa_kelas` (kelas master) + snapshot semester mengikuti tingkat.
  */
 class UserObserver
 {
@@ -22,9 +21,8 @@ class UserObserver
 
     public function updated(User $user): void
     {
-        // Pindah prodi ikut diperhitungkan: section pengganti dicari dalam
-        // prodi mahasiswa, sehingga KRS lama menjadi tidak sah juga saat
-        // prodi-nya berubah.
+        // Pindah prodi ikut diperhitungkan: label kelas lama menjadi tidak
+        // sah di prodi baru, sehingga tautan pivot perlu diselaraskan ulang.
         if (! $user->wasChanged('kelas') && ! $user->wasChanged('prodi_id')) {
             return;
         }

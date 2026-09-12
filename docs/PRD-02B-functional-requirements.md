@@ -342,5 +342,13 @@
 - **Detail**:
   - Catat: jumlah concurrent users, response time per request
   - Catat: success rate, failure rate, timeout rate
+
+> **Status implementasi (20 Agustus 2026):** FR-TEST-001..004 terpenuhi di
+> halaman web `/test-mode` (toggle + pelabelan genuine/impostor) & `/analysis`
+> (FAR/FRR sweep θ/EER, geofence, latensi, uji simultan — visualisasi donut/bar/gauge).
+> Label juga dapat dikirim saat check-in via header `X-Test-Label`/`metadata.label`.
+> Dataset awal tersedia via `php artisan attendance:seed-analysis-data`.
+> Pengambilan data lapangan asli & load test eksternal (k6/JMeter) masih terbuka
+> (R-02/R-05/R-07 di temuan.md).
   - Catat: rata-rata waktu total proses absensi (dari buka app sampai selesai)
   - Skenario: 20, 30, 40 mahasiswa bersamaan

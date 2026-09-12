@@ -63,7 +63,7 @@ class HistoricalMasterLifecycleTest extends TestCase
         $mkId = DB::table('mata_kuliahs')->insertGetId([
             'kode_mk' => 'RWT101', 'nama' => 'Riwayat', 'sks' => 2,
             'semester_id' => $semesterId, 'prodi_id' => $this->prodiId(),
-            'kelas' => 'A', 'total_pertemuan' => 16, 'status' => 'aktif',
+            'total_pertemuan' => 16, 'status' => 'aktif',
         ]);
 
         $geofenceId = DB::table('geofences')->insertGetId([

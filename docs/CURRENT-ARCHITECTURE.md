@@ -1,8 +1,44 @@
 # Arsitektur Saat Ini
 
 **Status:** maintained
-**Pembaruan:** 11 Agustus 2026
-**Authority:** executable truth; backlog dan evidence mengikuti [temuan.md](temuan.md)
+**Pembaruan:** 12 September 2026
+**Authority:** executable truth; backlog dan evidence mengikuti temuan.md
+
+## Struktur Data Akademik (Kelas Master) — RENCANA 2
+
+Sejak 20 Agustus 2026, model data akademik memakai **kelas sebagai entitas master**, bukan string:
+
+```
+tahun_ajarans 1─< semesters (periode: Ganjil/Genap)
+semesters 1─< kelas (prodi + semester + tingkat + nama → "4B", "5E")
+kelas 1─< mahasiswa_kelas >─1 users   → riwayat mutasi antar kelas per semester
+mata_kuliahs (master kurikulum: kode, nama, sks, prodi, semester — TANPA kelas/dosen)
+jadwals (dosen_id + mata_kuliah_id + kelas_id + hari + jam + ruangan + geofence)
+```
+
+- **Kelas master** (`kelas`): unique `(prodi_id, semester_id, tingkat, nama)`; tingkat enum 1–5, nama A–E.
+- **`mahasiswa_kelas`**: pivot user ↔ kelas per semester; unique `(user_id, semester_id)` sehingga riwayat mutasi tercatat (Calvin 4B semester genap → 5E semester ganjil).
+- **Mata kuliah** murni master kurikulum: kolom `dosen_id`/`kelas`/`kelas_key` dihapus (migration `2026_08_20_000001`); unique `(kode_mk, semester_id, prodi_id)`.
+- **Dosen & kelas di-plot per jadwal** (`jadwals.dosen_id`, `jadwals.kelas_id`), bukan di mata kuliah.
+- **KRS mahasiswa** diturunkan dari `mahasiswa_kelas` → kelas → jadwal (bukan pivot `mahasiswa_mata_kuliah` yang dihapus di migration `2026_08_20_000002`, bukan kolom string `users.kelas`).
+- **`users.kelas` & `users.semester` dipertahankan sebagai snapshot** (display cepat + kompatibilitas mobile); `UserObserver` + `MahasiswaEnrollmentSynchronizer` menyelaraskan snapshot ↔ pivot saat kelas berubah.
+- Peserta mata kuliah = mahasiswa dari kelas pada jadwal MK tersebut; enrollment manual ke pivot lama dihapus.
+- Validasi anti-bentrok jadwal: dosen/kelas/ruangan yang sama di hari & jam overlap ditolak (interval setengah terbuka `[start, end)` — back-to-back diizinkan).
+- Dosen "mata kuliah diampu" = jadwal dengan `dosen_id` = dia.
+
+## State Data Terkini (12 September 2026)
+
+| Area | State |
+|---|---|
+| Semester aktif | `2026/2027-1` Ganjil — kelas 1A–1E (tingkat 1), 3A–3E (tingkat 3), 5A–5E (tingkat 5), total 15 kelas |
+| Semester arsip | `2025/2026-2` Genap (nonaktif) — kelas 4A–4E saja; pemilik 62 attendance riwayat |
+| Users | 171 (mahasiswa 150, dosen 9, admin_prodi 3, kaprodi 3, orang_tua 3, super_admin/admin_jurusan/ketua_jurusan 1) |
+| `mahasiswa_kelas` | 165 baris (angkatan 2026 = 150 pivot semester aktif; angkatan 2024 = 15 pivot arsip genap) |
+| Jadwal & MK | 8 jadwal (kelas 4A–4E genap), 3 mata kuliah master |
+| Rekam | attendances 62, attendance_logs 926 (4 produksi + 920 seed analisis R-05 + 2 tambahan), permits 12, leave 1, SP 3 |
+| Biometrik | 5 face embeddings approved (dekripsi terverifikasi), 8 geofences |
+
+**Pembersihan 12 September 2026:** kelas 1A–1E di semester genap 2025/2026 (hasil seeding keliru — angkatan 2026 tidak mungkin berada di semester genap 2025/2026) dihapus beserta 135 baris pivot-nya. Pivot tersebut 100% duplikat angkatan 2026 yang juga sudah terdaftar di semester ganjil aktif, tanpa jadwal maupun attendance. Tidak ada data riwayat yang hilang.
 
 ## Komponen
 
@@ -91,8 +127,8 @@ Rekam akademik historis tidak boleh hilang karena penghapusan master secara tran
 Selain validasi aplikasi, database menegakkan invariant berikut sebagai lapisan terakhir:
 
 - CHECK: koordinat/radius geofence, `jam_selesai > jam_mulai` pada jadwal, urutan tanggal semester/tahun ajaran, `sks`/`total_pertemuan` positif, toleransi/geofence/persentase, dan urutan threshold SP1<SP2<SP3<DO pada `prodi_settings`.
-- UNIQUE: duplikat mata kuliah dengan `kelas IS NULL` ditutup via generated column `kelas_key = COALESCE(kelas,'')` plus unique `(kode_mk, semester_id, kelas_key)`.
-- Composite index mengikuti query utama monitoring/report: `attendances(user_id,tanggal)`, `attendances(jadwal_id,tanggal)`, `attendances(mata_kuliah_id,status)`, `jadwals(hari,status)`, `face_embeddings(user_id,status)`.
+- UNIQUE: satu mata kuliah master per `(kode_mk, semester_id, prodi_id)` via `unique_mk_semester`; satu kelas per `(prodi_id, semester_id, tingkat, nama)` via `unique_kelas_prodi_semester_tingkat_nama`; satu pivot per `(user_id, semester_id)` via `unique_mahasiswa_kelas_user_semester`. Generated column lama `kelas_key` dan unique `(kode_mk, semester_id, kelas_key)` dihapus bersama kolom `kelas` (RENCANA 2).
+- Composite index mengikuti query utama monitoring/report: `attendances(user_id,tanggal)`, `attendances(jadwal_id,tanggal)`, `attendances(mata_kuliah_id,status)`, `jadwals(hari,status)`, `face_embeddings(user_id,status)`, plus `jadwals(kelas_id)` & `jadwals(dosen_id)`.
 
 ## Face Matching Canonical
 

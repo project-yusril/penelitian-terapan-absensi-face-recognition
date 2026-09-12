@@ -56,9 +56,7 @@ class JadwalCard extends StatelessWidget {
         color: AppColors.danger,
         icon: Icons.event_busy,
         label: jadwal.attendanceStatus == 'alpha' ? 'Alpha' : 'Terlewat',
-        detail: jadwal.attendanceStatus == 'alpha'
-            ? null
-            : 'tidak absen',
+        detail: jadwal.attendanceStatus == 'alpha' ? null : 'tidak absen',
       );
     }
     if (jadwal.isOngoing) {
@@ -141,6 +139,13 @@ class JadwalCard extends StatelessWidget {
                       _metaRow(Icons.place_outlined, jadwal.ruangan),
                       const SizedBox(height: 2),
                       _metaRow(Icons.person_outline, jadwal.dosen),
+                      if (jadwal.kelas != null && jadwal.kelas!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        _metaRow(
+                          Icons.groups_outlined,
+                          'Kelas ${jadwal.kelas}',
+                        ),
+                      ],
                       const SizedBox(height: 10),
                       _statusChip(visual),
                     ],

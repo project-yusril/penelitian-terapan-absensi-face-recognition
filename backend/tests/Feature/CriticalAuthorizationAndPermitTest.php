@@ -122,6 +122,42 @@ class CriticalAuthorizationAndPermitTest extends TestCase
             $this->evidence($jadwal))->assertUnprocessable();
     }
 
+    public function test_online_checkin_rejects_client_reported_mock_location(): void
+    {
+        [$student, , $jadwal] = $this->attendanceFixture();
+        $uuid = fake()->uuid();
+        $permit = $this->actingAs($student)->postJson('/api/mahasiswa/attendance/permits', [
+            'jadwal_id' => $jadwal->id, 'action' => 'check_in', 'client_uuid' => $uuid,
+        ])->assertCreated()->json('data');
+        $payload = array_merge($this->evidence($jadwal, $permit, $uuid), [
+            'mock_location_detected' => true,
+        ]);
+
+        $this->actingAs($student)->postJson('/api/mahasiswa/attendance/check-in', $payload)
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'Fake/mock location terdeteksi');
+
+        $this->assertDatabaseMissing('attendances', ['user_id' => $student->id]);
+        $this->assertDatabaseHas('attendance_logs', [
+            'user_id' => $student->id,
+            'action' => 'mock_location_detected',
+        ]);
+    }
+
+    public function test_offline_sync_rejects_client_reported_mock_location(): void
+    {
+        [$student, , $jadwal] = $this->attendanceFixture();
+        [$item] = $this->offlineItem($student, $jadwal, 'check_in');
+        $item['mock_location_detected'] = true;
+
+        $this->sync($student, [$item])
+            ->assertJsonPath('data.success', 0)
+            ->assertJsonPath('data.failed', 1)
+            ->assertJsonPath('data.results.0.code', 'mock_location_detected');
+
+        $this->assertDatabaseMissing('attendances', ['user_id' => $student->id]);
+    }
+
     public function test_permit_is_bound_to_user_schedule_action_and_is_single_use(): void
     {
         [$student, , $jadwal] = $this->attendanceFixture();
@@ -288,7 +324,7 @@ class CriticalAuthorizationAndPermitTest extends TestCase
     public function test_permit_requires_enrollment_and_current_academic_date(): void
     {
         [$student, , $jadwal] = $this->attendanceFixture();
-        $student->mataKuliahs()->detach($jadwal->mata_kuliah_id);
+        $student->mahasiswaKelas()->where('semester_id', $jadwal->mataKuliah->semester_id)->delete();
 
         $this->actingAs($student)->postJson('/api/mahasiswa/attendance/permits', [
             'jadwal_id' => $jadwal->id,
@@ -296,7 +332,7 @@ class CriticalAuthorizationAndPermitTest extends TestCase
             'client_uuid' => fake()->uuid(),
         ])->assertForbidden();
 
-        $student->mataKuliahs()->attach($jadwal->mata_kuliah_id);
+        $student->mahasiswaKelas()->create(['kelas_id' => $jadwal->kelas_id, 'semester_id' => $jadwal->mataKuliah->semester_id]);
         $jadwal->mataKuliah->semester->update(['tanggal_selesai' => '2026-07-19']);
         $this->actingAs($student)->postJson('/api/mahasiswa/attendance/permits', [
             'jadwal_id' => $jadwal->id,
@@ -321,7 +357,6 @@ class CriticalAuthorizationAndPermitTest extends TestCase
         $checkinCourse = $checkoutSchedule->mataKuliah->replicate();
         $checkinCourse->kode_mk = 'SEC102';
         $checkinCourse->save();
-        $student->mataKuliahs()->attach($checkinCourse->id);
         $checkinSchedule = $checkoutSchedule->replicate();
         $checkinSchedule->mata_kuliah_id = $checkinCourse->id;
         $checkinSchedule->ruangan = 'Lab 2';
@@ -594,7 +629,6 @@ class CriticalAuthorizationAndPermitTest extends TestCase
         $secondCourse = $jadwal->mataKuliah->replicate();
         $secondCourse->kode_mk = 'SEC103';
         $secondCourse->save();
-        $student->mataKuliahs()->attach($secondCourse->id);
         $secondSchedule = $jadwal->replicate();
         $secondSchedule->mata_kuliah_id = $secondCourse->id;
         $secondSchedule->save();
@@ -627,9 +661,10 @@ class CriticalAuthorizationAndPermitTest extends TestCase
         $tahun = TahunAjaran::create(['kode' => '2026', 'nama' => '2026/2027', 'tanggal_mulai' => '2026-01-01', 'tanggal_selesai' => '2026-12-31', 'status' => 'aktif']);
         $semester = Semester::create(['tahun_ajaran_id' => $tahun->id, 'nama' => 'Ganjil', 'kode' => '2026-G', 'tanggal_mulai' => '2026-01-01', 'tanggal_selesai' => '2026-12-31', 'status' => 'aktif']);
         $mk = MataKuliah::create(['kode_mk' => 'SEC101', 'nama' => 'Security', 'sks' => 2, 'semester_id' => $semester->id, 'prodi_id' => $prodi->id, 'status' => 'aktif']);
-        $student->mataKuliahs()->attach($mk->id);
         $geo = Geofence::create(['nama' => 'Lab', 'latitude' => -0.0263, 'longitude' => 109.3425, 'radius' => 100, 'prodi_id' => $prodi->id, 'status' => 'aktif']);
-        $jadwal = Jadwal::create(['mata_kuliah_id' => $mk->id, 'geofence_id' => $geo->id, 'hari' => 'Senin', 'jam_mulai' => '09:00', 'jam_selesai' => '11:00', 'status' => 'aktif']);
+        $kelas = \App\Models\Kelas::create(['prodi_id' => $prodi->id, 'semester_id' => $semester->id, 'tingkat' => '4', 'nama' => 'A', 'status' => 'aktif']);
+        $student->mahasiswaKelas()->create(['kelas_id' => $kelas->id, 'semester_id' => $semester->id]);
+        $jadwal = Jadwal::create(['mata_kuliah_id' => $mk->id, 'kelas_id' => $kelas->id, 'geofence_id' => $geo->id, 'hari' => 'Senin', 'jam_mulai' => '09:00', 'jam_selesai' => '11:00', 'status' => 'aktif']);
         ProdiSetting::create(['prodi_id' => $prodi->id, 'allow_offline_attendance' => true, 'offline_sync_timeout_menit' => 30]);
 
         return [$student, $prodi, $jadwal];

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Models\Jadwal;
 use App\Models\LeaveRequest;
 use App\Models\MataKuliah;
 use App\Models\ReEnrollmentRequest;
@@ -119,13 +120,23 @@ class DashboardController extends Controller
             && $roles->intersect(['super_admin', 'ketua_jurusan', 'admin_jurusan', 'kaprodi', 'admin_prodi'])->isEmpty();
 
         if ($isDosenOnly) {
-            // Dosen: statistik dibatasi pada mata kuliah yang diampu.
-            $dosenMkIds = $authorization->scopeMataKuliahs(MataKuliah::query(), $user)->pluck('id');
+            // Dosen: statistik dibatasi pada jadwal yang diampu (RENCANA 2).
+            $dosenJadwalIds = Jadwal::where('dosen_id', $user->id)
+                ->where('status', 'aktif')
+                ->when($semesterAktif, fn ($q) => $q->whereHas('mataKuliah', fn ($m) => $m->where('semester_id', $semesterAktif->id)))
+                ->pluck('id');
+            $dosenMkIds = Jadwal::whereIn('id', $dosenJadwalIds)->pluck('mata_kuliah_id')->unique()->values();
+            $dosenKelasIds = Jadwal::whereIn('id', $dosenJadwalIds)->pluck('kelas_id')->filter()->unique()->values();
+
+            $pesertaCount = $dosenKelasIds->isEmpty()
+                ? 0
+                : User::whereHas('mahasiswaKelas', fn ($q) => $q->whereIn('kelas_id', $dosenKelasIds))->count();
+
             $statsCards = [
                 ['label' => 'Mata Kuliah Diampu', 'value' => $dosenMkIds->count(), 'icon' => 'book', 'tone' => 'bg-brand-50 text-brand-600'],
-                ['label' => 'Total Peserta', 'value' => DB::table('mahasiswa_mata_kuliah')->whereIn('mata_kuliah_id', $dosenMkIds)->distinct('user_id')->count('user_id'), 'icon' => 'users', 'tone' => 'bg-emerald-50 text-emerald-600'],
-                ['label' => 'Perlu Approval', 'value' => Attendance::whereIn('mata_kuliah_id', $dosenMkIds)->where('status', 'pending')->count(), 'icon' => 'check', 'tone' => 'bg-amber-50 text-amber-600'],
-                ['label' => 'Alpha Hari Ini', 'value' => Attendance::whereIn('mata_kuliah_id', $dosenMkIds)->whereDate('tanggal', today())->where('status', 'alpha')->count(), 'icon' => 'warning', 'tone' => 'bg-rose-50 text-rose-600'],
+                ['label' => 'Total Peserta', 'value' => $pesertaCount, 'icon' => 'users', 'tone' => 'bg-emerald-50 text-emerald-600'],
+                ['label' => 'Perlu Approval', 'value' => Attendance::whereIn('jadwal_id', $dosenJadwalIds)->where('status', 'pending')->count(), 'icon' => 'check', 'tone' => 'bg-amber-50 text-amber-600'],
+                ['label' => 'Alpha Hari Ini', 'value' => Attendance::whereIn('jadwal_id', $dosenJadwalIds)->whereDate('tanggal', today())->where('status', 'alpha')->count(), 'icon' => 'warning', 'tone' => 'bg-rose-50 text-rose-600'],
             ];
         } else {
             // Admin/manajemen: statistik global institusi.

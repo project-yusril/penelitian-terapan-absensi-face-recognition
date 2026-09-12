@@ -40,12 +40,14 @@ class DashboardController extends Controller
             ]);
         }
 
-        // Jadwal hari ini
+        // Jadwal hari ini (RENCANA 2: dari kelas aktif, bukan pivot lama)
         $hariIni = Carbon::now()->locale('id')->isoFormat('dddd');
-        $mataKuliahIds = $user->mataKuliahs()->pluck('mata_kuliahs.id');
+        $kelasIds = $user->mahasiswaKelas()
+            ->whereHas('semester', fn ($q) => $q->where('status', 'aktif'))
+            ->pluck('kelas_id');
 
         $jadwalHariIni = Jadwal::with(['mataKuliah', 'geofence'])
-            ->whereIn('mata_kuliah_id', $mataKuliahIds)
+            ->whereIn('kelas_id', $kelasIds)
             ->where('hari', $hariIni)
             ->where('status', 'aktif')
             ->orderBy('jam_mulai')

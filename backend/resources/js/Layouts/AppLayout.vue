@@ -34,6 +34,7 @@ const navGroups = computed(() => [
         items: [
             { name: 'Pengguna', route: 'users.index', icon: 'users', show: can(masterRoles) },
             { name: 'Program Studi', route: 'prodi.index', icon: 'academic', show: can(masterRoles) },
+            { name: 'Kelas', route: 'kelas.index', icon: 'users', show: can(masterRoles) },
             { name: 'Mata Kuliah', route: 'mata-kuliah.index', icon: 'book', show: can(masterRoles) },
             { name: 'Jadwal', route: 'jadwal.index', icon: 'calendar', show: can(masterRoles) },
             { name: 'Tahun Ajaran', route: 'tahun-ajaran.index', icon: 'calendar', show: can(masterRoles) },

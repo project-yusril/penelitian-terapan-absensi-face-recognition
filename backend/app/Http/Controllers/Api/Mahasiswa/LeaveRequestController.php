@@ -68,7 +68,8 @@ class LeaveRequestController extends Controller
         $mulai = Carbon::parse($request->tanggal_mulai)->startOfDay();
         $selesai = Carbon::parse($request->tanggal_selesai)->startOfDay();
 
-        $enrolled = $user->mataKuliahs()->pluck('mata_kuliahs.id')->map(fn ($id) => (int) $id);
+        // RENCANA 2: KRS dari kelas aktif → jadwal → mata kuliah.
+        $enrolled = $this->enrolledCourseIds($user);
         $eligible = $this->eligibleCourseIds($user, $mulai, $selesai);
         $requested = $this->requestedCourseIds($request, $multi, $multi ? $eligible : $enrolled);
 
@@ -215,6 +216,24 @@ class LeaveRequestController extends Controller
     }
 
     /**
+     * RENCANA 2: MK yang diambil mahasiswa = jadwal kelas aktifnya.
+     *
+     * @return Collection<int, int>
+     */
+    private function enrolledCourseIds(User $user): Collection
+    {
+        return Jadwal::whereHas('kelas.mahasiswaKelas', function ($q) use ($user) {
+            $q->where('user_id', $user->id)
+                ->whereHas('semester', fn ($s) => $s->where('status', 'aktif'));
+        })
+            ->where('status', 'aktif')
+            ->distinct()
+            ->pluck('mata_kuliah_id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
+    }
+
+    /**
      * MK KRS aktif yang periode semester dan tahun ajarannya mencakup seluruh
      * rentang pengajuan. Ini mencegah fan-out ke enrollment historis.
      *
@@ -222,7 +241,13 @@ class LeaveRequestController extends Controller
      */
     private function eligibleCourseIds(User $user, Carbon $mulai, Carbon $selesai): Collection
     {
-        return $user->mataKuliahs()
+        $ids = $this->enrolledCourseIds($user);
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return MataKuliah::whereIn('id', $ids)
             ->where('mata_kuliahs.status', 'aktif')
             ->whereHas('semester', fn ($query) => $query
                 ->where('status', 'aktif')

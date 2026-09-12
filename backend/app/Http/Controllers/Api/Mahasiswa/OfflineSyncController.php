@@ -284,7 +284,8 @@ class OfflineSyncController extends Controller
         ]);
 
         if ($status === 'pending') {
-            $dosenId = $jadwal->mataKuliah()->value('dosen_id');
+            // RENCANA 2: dosen pengampu dari jadwal (bukan mata_kuliahs.dosen_id).
+            $dosenId = $jadwal->dosen_id;
             if ($dosenId) {
                 app(NotificationOutboxService::class)->enqueue(
                     "attendance:{$attendance->id}:pending:{$dosenId}",

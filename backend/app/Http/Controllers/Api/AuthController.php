@@ -58,6 +58,10 @@ class AuthController extends Controller
                 'email' => $user->email,
                 'nim' => $user->nim,
                 'nidn' => $user->nidn,
+                // RENCANA 2: kelas/semester snapshot tetap dikirim untuk UI mobile.
+                'kelas' => $user->kelas,
+                'angkatan' => $user->angkatan,
+                'semester' => $user->semester,
                 'foto_profil' => $user->foto_profil,
                 'foto_enrollment_url' => $this->enrollmentPhotoUrl($user),
                 'roles' => $user->roles->pluck('name'),

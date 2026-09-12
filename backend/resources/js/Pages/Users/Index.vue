@@ -15,17 +15,33 @@ const props = defineProps({
     filters: { type: Object, default: () => ({}) },
     roles: { type: Array, default: () => [] },
     prodis: { type: Array, default: () => [] },
+    kelasOptions: { type: Array, default: () => [] },
 });
+
+// RENCANA 2: kelas mahasiswa diturunkan dari master (id kelas).
+const isMahasiswaRole = computed(() => {
+    const role = props.roles.find((r) => r.id === form.role_id);
+    return role?.name === 'mahasiswa';
+});
+
+const selectedKelas = computed(() => props.kelasOptions.find((k) => k.id === form.kelas_id));
+const semesterFollows = computed(() => selectedKelas.value?.tingkat ?? '');
 
 const columns = [
     { key: 'select', label: '', width: '40px' },
     { key: 'nama', label: 'Nama', sortable: true },
+    { key: 'foto_wajah', label: 'Wajah', width: '70px' },
     { key: 'identitas', label: 'Email / NIM' },
     { key: 'roles', label: 'Role' },
     { key: 'prodi', label: 'Prodi' },
+    { key: 'enrollment_status', label: 'Enrollment', align: 'center' },
     { key: 'status', label: 'Status', sortable: true },
     { key: 'aksi', label: '', align: 'right', width: '90px' },
 ];
+
+// ---- Preview foto wajah terdaftar ----
+const previewWajah = ref(null);
+const previewWajahNama = ref('');
 
 // ---- Bulk selection ----
 const selectedIds = ref([]);
@@ -79,7 +95,7 @@ const editingId = ref(null);
 const form = useForm({
     nama: '', email: '', password: '', role_id: '',
     nim: '', nidn: '', nip: '', no_hp: '',
-    prodi_id: '', kelas: '', angkatan: '', semester: '',
+    prodi_id: '', kelas_id: '', angkatan: '', semester: '',
     status: 'aktif',
 });
 
@@ -103,7 +119,7 @@ const openEdit = (row) => {
     form.nip = row.nip ?? '';
     form.no_hp = row.no_hp ?? '';
     form.prodi_id = row.prodi_id ?? '';
-    form.kelas = row.kelas ?? '';
+    form.kelas_id = row.kelas_id ?? '';
     form.angkatan = row.angkatan ?? '';
     form.semester = row.semester ?? '';
     form.status = row.status ?? 'aktif';
@@ -234,6 +250,21 @@ const exportMahasiswa = () => {
             </div>
         </template>
 
+        <template #cell:foto_wajah="{ row }">
+            <button
+                v-if="row.foto_wajah_url"
+                type="button"
+                :aria-label="`Lihat foto wajah ${row.nama}`"
+                class="block h-10 w-10 overflow-hidden rounded-lg ring-1 ring-slate-200 transition hover:ring-2 hover:ring-brand-400"
+                @click="previewWajah = row.foto_wajah_url; previewWajahNama = row.nama"
+            >
+                <img :src="row.foto_wajah_url" alt="" class="h-full w-full object-cover" />
+            </button>
+            <span v-else class="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-300" title="Belum ada wajah terdaftar">
+                <Icon name="user" class="h-5 w-5" />
+            </span>
+        </template>
+
         <template #cell:identitas="{ row }">
             <div>
                 <p class="text-slate-600">{{ row.email }}</p>
@@ -247,6 +278,10 @@ const exportMahasiswa = () => {
 
         <template #cell:prodi="{ row }">
             {{ row.prodi ?? '—' }}
+        </template>
+
+        <template #cell:enrollment_status="{ row }">
+            <StatusBadge :value="row.enrollment_status" />
         </template>
 
         <template #cell:status="{ row }">
@@ -329,7 +364,18 @@ const exportMahasiswa = () => {
 
             <div>
                 <label class="label">Kelas</label>
-                <input v-model="form.kelas" type="text" class="input" />
+                <select
+                    v-model="form.kelas_id"
+                    class="input"
+                    :disabled="!isMahasiswaRole"
+                    @change="form.semester = semesterFollows || form.semester"
+                >
+                    <option value="">— Tidak ada —</option>
+                    <option v-for="k in kelasOptions" :key="k.id" :value="k.id">{{ k.label }}</option>
+                </select>
+                <p v-if="!isMahasiswaRole" class="mt-1 text-xs text-slate-400">
+                    Kelas hanya berlaku untuk role Mahasiswa.
+                </p>
             </div>
             <div class="grid grid-cols-2 gap-3">
                 <div>
@@ -338,9 +384,17 @@ const exportMahasiswa = () => {
                 </div>
                 <div>
                     <label class="label">Semester</label>
-                    <input v-model="form.semester" type="number" class="input" />
+                    <input
+                        v-model="form.semester"
+                        type="number"
+                        class="input"
+                        :placeholder="semesterFollows ? `Mengikuti kelas: ${semesterFollows}` : ''"
+                    />
                 </div>
             </div>
+            <p v-if="selectedKelas" class="text-xs text-emerald-600">
+                Semester mengikuti kelas {{ selectedKelas.label }}: {{ semesterFollows }}
+            </p>
         </form>
 
         <template #footer>
@@ -359,6 +413,12 @@ const exportMahasiswa = () => {
         @confirm="doDelete"
         @cancel="confirmState.show = false"
     />
+
+    <!-- Preview foto wajah terdaftar -->
+    <Modal :show="!!previewWajah" max-width="md" :title="`Foto Wajah — ${previewWajahNama}`" @close="previewWajah = null">
+        <img v-if="previewWajah" :src="previewWajah" alt="" class="w-full rounded-xl" />
+        <p class="mt-2 text-xs text-slate-400">URL foto privat &amp; kedaluwarsa otomatis (10 menit) — muat ulang halaman untuk tautan baru.</p>
+    </Modal>
 
     <!-- Import mahasiswa modal -->
     <Modal :show="showImport" title="Import Mahasiswa (Excel)" max-width="lg" @close="showImport = false">

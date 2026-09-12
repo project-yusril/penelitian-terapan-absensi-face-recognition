@@ -120,37 +120,42 @@ class ReportController extends Controller
 
     private function byMataKuliah(User $actor, int $mkId): array
     {
-        $mk = $this->authorization->scopeMataKuliahs(
-            MataKuliah::with('mahasiswas:id,nama,nim,kelas'),
-            $actor,
-        )->findOrFail($mkId);
+        $mk = $this->authorization->scopeMataKuliahs(MataKuliah::query(), $actor)->findOrFail($mkId);
 
-        $rows = $mk->mahasiswas->map(function ($mhs) use ($actor, $mk) {
-            $stats = $this->authorization->scopeAttendances(Attendance::query(), $actor)
-                ->where('user_id', $mhs->id)
-                ->where('mata_kuliah_id', $mk->id)
-                ->selectRaw("
-                    COUNT(*) as total,
-                    SUM(CASE WHEN status = 'hadir' THEN 1 ELSE 0 END) as hadir,
-                    SUM(CASE WHEN status = 'hadir_terlambat' THEN 1 ELSE 0 END) as terlambat,
-                    SUM(CASE WHEN status = 'alpha' THEN 1 ELSE 0 END) as alpha,
-                    SUM(CASE WHEN status IN ('izin','sakit') THEN 1 ELSE 0 END) as izin_sakit
-                ")->first();
-            $total = (int) ($stats->total ?? 0);
-            $hadirEf = (int) ($stats->hadir ?? 0) + (int) ($stats->terlambat ?? 0);
+        // RENCANA 2: peserta MK = mahasiswa dari kelas yang mengampu MK ini.
+        $kelasIds = $mk->jadwals()->pluck('kelas_id')->filter()->unique()->values();
+        $rows = $kelasIds->isEmpty()
+            ? collect()
+            : User::whereHas('mahasiswaKelas', fn ($q) => $q->whereIn('kelas_id', $kelasIds))
+                ->select('users.id', 'users.nama', 'users.nim', 'users.kelas')
+                ->orderBy('users.nama')
+                ->get()
+                ->map(function ($mhs) use ($actor, $mk) {
+                    $stats = $this->authorization->scopeAttendances(Attendance::query(), $actor)
+                        ->where('user_id', $mhs->id)
+                        ->where('mata_kuliah_id', $mk->id)
+                        ->selectRaw("
+                            COUNT(*) as total,
+                            SUM(CASE WHEN status = 'hadir' THEN 1 ELSE 0 END) as hadir,
+                            SUM(CASE WHEN status = 'hadir_terlambat' THEN 1 ELSE 0 END) as terlambat,
+                            SUM(CASE WHEN status = 'alpha' THEN 1 ELSE 0 END) as alpha,
+                            SUM(CASE WHEN status IN ('izin','sakit') THEN 1 ELSE 0 END) as izin_sakit
+                        ")->first();
+                    $total = (int) ($stats->total ?? 0);
+                    $hadirEf = (int) ($stats->hadir ?? 0) + (int) ($stats->terlambat ?? 0);
 
-            return [
-                'nama' => $mhs->nama,
-                'nim' => $mhs->nim,
-                'kelas' => $mhs->kelas,
-                'total' => $total,
-                'hadir' => (int) ($stats->hadir ?? 0),
-                'terlambat' => (int) ($stats->terlambat ?? 0),
-                'alpha' => (int) ($stats->alpha ?? 0),
-                'izin_sakit' => (int) ($stats->izin_sakit ?? 0),
-                'persentase' => $total > 0 ? round($hadirEf / $total * 100, 1) : 0,
-            ];
-        })->values();
+                    return [
+                        'nama' => $mhs->nama,
+                        'nim' => $mhs->nim,
+                        'kelas' => $mhs->kelas,
+                        'total' => $total,
+                        'hadir' => (int) ($stats->hadir ?? 0),
+                        'terlambat' => (int) ($stats->terlambat ?? 0),
+                        'alpha' => (int) ($stats->alpha ?? 0),
+                        'izin_sakit' => (int) ($stats->izin_sakit ?? 0),
+                        'persentase' => $total > 0 ? round($hadirEf / $total * 100, 1) : 0,
+                    ];
+                })->values();
 
         return [
             'type' => 'mata_kuliah',
@@ -165,11 +170,16 @@ class ReportController extends Controller
     {
         $mhs = $this->authorization->scopeUsers(User::with('prodi:id,nama'), $actor)->findOrFail($userId);
 
-        // Rekap per mata kuliah yang diikuti mahasiswa ini.
-        $mataKuliahs = $this->authorization->scopeMataKuliahs(
-            MataKuliah::whereHas('mahasiswas', fn ($query) => $query->whereKey($mhs->id)),
-            $actor,
-        )->get();
+        // Rekap per mata kuliah yang diikuti mahasiswa (RENCANA 2: dari kelas aktif).
+        $kelasIds = $mhs->mahasiswaKelas()
+            ->whereHas('semester', fn ($q) => $q->where('status', 'aktif'))
+            ->pluck('kelas_id');
+        $mataKuliahs = $kelasIds->isEmpty()
+            ? collect()
+            : $this->authorization->scopeMataKuliahs(
+                MataKuliah::whereHas('jadwals', fn ($q) => $q->whereIn('kelas_id', $kelasIds)),
+                $actor,
+            )->get();
         $rows = $mataKuliahs->map(function ($mk) use ($actor, $mhs) {
             $stats = $this->authorization->scopeAttendances(Attendance::query(), $actor)
                 ->where('user_id', $mhs->id)

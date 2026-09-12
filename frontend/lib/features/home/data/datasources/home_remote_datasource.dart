@@ -31,7 +31,13 @@ class HomeRemoteDataSourceImpl implements HomeRemoteDataSource {
 
   JadwalHariIni _parseJadwal(Map<String, dynamic> json) {
     final mataKuliah = json['mata_kuliah'] as Map<String, dynamic>?;
-    final dosen = mataKuliah?['dosen'] as Map<String, dynamic>?;
+    // RENCANA 2: dosen kini di-plot per jadwal (`jadwals.dosen_id`), bukan di
+    // mata_kuliah. Baca dari level jadwal dulu; fallback ke mata_kuliah untuk
+    // kompatibilitas dengan payload lama.
+    final dosen =
+        (json['dosen'] as Map<String, dynamic>?) ??
+        (mataKuliah?['dosen'] as Map<String, dynamic>?);
+    final kelas = json['kelas'] as Map<String, dynamic>?;
     final geofence = json['geofence'] as Map<String, dynamic>?;
     final window = json['window'] as Map<dynamic, dynamic>?;
     final eligibility = json['eligibility'] as Map<dynamic, dynamic>?;
@@ -40,6 +46,8 @@ class HomeRemoteDataSourceImpl implements HomeRemoteDataSource {
       mataKuliahId: _toInt(json['mata_kuliah_id']),
       mataKuliah: mataKuliah?['nama']?.toString() ?? '',
       dosen: dosen?['nama']?.toString() ?? '',
+      // RENCANA 2: kelas master ("4B") tersedia di level jadwal.
+      kelas: kelas == null ? null : kelasLabelFromJson(kelas),
       hari: json['hari'] ?? '',
       jamMulai: json['jam_mulai'] ?? '',
       jamSelesai: json['jam_selesai'] ?? '',

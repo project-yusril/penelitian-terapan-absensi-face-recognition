@@ -166,8 +166,10 @@ class _AttendancePageState extends State<AttendancePage>
   }
 
   Future<void> _validateLocation() async {
+    _attemptId = _attempts.begin();
     setState(() {
       _isValidating = true;
+      _locationValid = false;
       _statusMessage = 'Memeriksa lokasi...';
       _mockLocationDetected = false;
     });
@@ -176,11 +178,7 @@ class _AttendancePageState extends State<AttendancePage>
       // L-03: cek mock GPS (akan dicek lagi sebelum submit untuk amankan offline)
       final isMockLocation = await SafeDevice.isMockLocation;
       if (isMockLocation) {
-        setState(() {
-          _mockLocationDetected = true;
-          _isValidating = false;
-          _statusMessage = 'Terdeteksi manipulasi lokasi!';
-        });
+        _blockMockLocation();
         return;
       }
 
@@ -201,6 +199,18 @@ class _AttendancePageState extends State<AttendancePage>
           accuracy: LocationAccuracy.high,
         ),
       );
+
+      // SafeDevice dapat mengembalikan false bila listener native-nya belum
+      // menerima fix pertama. Setelah posisi tersedia, gabungkan pemeriksaan
+      // ulang itu dengan flag `Location.isMock()` yang dibawa Geolocator.
+      final deviceMockDetected = await SafeDevice.isMockLocation;
+      if (AttendanceLocationService.isMockDetected(
+        positionIsMocked: _currentPosition!.isMocked,
+        deviceMockDetected: deviceMockDetected,
+      )) {
+        _blockMockLocation();
+        return;
+      }
 
       _distanceToGeofence = LocationUtils.haversineDistance(
         _currentPosition!.latitude,
@@ -248,6 +258,15 @@ class _AttendancePageState extends State<AttendancePage>
   }
 
   Future<void> _initCamera() async {
+    final previousController = _cameraController;
+    if (previousController != null) {
+      await _cameraCommands.run(previousController.dispose);
+      if (_cameraController == previousController) {
+        _cameraController = null;
+      }
+      if (!mounted || !_lifecycleActive) return;
+    }
+
     final cameras = await availableCameras();
     final frontCamera = cameras.firstWhere(
       (c) => c.lensDirection == CameraLensDirection.front,
@@ -555,6 +574,11 @@ class _AttendancePageState extends State<AttendancePage>
         },
       );
     } catch (e, stack) {
+      if (e is AttendanceLocationException &&
+          e.code == 'mock_location_detected') {
+        _blockMockLocation();
+        return;
+      }
       _failSubmission(
         'Lokasi terbaru tidak valid: $e',
         error: e,
@@ -682,13 +706,34 @@ class _AttendancePageState extends State<AttendancePage>
     }
   }
 
+  void _blockMockLocation() {
+    if (!mounted) return;
+    _attempts.cancel();
+    _continuity.reset();
+    _livenessService.reset();
+    unawaited(_stopImageStream());
+    setState(() {
+      _mockLocationDetected = true;
+      _locationValid = false;
+      _isValidating = false;
+      _isCameraInitialized = false;
+      _currentStep = 0;
+      _livenessPassed = false;
+      _statusMessage = 'Terdeteksi manipulasi lokasi!';
+    });
+  }
+
   /// Batalkan pengiriman dan kembalikan alur ke tahap liveness.
   ///
   /// Selalu mencatat alasannya. Sebelumnya fungsi ini hanya mengganti pesan di
   /// layar lalu diam, sehingga siklus "verifikasi berhasil → gagal kirim →
   /// ulangi" berputar tanpa meninggalkan satu baris log pun — dari luar
   /// tampak seperti aplikasi menggantung, padahal ada kegagalan berulang.
-  void _failSubmission(String message, {Object? error, StackTrace? stackTrace}) {
+  void _failSubmission(
+    String message, {
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
     _log.error(
       'pengiriman absensi dibatalkan',
       data: {
@@ -952,17 +997,17 @@ class _AttendancePageState extends State<AttendancePage>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _readoutItem(
-            'Jarak',
-            '${_distanceToGeofence.toStringAsFixed(0)} m',
-          ),
+          _readoutItem('Jarak', '${_distanceToGeofence.toStringAsFixed(0)} m'),
           Container(
             width: 1,
             height: 28,
             margin: const EdgeInsets.symmetric(horizontal: 14),
             color: Colors.white24,
           ),
-          _readoutItem('Radius', '${widget.geofenceRadius.toStringAsFixed(0)} m'),
+          _readoutItem(
+            'Radius',
+            '${widget.geofenceRadius.toStringAsFixed(0)} m',
+          ),
           Container(
             width: 1,
             height: 28,

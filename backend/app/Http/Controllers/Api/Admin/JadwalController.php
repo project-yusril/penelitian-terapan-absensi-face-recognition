@@ -11,10 +11,14 @@ class JadwalController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Jadwal::with(['mataKuliah.dosen', 'mataKuliah.prodi', 'geofence']);
+        $query = Jadwal::with(['mataKuliah.prodi', 'kelas:id,tingkat,nama', 'dosen:id,nama', 'geofence']);
 
         if ($request->filled('mata_kuliah_id')) {
             $query->where('mata_kuliah_id', $request->mata_kuliah_id);
+        }
+
+        if ($request->filled('kelas_id')) {
+            $query->where('kelas_id', $request->kelas_id);
         }
 
         if ($request->filled('hari')) {
@@ -29,9 +33,9 @@ class JadwalController extends Controller
             $query->where('status', $request->status);
         }
 
-        // Filter by dosen
+        // Filter by dosen (RENCANA 2: kolom jadwals.dosen_id).
         if ($request->filled('dosen_id')) {
-            $query->whereHas('mataKuliah', fn ($q) => $q->where('dosen_id', $request->dosen_id));
+            $query->where('dosen_id', $request->dosen_id);
         }
 
         // Filter by prodi
@@ -48,7 +52,7 @@ class JadwalController extends Controller
 
     public function show(Request $request, int $id): JsonResponse
     {
-        $jadwal = Jadwal::with(['mataKuliah.dosen', 'mataKuliah.prodi', 'geofence'])->findOrFail($id);
+        $jadwal = Jadwal::with(['mataKuliah.prodi', 'kelas:id,tingkat,nama', 'dosen:id,nama', 'geofence'])->findOrFail($id);
 
         return $this->success($jadwal);
     }
@@ -57,6 +61,8 @@ class JadwalController extends Controller
     {
         $request->validate([
             'mata_kuliah_id' => 'required|exists:mata_kuliahs,id',
+            'kelas_id' => 'required|exists:kelas,id',
+            'dosen_id' => 'nullable|exists:users,id',
             'geofence_id' => 'required|exists:geofences,id',
             'hari' => 'required|in:Senin,Selasa,Rabu,Kamis,Jumat,Sabtu',
             'jam_mulai' => 'required|date_format:H:i',
@@ -65,22 +71,13 @@ class JadwalController extends Controller
             'status' => 'nullable|in:aktif,nonaktif',
         ]);
 
-        // Cek bentrok ruangan
-        // Overlap interval setengah terbuka: [start, end). Jadwal back-to-back
-        // (08:00-09:00 dan 09:00-10:00) tidak dianggap bentrok.
-        $bentrok = Jadwal::where('geofence_id', $request->geofence_id)
-            ->where('hari', $request->hari)
-            ->where('status', 'aktif')
-            ->where('jam_mulai', '<', $request->jam_selesai)
-            ->where('jam_selesai', '>', $request->jam_mulai)
-            ->exists();
+        $this->assertNoConflict($request, null);
 
-        if ($bentrok) {
-            return $this->error('Jadwal bentrok dengan jadwal lain di lokasi yang sama', 422);
-        }
-
-        $jadwal = Jadwal::create($request->all());
-        $jadwal->load(['mataKuliah.dosen', 'geofence']);
+        $jadwal = Jadwal::create($request->only([
+            'mata_kuliah_id', 'kelas_id', 'dosen_id', 'geofence_id',
+            'hari', 'jam_mulai', 'jam_selesai', 'ruangan', 'status',
+        ]));
+        $jadwal->load(['mataKuliah', 'kelas:id,tingkat,nama', 'dosen:id,nama', 'geofence']);
 
         return $this->created($jadwal, 'Jadwal berhasil dibuat');
     }
@@ -91,6 +88,8 @@ class JadwalController extends Controller
 
         $request->validate([
             'mata_kuliah_id' => 'sometimes|exists:mata_kuliahs,id',
+            'kelas_id' => 'sometimes|exists:kelas,id',
+            'dosen_id' => 'sometimes|nullable|exists:users,id',
             'geofence_id' => 'sometimes|exists:geofences,id',
             'hari' => 'sometimes|in:Senin,Selasa,Rabu,Kamis,Jumat,Sabtu',
             'jam_mulai' => 'sometimes|date_format:H:i',
@@ -99,37 +98,33 @@ class JadwalController extends Controller
             'status' => 'sometimes|in:aktif,nonaktif',
         ]);
 
-        // Cek bentrok jika ada perubahan waktu/lokasi
-        if ($request->hasAny(['geofence_id', 'hari', 'jam_mulai', 'jam_selesai'])) {
-            $geofenceId = $request->geofence_id ?? $jadwal->geofence_id;
-            $hari = $request->hari ?? $jadwal->hari;
-            $jamMulai = $request->jam_mulai ?? $jadwal->jam_mulai;
-            $jamSelesai = $request->jam_selesai ?? $jadwal->jam_selesai;
+        // Cek bentrok jika ada perubahan waktu/lokasi/dosen/kelas
+        if ($request->hasAny(['kelas_id', 'dosen_id', 'ruangan', 'geofence_id', 'hari', 'jam_mulai', 'jam_selesai'])) {
+            $payload = array_merge([
+                'kelas_id' => $jadwal->kelas_id,
+                'dosen_id' => $jadwal->dosen_id,
+                'ruangan' => $jadwal->ruangan,
+                'geofence_id' => $jadwal->geofence_id,
+                'hari' => $jadwal->hari,
+                'jam_mulai' => $jadwal->jam_mulai,
+                'jam_selesai' => $jadwal->jam_selesai,
+            ], $request->only(['kelas_id', 'dosen_id', 'ruangan', 'geofence_id', 'hari', 'jam_mulai', 'jam_selesai']));
 
             // Update parsial dapat menghasilkan rentang terbalik ketika hanya
             // salah satu jam dikirim, sehingga urutan divalidasi terhadap nilai
             // efektif, bukan hanya terhadap payload.
-            if (strtotime((string) $jamSelesai) <= strtotime((string) $jamMulai)) {
+            if (strtotime((string) $payload['jam_selesai']) <= strtotime((string) $payload['jam_mulai'])) {
                 return $this->error('Jam selesai harus setelah jam mulai', 422);
             }
 
-            // Overlap interval setengah terbuka: [start, end). Jadwal back-to-back
-            // tidak dianggap bentrok.
-            $bentrok = Jadwal::where('geofence_id', $geofenceId)
-                ->where('hari', $hari)
-                ->where('id', '!=', $jadwal->id)
-                ->where('status', 'aktif')
-                ->where('jam_mulai', '<', $jamSelesai)
-                ->where('jam_selesai', '>', $jamMulai)
-                ->exists();
-
-            if ($bentrok) {
-                return $this->error('Jadwal bentrok dengan jadwal lain di lokasi yang sama', 422);
-            }
+            $this->assertNoConflict((object) $payload, $jadwal->id);
         }
 
-        $jadwal->update($request->all());
-        $jadwal->load(['mataKuliah.dosen', 'geofence']);
+        $jadwal->update($request->only([
+            'mata_kuliah_id', 'kelas_id', 'dosen_id', 'geofence_id',
+            'hari', 'jam_mulai', 'jam_selesai', 'ruangan', 'status',
+        ]));
+        $jadwal->load(['mataKuliah', 'kelas:id,tingkat,nama', 'dosen:id,nama', 'geofence']);
 
         return $this->success($jadwal, 'Jadwal berhasil diperbarui');
     }
@@ -145,5 +140,36 @@ class JadwalController extends Controller
         $jadwal->delete();
 
         return $this->success(message: 'Jadwal berhasil dihapus');
+    }
+
+    /**
+     * Phase 3.6: anti-bentrok — dosen/kelas/ruangan yang sama di hari & jam
+     * yang sama ditolak. Interval setengah terbuka [start, end): jadwal
+     * back-to-back tidak dianggap bentrok.
+     */
+    private function assertNoConflict(object $payload, ?int $ignoreId): void
+    {
+        $overlap = fn ($q) => $q
+            ->where('hari', $payload->hari)
+            ->where('status', 'aktif')
+            ->where('jam_mulai', '<', $payload->jam_selesai)
+            ->where('jam_selesai', '>', $payload->jam_mulai)
+            ->when($ignoreId, fn ($q2) => $q2->whereKeyNot($ignoreId));
+
+        $checks = [];
+        if (! empty($payload->dosen_id)) {
+            $checks['dosen'] = Jadwal::where('dosen_id', $payload->dosen_id)->where($overlap)->exists();
+        }
+        if (! empty($payload->kelas_id)) {
+            $checks['kelas'] = Jadwal::where('kelas_id', $payload->kelas_id)->where($overlap)->exists();
+        }
+        if (! empty($payload->ruangan)) {
+            $checks['ruangan'] = Jadwal::where('ruangan', $payload->ruangan)->where($overlap)->exists();
+        }
+
+        $bentrok = collect($checks)->filter()->keys();
+        if ($bentrok->isNotEmpty()) {
+            abort(422, 'Jadwal bentrok: '.$bentrok->map(fn ($k) => ucfirst($k))->implode(', ').' sudah terisi di hari & jam tersebut.');
+        }
     }
 }

@@ -84,19 +84,21 @@
 
 Ambang ini adalah default `prodi_settings` dan sama dengan `AppConstants` mobile. Detail runtime lain lihat [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md).
 
-### Keputusan Canonical Terkini (11 Agustus 2026)
+### Keputusan Canonical Terkini (11 Agustus 2026; diperbarui 20 Agustus 2026 — RENCANA 2)
 - Face match: `face_distance <= face_threshold` di mobile, backend, dan analisis (L-08/R-04).
 - Baseline GPS accuracy minimum: 20 m (`prodi_settings.gps_accuracy_minimum`, seeder, `AppConstants`).
 - Analisis geofence: success rate dari `checkin_success`/`checkin_failed`, bukan `geofence_valid` (R-01).
 - Lifecycle master historis: FK `ON DELETE RESTRICT` + arsip soft delete (M-19); invariant domain ditegakkan database (M-20).
 - Session cookie production fail-closed; throttle login/TOTP; revocation sesi lain saat ganti password (M-21).
 - Rate limit: group API terautentikasi memakai `throttle:api` 60/menit **per user**, `POST /auth/change-password` memakai `throttle:auth-sensitive` 5/menit per user. Keying per user, bukan per IP, agar NAT kampus tidak saling mengunci (M-23).
-- Authorization: matriks role/permission/prodi canonical ada di [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md); enforcement tiga lapis (guard role, object policy, query scope) dan filter request hanya boleh mempersempit scope (H-21/MS-01).
+- Authorization: matriks role/permission/prodi canonical ada di ROLE-PERMISSION-MATRIX.md; enforcement tiga lapis (guard role, object policy, query scope) dan filter request hanya boleh mempersempit scope (H-21/MS-01).
 - Dataset analisis penelitian: `prodi_id` mempersempit dataset — bukan hanya memilih threshold — dengan atribusi prodi subjek (`users.prodi_id`), dan endpoint analisis memakai scope aktor sehingga role tingkat prodi tidak dapat membaca prodi lain (R-04/M-24).
-- Attendance/enrollment production fail-closed. Trusted verifier (C-04/H-04) di luar scope penelitian; [ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak, residual risk diterima.
+- Attendance/enrollment production fail-closed. Trusted verifier (C-04/H-04) di luar scope penelitian; ADR-001 ditolak, residual risk diterima.
 - Platform mobile release Android-only; iOS tidak didukung (H-17).
 - FCM lifecycle tersedia sebagai explicit opt-in; default release off (L-02).
 - Workflow Backend/Frontend CI sudah didefinisikan; remote enforcement/evidence masih mengikuti L-09.
+- **RENCANA 2 (kelas master, 20 Agustus 2026):** mata kuliah = master kurikulum (tanpa `kelas`/`dosen_id`); dosen & kelas di-plot per jadwal (`jadwals.dosen_id`/`kelas_id`); KRS diturunkan dari `mahasiswa_kelas` → kelas → jadwal; pivot `mahasiswa_mata_kuliah` dihapus; `users.kelas`/`semester` = snapshot. Unik: `mata_kuliahs(kode_mk, semester_id, prodi_id)`, `kelas(prodi_id, semester_id, tingkat, nama)`, `mahasiswa_kelas(user_id, semester_id)`. Detail & verifikasi: rencana2.md, CURRENT-ARCHITECTURE.md → "Struktur Data Akademik", CURRENT-API.md → "Perubahan Kontrak RENCANA 2".
+- **Pembersihan data (12 September 2026):** semester aktif `2026/2027-1` memuat kelas 1A–1E, 3A–3E, 5A–5E; kelas 1A–1E di semester genap 2025/2026 hasil seeding keliru dihapus beserta pivotnya (100% duplikat angkatan 2026, tanpa jadwal/attendance). Arsip genap 2025/2026 hanya 4A–4E (62 attendance riwayat). State data lengkap: CURRENT-ARCHITECTURE.md → "State Data Terkini".
 
 ### Flow Absensi
 ```

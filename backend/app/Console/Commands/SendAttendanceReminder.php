@@ -20,14 +20,12 @@ class SendAttendanceReminder extends Command
         $currentTime = Carbon::now()->format('H:i:s');
 
         // Cari jadwal yang mulai dalam 15 menit ke depan
-        $jadwals = Jadwal::with(['mataKuliah.mahasiswas'])
+        $jadwals = Jadwal::with(['mataKuliah', 'kelas.mahasiswaKelas.user'])
             ->where('hari', $hariIni)
             ->where('status', 'aktif')
             ->where('jam_mulai', '>', $currentTime)
             ->where('jam_mulai', '<=', $targetTime)
             ->get();
-
-        $totalSent = 0;
 
         foreach ($jadwals as $jadwal) {
             $mk = $jadwal->mataKuliah;
@@ -35,7 +33,11 @@ class SendAttendanceReminder extends Command
                 continue;
             }
 
-            $mahasiswas = $mk->mahasiswas;
+            // RENCANA 2: reminder ke mahasiswa dari kelas pada jadwal ini.
+            $mahasiswas = $jadwal->kelas?->mahasiswaKelas
+                ->map(fn ($mk2) => $mk2->user)
+                ->filter()
+                ->values();
 
             foreach ($mahasiswas as $mhs) {
                 // Cek apakah sudah pernah kirim reminder hari ini untuk jadwal ini

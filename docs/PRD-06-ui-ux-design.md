@@ -221,7 +221,7 @@ Shadows:
 │                                                     │
 │  ┌─── Menu ──────────────────────────────────────┐  │
 │  │                                                │  │
-│  │  📷 Enrollment Wajah                          │  │
+│  │  ���· Enrollment Wajah                          │  │
 │  │     Status: ✅ Approved                       │  │
 │  │     [Request Re-enrollment]                   │  │
 │  │                                                │  │

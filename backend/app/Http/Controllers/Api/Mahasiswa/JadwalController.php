@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api\Mahasiswa;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\Jadwal;
+use App\Models\User;
 use App\Services\AttendancePolicyService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -13,17 +15,29 @@ use Illuminate\Support\Carbon;
 class JadwalController extends Controller
 {
     /**
+     * RENCANA 2: KRS mahasiswa diturunkan dari pivot `mahasiswa_kelas`
+     * (kelas aktif) → jadwal kelas tersebut. Bukan lagi dari `users.kelas`
+     * atau pivot `mahasiswa_mata_kuliah`.
+     */
+    private function scheduleQueryFor(User $user): Builder
+    {
+        $kelasIds = $user->mahasiswaKelas()
+            ->whereHas('semester', fn ($q) => $q->where('status', 'aktif'))
+            ->pluck('kelas_id');
+
+        return Jadwal::with(['mataKuliah', 'kelas:id,tingkat,nama', 'dosen:id,nama', 'geofence'])
+            ->whereIn('kelas_id', $kelasIds)
+            ->where('status', 'aktif');
+    }
+
+    /**
      * Semua jadwal mahasiswa di semester aktif
      */
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
 
-        $mataKuliahIds = $user->mataKuliahs()->pluck('mata_kuliahs.id');
-
-        $jadwals = Jadwal::with(['mataKuliah.dosen', 'geofence'])
-            ->whereIn('mata_kuliah_id', $mataKuliahIds)
-            ->where('status', 'aktif')
+        $jadwals = $this->scheduleQueryFor($user)
             ->orderByRaw("FIELD(hari, 'Senin','Selasa','Rabu','Kamis','Jumat','Sabtu')")
             ->orderBy('jam_mulai')
             ->get();
@@ -42,12 +56,8 @@ class JadwalController extends Controller
         $user = $request->user();
         $hariIni = Carbon::now()->locale('id')->isoFormat('dddd');
 
-        $mataKuliahIds = $user->mataKuliahs()->pluck('mata_kuliahs.id');
-
-        $jadwals = Jadwal::with(['mataKuliah.dosen', 'geofence'])
-            ->whereIn('mata_kuliah_id', $mataKuliahIds)
+        $jadwals = $this->scheduleQueryFor($user)
             ->where('hari', $hariIni)
-            ->where('status', 'aktif')
             ->orderBy('jam_mulai')
             ->get();
 
@@ -106,12 +116,8 @@ class JadwalController extends Controller
         $hariIni = Carbon::now()->locale('id')->isoFormat('dddd');
         $now = Carbon::now()->format('H:i:s');
 
-        $mataKuliahIds = $user->mataKuliahs()->pluck('mata_kuliahs.id');
-
-        $jadwals = Jadwal::with(['mataKuliah.dosen', 'geofence'])
-            ->whereIn('mata_kuliah_id', $mataKuliahIds)
+        $jadwals = $this->scheduleQueryFor($user)
             ->where('hari', $hariIni)
-            ->where('status', 'aktif')
             ->where('jam_mulai', '<=', $now)
             ->where('jam_selesai', '>=', $now)
             ->get();

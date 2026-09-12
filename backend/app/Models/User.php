@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -124,14 +126,48 @@ class User extends Authenticatable
             ->withPivot('hubungan');
     }
 
-    public function mataKuliahs(): BelongsToMany
+    /**
+     * RENCANA 2: relasi baru lewat tabel pivot `mahasiswa_kelas`.
+     */
+    public function mahasiswaKelas(): HasMany
     {
-        return $this->belongsToMany(MataKuliah::class, 'mahasiswa_mata_kuliah');
+        return $this->hasMany(MahasiswaKelas::class);
     }
 
-    public function dosenMataKuliahs(): HasMany
+    /**
+     * RENCANA 2: pivot kelas di semester AKTIF — sumber kelas "saat ini".
+     * Snapshot `users.kelas` tetap dipakai untuk display cepat & kompatibilitas
+     * mobile, tetapi relasi ini adalah kebenaran kanonikal.
+     */
+    public function kelasAktif(): HasOne
     {
-        return $this->hasMany(MataKuliah::class, 'dosen_id');
+        return $this->hasOne(MahasiswaKelas::class)
+            ->whereHas('semester', fn ($q) => $q->where('status', 'aktif'))
+            ->with('kelas')
+            ->latestOfMany();
+    }
+
+    public function kelas(): BelongsToMany
+    {
+        return $this->belongsToMany(Kelas::class, 'mahasiswa_kelas', 'user_id', 'kelas_id')
+            ->withPivot('semester_id');
+    }
+
+    /**
+     * RENCANA 2: mata kuliah mahasiswa diturunkan dari kelas -> jadwal.
+     */
+    public function mataKuliahViaKelas(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            MataKuliah::class,
+            MahasiswaKelas::class,
+            'user_id',
+            'id',
+            'id',
+            'mata_kuliah_id'
+        )->whereHas('jadwals', function ($query) {
+            $query->whereColumn('jadwals.kelas_id', 'mahasiswa_kelas.kelas_id');
+        });
     }
 
     public function reEnrollmentRequests(): HasMany

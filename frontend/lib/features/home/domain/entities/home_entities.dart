@@ -5,6 +5,9 @@ class JadwalHariIni extends Equatable {
   final int mataKuliahId;
   final String mataKuliah;
   final String dosen;
+
+  /// RENCANA 2: label kelas master ("4B") dari jadwal; null bila tidak tersedia.
+  final String? kelas;
   final String hari;
   final String jamMulai;
   final String jamSelesai;
@@ -28,6 +31,7 @@ class JadwalHariIni extends Equatable {
     required this.mataKuliahId,
     required this.mataKuliah,
     required this.dosen,
+    this.kelas,
     required this.hari,
     required this.jamMulai,
     required this.jamSelesai,
@@ -85,8 +89,7 @@ class JadwalHariIni extends Equatable {
 
   /// Tidak hadir: sudah ditandai alpha, atau jamnya lewat tanpa absensi.
   bool get isMissed =>
-      attendanceStatus == 'alpha' ||
-      (hasEnded && !isCheckedIn && !isExcused);
+      attendanceStatus == 'alpha' || (hasEnded && !isCheckedIn && !isExcused);
 
   /// Berhalangan dengan izin resmi.
   bool get isExcused =>
@@ -113,6 +116,16 @@ class JadwalHariIni extends Equatable {
 }
 
 DateTime? _noAnchoredTime() => null;
+
+/// Label kelas master dari objek relasi `kelas` ({id, tingkat, nama}).
+///
+/// Dipakai juga oleh datasource home untuk parsing `jadwal.kelas`.
+String? kelasLabelFromJson(Map<String, dynamic> kelas) {
+  final tingkat = kelas['tingkat']?.toString() ?? '';
+  final nama = kelas['nama']?.toString() ?? '';
+  if (tingkat.isEmpty && nama.isEmpty) return null;
+  return '$tingkat$nama';
+}
 
 class AttendanceSummary extends Equatable {
   final int totalHadir;

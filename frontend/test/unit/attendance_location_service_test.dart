@@ -75,6 +75,30 @@ void main() {
     expect(policy.accepts(accuracy: double.nan, ageMs: 0), isFalse);
   });
 
+  test('mock detection combines the native fix and device signals', () {
+    expect(
+      AttendanceLocationService.isMockDetected(
+        positionIsMocked: true,
+        deviceMockDetected: false,
+      ),
+      isTrue,
+    );
+    expect(
+      AttendanceLocationService.isMockDetected(
+        positionIsMocked: false,
+        deviceMockDetected: true,
+      ),
+      isTrue,
+    );
+    expect(
+      AttendanceLocationService.isMockDetected(
+        positionIsMocked: false,
+        deviceMockDetected: false,
+      ),
+      isFalse,
+    );
+  });
+
   test('service uses injectable provider and monotonic age', () async {
     var ticks = Duration.zero;
     final provider = _Provider();
@@ -134,7 +158,9 @@ void main() {
   // dibandingkan dengan batas jam server.
   test('accepts a valid fix even when the device clock is skewed', () async {
     for (final skew in [
-      const Duration(seconds: 3), // HP lebih cepat — kasus nyata di perangkat uji
+      const Duration(
+        seconds: 3,
+      ), // HP lebih cepat — kasus nyata di perangkat uji
       const Duration(seconds: -3), // HP lebih lambat
     ]) {
       final provider = _Provider()
