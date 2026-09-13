@@ -1,7 +1,7 @@
 # Deployment dan Release
 
 **Status:** maintained runbook
-**Pembaruan:** 18 Agustus 2026
+**Pembaruan:** 12 September 2026
 **Release matrix:** web/backend + Android; iOS tidak didukung
 
 ## Baseline
@@ -32,7 +32,27 @@ yang menjalankan `serve:all`, queue listener, log viewer (Pail), dan Vite sekali
 
 > **Penting:** tanpa scheduler yang hidup, `attendance:auto-close` dan `attendance:mark-absent` tidak pernah mengeksekusi sehingga status ALPHA tidak tercatat. `php artisan serve` saja **tidak cukup**; gunakan `serve:all` atau `composer dev`.
 
-## Backend Production
+## Backend Production (Live)
+
+Backend penelitian **sudah live** pada 12 September 2026 di:
+
+| Item | Nilai |
+|---|---|
+| Base URL | `https://absensi.yusrilekamahendra.com` |
+| API base | `https://absensi.yusrilekamahendra.com/api` |
+| Host | Hostinger (hPanel, PHP 8.3.33, HTTP/3 via hCDN) |
+| Liveness | `GET /api/health` → `200 {"status":"ok"}` (terverifikasi 12 September 2026) |
+| Dashboard web | `GET /` → 302 ke `/login`, cookie session `Secure`+`HttpOnly`+`SameSite=lax` aktif |
+
+Mobile terhubung ke host ini lewat `--dart-define=API_BASE_URL=https://absensi.yusrilekamahendra.com/api` (sudah diuji dari perangkat fisik Android — app boot dan mencapai halaman login). `AppConfig` menerima HTTPS apa pun tanpa allowlist, sehingga tidak ada perubahan kode untuk pindah host.
+
+Yang **belum diverifikasi** pada host live (masuk L-09 sampai ada bukti):
+
+1. Scheduler/queue worker long-running (`attendance:auto-close`, `attendance:mark-absent`, outbox, reminder) — Hostinger shared hosting memakai cron, bukan systemd; pastikan cron `schedule:run` per menit terpasang di hPanel.
+2. Mail delivery (reset/activation) dari host.
+3. `/api/healthz` tetap tidak boleh diekspos publik — batasi via hPanel/`.htaccess` bila perlu.
+
+## Backend Production (Runbook Umum)
 
 1. Install dependency dengan committed lockfiles: `composer install --no-dev --optimize-autoloader` dan `npm ci`.
 2. Buat `.env` melalui secret manager; jangan menyalin `.env` development.
@@ -58,7 +78,7 @@ Production harus menggunakan:
 ```dotenv
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=https://absensi.example.ac.id
+APP_URL=https://absensi.yusrilekamahendra.com
 APP_TIMEZONE=Asia/Pontianak
 SESSION_SECURE_COOKIE=true
 SESSION_ENCRYPT=true
@@ -96,7 +116,7 @@ Gradle juga mendukung untracked `android/key.properties` untuk build operator lo
 Build lokal:
 
 ```powershell
-flutter build appbundle --release --dart-define=API_BASE_URL=https://api.example.ac.id/api
+flutter build appbundle --release --dart-define=API_BASE_URL=https://absensi.yusrilekamahendra.com/api
 ```
 
 Verifikasi certificate signer, app startup, login, checkout navigation, offline recovery, camera, dan GPS pada physical Android device sebelum distribusi. Permit/check-in/out production tetap diblokir permanen untuk konteks penelitian (trusted verifier di luar scope — [ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak).
@@ -122,9 +142,7 @@ Analyzer warning maupun info menjadi CI failure (L-05). `android-release.yml` (m
 > environment `production`/`device-testing` protected, dan workflow manual terkait
 > berhasil. Sampai itu tersedia, L-09 tetap terbuka.
 
-Seluruh pekerjaan lokal sudah di-push ke `origin/main` pada 11 Agustus 2026
-(`5e49bfe`, `b271326`, `d46f0b1`, `13fc302`), sehingga workflow push/PR terpicu
-pada revision tersebut. **Push hanya memicu workflow, bukan membuktikan
+Seluruh pekerjaan lokal sudah di-push ke `origin/main`; push terakhir 12 September 2026 (`840082b` — test invarian guard route, runner k6 R-02, scaffold Playwright E2E, pembersihan dead code Flutter) memicu workflow push/PR. **Push hanya memicu workflow, bukan membuktikan
 hasilnya** — status green tetap harus diperiksa langsung di GitHub karena
 GitHub CLI tidak tersedia di workspace pengembangan.
 

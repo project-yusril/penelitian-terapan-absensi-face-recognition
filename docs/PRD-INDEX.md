@@ -4,9 +4,9 @@
 # Politeknik Negeri Pontianak - Jurusan Teknik Elektro
 
 ---
+**Versi**: 1.2
 
-**Versi**: 1.1
-**Tanggal**: 27 Mei 2026 (indeks); catatan canonical diperbarui 11 Agustus 2026
+**Tanggal**: 27 Mei 2026 (indeks); catatan canonical diperbarui 12 September 2026
 **Author**: Yusril Eka Mahendra, M.TI
 **Status**: Maintained requirements index; detail runtime lihat `docs/README.md`
 
@@ -99,6 +99,7 @@ Ambang ini adalah default `prodi_settings` dan sama dengan `AppConstants` mobile
 - Workflow Backend/Frontend CI sudah didefinisikan; remote enforcement/evidence masih mengikuti L-09.
 - **RENCANA 2 (kelas master, 20 Agustus 2026):** mata kuliah = master kurikulum (tanpa `kelas`/`dosen_id`); dosen & kelas di-plot per jadwal (`jadwals.dosen_id`/`kelas_id`); KRS diturunkan dari `mahasiswa_kelas` → kelas → jadwal; pivot `mahasiswa_mata_kuliah` dihapus; `users.kelas`/`semester` = snapshot. Unik: `mata_kuliahs(kode_mk, semester_id, prodi_id)`, `kelas(prodi_id, semester_id, tingkat, nama)`, `mahasiswa_kelas(user_id, semester_id)`. Detail & verifikasi: rencana2.md, CURRENT-ARCHITECTURE.md → "Struktur Data Akademik", CURRENT-API.md → "Perubahan Kontrak RENCANA 2".
 - **Pembersihan data (12 September 2026):** semester aktif `2026/2027-1` memuat kelas 1A–1E, 3A–3E, 5A–5E; kelas 1A–1E di semester genap 2025/2026 hasil seeding keliru dihapus beserta pivotnya (100% duplikat angkatan 2026, tanpa jadwal/attendance). Arsip genap 2025/2026 hanya 4A–4E (62 attendance riwayat). State data lengkap: CURRENT-ARCHITECTURE.md → "State Data Terkini".
+- **Backend live (12 September 2026):** backend penelitian berjalan di `https://absensi.yusrilekamahendra.com` (Hostinger); `GET /api/health` → 200. Mobile memakai `--dart-define=API_BASE_URL=https://absensi.yusrilekamahendra.com/api`. Scheduler/queue cron Hostinger dan mail delivery masih harus diverifikasi di host (bagian L-09). Detail: DEPLOYMENT.md → "Backend Production (Live)".
 
 ### Flow Absensi
 ```

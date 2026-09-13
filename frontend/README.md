@@ -7,8 +7,10 @@ Aplikasi Flutter Android mahasiswa untuk enrollment biometrik, attendance permit
 `API_BASE_URL` wajib diberikan saat run/build:
 
 ```powershell
-flutter run --dart-define=API_BASE_URL=https://api.example.ac.id/api
+flutter run --dart-define=API_BASE_URL=https://absensi.yusrilekamahendra.com/api
 ```
+
+Backend penelitian live di `https://absensi.yusrilekamahendra.com/api` (lihat [deployment runbook](../docs/DEPLOYMENT.md)). URL tersebut sudah diuji dari perangkat fisik Android: app boot, `AppConfig` menerima URL HTTPS, dan alur login berjalan.
 
 Release/profile hanya menerima HTTPS. Debug HTTP menerima loopback, alias emulator `10.0.2.2`, dan alamat privat RFC 1918 untuk pengujian perangkat fisik. LAN HTTP hanya boleh dipakai dengan akun/data uji pada hotspot atau router pribadi yang dipercaya karena trafik tidak terenkripsi. Panduan backend, firewall, build APK Wi-Fi, dan fallback USB tersedia di [README project](../README.md#menjalankan-aplikasi-melalui-wi-fi).
 

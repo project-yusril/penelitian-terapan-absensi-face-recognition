@@ -1,9 +1,9 @@
 # Kontrak API Saat Ini
 
 **Status:** maintained summary  
-**Pembaruan:** 18 Agustus 2026
+**Pembaruan:** 12 September 2026
 **Authority:** `backend/routes/api.php`, request validation, services, dan feature tests  
-**Base path:** `/api`
+**Base path:** `/api` — backend penelitian live di `https://absensi.yusrilekamahendra.com/api` (liveness: `GET /api/health` → `{"status":"ok"}`; detail host di [DEPLOYMENT.md](DEPLOYMENT.md))
 
 Jika contoh PRD atau task plan berbeda dari dokumen ini, executable routes/validation dan dokumen ini yang berlaku.
 
@@ -12,7 +12,7 @@ Jika contoh PRD atau task plan berbeda dari dokumen ini, executable routes/valid
 - Protected API memakai `Authorization: Bearer <sanctum-token>`.
 - Semua protected route juga memeriksa akun aktif.
 - Response validation menggunakan HTTP 422; authentication 401; authorization/status akun 403; replay/conflict 409.
-- Production wajib HTTPS. Mobile memperoleh base URL dari `--dart-define=API_BASE_URL=https://host/api`.
+- Production wajib HTTPS. Mobile memperoleh base URL dari `--dart-define=API_BASE_URL=https://absensi.yusrilekamahendra.com/api` (host live penelitian).
 
 ## Authentication
 

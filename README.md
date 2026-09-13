@@ -70,10 +70,10 @@ Dengan backend HTTPS yang dapat dijangkau perangkat:
 ```powershell
 cd frontend
 flutter pub get --enforce-lockfile
-flutter run --dart-define=API_BASE_URL=https://api.example.ac.id/api
+flutter run --dart-define=API_BASE_URL=https://absensi.yusrilekamahendra.com/api
 ```
 
-Build debug menerima HTTP untuk loopback dan alamat LAN privat; build profile/release **wajib HTTPS**. Detail alur koneksi Wi-Fi (cari IP laptop, buka firewall, build APK debug, fallback USB `adb reverse`) ada di bagian [Menjalankan Aplikasi Melalui Wi-Fi](#menjalankan-aplikasi-melalui-wi-fi) README bahasa lengkap di bawah dan di [frontend/README.md](frontend/README.md).
+Backend production penelitian live di `https://absensi.yusrilekamahendra.com` (Hostinger; `GET /api/health` → `{"status":"ok"}`). Build debug menerima HTTP untuk loopback dan alamat LAN privat; build profile/release **wajib HTTPS**. Detail alur koneksi Wi-Fi (cari IP laptop, buka firewall, build APK debug, fallback USB `adb reverse`) ada di bagian [Menjalankan Aplikasi Melalui Wi-Fi](#menjalankan-aplikasi-melalui-wi-fi) README bahasa lengkap di bawah dan di [frontend/README.md](frontend/README.md).
 
 ## Menjalankan Aplikasi Melalui Wi-Fi
 
@@ -192,7 +192,7 @@ flutter test
 flutter analyze --fatal-warnings --fatal-infos
 ```
 
-Hasil verifikasi tooling terakhir (20 Agustus 2026): backend **229 test / 862 assertion PASS**, Flutter **189 test lulus**, `flutter analyze` bersih, `npm run build` lulus, Pint tanpa style issue, 0 known vulnerability (composer & npm). Workflow CI menjalankan gate yang sama pada setiap push/PR: Backend CI (`composer validate`/`check-platform-reqs`/`audit`, npm audit/build, `php artisan test`) dan Frontend CI (`flutter analyze --fatal-warnings --fatal-infos`, `flutter test`); `android-release.yml` dan `android-device-tests.yml` manual.
+Hasil verifikasi tooling terakhir (12 September 2026): backend **235 test / 883 assertion PASS** (termasuk `RouteGuardInvariantTest` yang menegakkan guard role pada seluruh route non-publik), Flutter **192 test lulus**, `flutter analyze` bersih, Pint tanpa style issue. Workflow CI menjalankan gate yang sama pada setiap push/PR: Backend CI (`composer validate`/`check-platform-reqs`/`audit`, npm audit/build, `php artisan test`) dan Frontend CI (`flutter analyze --fatal-warnings --fatal-infos`, `flutter test`); `android-release.yml` dan `android-device-tests.yml` manual.
 
 ## Status Penelitian
 
@@ -200,7 +200,7 @@ Hasil verifikasi tooling terakhir (20 Agustus 2026): backend **229 test / 862 as
 
 - Trusted biometric verifier server-side dinyatakan **di luar scope penelitian** ([ADR-001](docs/ADR-001-trusted-biometric-verifier.md) ditolak); production mutation attendance/enrollment tetap fail-closed dan residual risk diterima serta didokumentasikan.
 - Android adalah satu-satunya target mobile release; iOS tidak didukung.
-- R-02 (load test), R-03 (metodologi FAR/FRR lapangan), dan pengambilan data lapangan asli R-05 masih terbuka; dataset uji awal (920 log) sudah dapat di-seed via `php artisan attendance:seed-analysis-data`.
+- R-02 (runner k6 tersedia di `loadtest/`, eksekusi benchmark terbuka), R-03 (metodologi FAR/FRR lapangan), dan pengambilan data lapangan asli R-05 masih terbuka; dataset uji awal (920 log) sudah dapat di-seed via `php artisan attendance:seed-analysis-data`.
 - Backlog risiko lengkap, status remediation, dan evidence: [`docs/temuan.md`](docs/temuan.md).
 
 ## Dokumentasi
@@ -231,5 +231,5 @@ Dokumen historis (task plan, analisis lama, fix log) hanya merekam kondisi pada 
 |---|---|
 | Backend | PHP 8.3, Laravel 13, Inertia 3, Vue 3, Vite 8, MySQL 8, Sanctum |
 | Mobile | Flutter 3.44 / Dart 3.12, BLoC, Dio, Hive (AES), MobileFaceNet, FCM |
-| Infra & CI | GitHub Actions (backend/frontend CI, Android release & device test), Nginx/systemd (contoh deploy) |
-| Kualitas | PHPUnit/Pest (229+ test), Flutter test (189+), Pint, `composer audit` + `npm audit`, analyzers fail-closed |
+| Infra & CI | GitHub Actions (backend/frontend CI, Android release & device test), Nginx/systemd (contoh deploy), Hostinger (hosting backend live) |
+| Kualitas | PHPUnit/Pest (235+ test), Flutter test (192+), Pint, `composer audit` + `npm audit`, analyzers fail-closed |
