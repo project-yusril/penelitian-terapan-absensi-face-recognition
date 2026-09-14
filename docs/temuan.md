@@ -532,6 +532,17 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 - Status 11 Agustus 2026: selesai. `ScopesAnalysisDataset::resolveAnalysisProdiScope` menjadi resolver canonical dan dipakai seluruh endpoint `Api\Admin\AnalysisController` serta halaman web. `super_admin` menerima `prodi_id` request apa adanya (null berarti gabungan); role tingkat prodi dipaksa ke `prodi_id` aktor, permintaan prodi lain menghasilkan 403, dan aktor tanpa `prodi_id` ditolak alih-alih jatuh ke dataset global.
 - Verifikasi: `AnalysisProdiScopeTest` menambah empat skenario — admin prodi meminta prodi lain 403, admin prodi tanpa filter dipersempit ke prodinya sendiri (FAR/FRR prodinya, bukan gabungan), admin prodi tanpa `prodi_id` 403, dan `super_admin` tetap menerima gabungan.
 
+### [M-25] Foto enrollment dikirim tanpa kompresi klien dan batas server 500 KB terlalu ketat
+
+- Ditemukan 14 September 2026 dari laporan kegagalan enrollment di lapangan: "Validation failed (HTTP 422) foto: [The foto field must not be greater than 500 kilobytes.]".
+- Bukti: `takePicture()` kamera (`ResolutionPreset.high`) menghasilkan JPEG ukuran penuh (2–8 MB pada HP modern); `TemporaryCaptureProcessor` membaca file apa adanya dan `FaceBloc._onSubmitEnrollment` mengirim byte itu tanpa resize/kompresi, sedangkan `EnrollmentController::store` dan `requestReEnrollment` memvalidasi `foto|max:500`. Kompresi EXIF bake (R-04/FIX BUG MATCHING) hanya untuk crop embedding, tidak menyentuh payload yang dikirim.
+- Dampak: enrollment gagal persisten pada kamera resolusi tinggi (itel A665L terdampak); mahasiswa tidak bisa mendaftar sama sekali, bukan sekadar penurunan kualitas.
+- Perbaikan dua lapis: (1) klien mengompresi foto sebelum submit — sisi panjang maksimum 1600 px, JPEG q85, loop penurunan kualitas/dimensi hingga ≤ 500 KB (`EnrollmentPhotoCompressor`); (2) server melonggarkan batas ke 10 MB dengan rule dimensi maksimum 6000 px sebagai sabuk pengaman untuk klien lama. Konstanta `MAX_FOTO_KB` dan `fotoRules()` menjadi canonical untuk enrollment dan re-enrollment; foto profil di `ProfileController` disamakan dari `max:2048` ke `max:10240` + rule dimensi.
+- Acceptance: enrollment dari kamera 12–108 MP lolos; foto arsip tetap terbaca jelas oleh Kaprodi; payload upload tipikal < 500 KB.
+- Task: [X] **M-25 Kompresi foto enrollment di klien dan longgarkan validasi server.**
+- Status 14 September 2026: selesai. `EnrollmentPhotoCompressor.compress()` dipanggil di `enrollment_page.dart` setelah pemeriksaan wajah final dan sebelum `SubmitEnrollment`; embedding tetap dihitung dari capture penuh, kompresi hanya untuk payload arsip. Unit test `enrollment_photo_compressor_test.dart` mencakup pengecilan dimensi, tanpa upscale, batas keras ≤ 500 KB pada gambar noise, error decode, dan EXIF bake. Backend: rule `fotoRules()` (10 MB + dimensi ≤ 6000 px) dipakai `store` dan `requestReEnrollment`.
+- Verifikasi: 5 test compressor lulus, `flutter analyze` bersih, 197 test Flutter lulus, 235 test backend lulus. Deploy ke Hostinger 14 September 2026: PHP syntax OK kedua controller, `/api/health` 200, 30 foto enrollment terverifikasi hash-chain SHA256 identik sebelum dan sesudah deploy (`932288fc…`). Backup foto (30 file, 8,9 MB) dan dump DB tersimpan di server `~/backups/…20260914` dan lokal `backup_server_face_20260914/`.
+
 ## Temuan Low
 
 ### [L-01] Dependency constraints terlalu longgar

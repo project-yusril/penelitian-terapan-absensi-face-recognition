@@ -237,7 +237,7 @@ Route::middleware(['auth:sanctum', 'user.active', 'throttle:api'])->group(functi
         Route::post('/enrollment/check-duplicate', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'checkDuplicate'])->middleware('throttle:biometric-probe', 'biometric.trusted');
         Route::get('/enrollment/status', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'status']);
 
-        Route::post('/re-enrollment', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'requestReEnrollment'])->middleware('biometric.trusted');
+        Route::post('/re-enrollment', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'requestReEnrollment'])->middleware('throttle:biometric-probe', 'biometric.trusted');
         Route::get('/enrollment/embedding', [App\Http\Controllers\Api\Mahasiswa\EnrollmentController::class, 'getMyEmbedding'])->middleware('enrollment.approved', 'biometric.trusted');
 
         // Attendance

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\PhotoUploadPolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -39,7 +40,7 @@ class ProfileController extends Controller
     public function uploadFoto(Request $request): JsonResponse
     {
         $request->validate([
-            'foto' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+            'foto' => PhotoUploadPolicy::facePhotoRules(),
         ]);
 
         $user = $request->user();

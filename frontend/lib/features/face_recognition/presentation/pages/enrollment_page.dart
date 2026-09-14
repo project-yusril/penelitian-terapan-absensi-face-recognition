@@ -24,6 +24,7 @@ import '../../domain/services/camera_frame_snapshot.dart';
 import '../../domain/services/frame_analysis_pipeline.dart';
 import '../../domain/services/temporary_capture_processor.dart';
 import '../../domain/services/enrollment_identity_continuity.dart';
+import '../../domain/services/enrollment_photo_compressor.dart';
 
 class EnrollmentPage extends StatefulWidget {
   const EnrollmentPage({super.key});
@@ -722,6 +723,15 @@ class _EnrollmentPageState extends State<EnrollmentPage>
           if (_isCurrent(capture.attemptId)) {
             setState(() => _statusMessage = 'Memeriksa data wajah...');
           }
+          // Kompres foto SEBELUM submit: capture.bytes adalah JPEG kamera
+          // ukuran penuh (2–8 MB) dan akan ditolak batas ukuran foto server.
+          // Embedding sudah dibuat dari capture penuh di atas — kompresi hanya
+          // untuk payload arsip yang dikirim, bukan untuk perhitungan wajah.
+          final compressed = await EnrollmentPhotoCompressor.compress(
+            capture.bytes,
+          );
+          if (!_isCurrent(capture.attemptId)) return;
+
           final dup = await _log.timed(
             'API checkDuplicate (sebelum submit)',
             () => faceBloc.checkDuplicate(embedding),
@@ -750,7 +760,7 @@ class _EnrollmentPageState extends State<EnrollmentPage>
                 livenessChallenge: _challenge,
                 deviceModel: deviceModel,
                 deviceOs: deviceOs,
-                fotoEnrollment: capture.bytes,
+                fotoEnrollment: compressed.bytes,
               ),
             );
           }

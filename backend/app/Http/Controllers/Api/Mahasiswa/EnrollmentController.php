@@ -10,6 +10,7 @@ use App\Models\ReEnrollmentRequest;
 use App\Models\User;
 use App\Services\BiometricDuplicateService;
 use App\Services\BiometricLockService;
+use App\Services\PhotoUploadPolicy;
 use App\Services\PrivateFileUrlService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,7 +38,7 @@ class EnrollmentController extends Controller
                     $fail("The {$attribute} field must be finite.");
                 }
             }],
-            'foto' => 'required|image|mimes:jpeg,jpg,png|max:500',
+            'foto' => PhotoUploadPolicy::facePhotoRules(),
             'liveness_passed' => 'required|boolean',
             'enrollment_device' => 'nullable|string|max:255',
         ]);
@@ -178,7 +179,7 @@ class EnrollmentController extends Controller
         $request->validate([
             'alasan' => 'required|in:potong_rambut,pakai_jilbab,lepas_jilbab,perubahan_lain',
             'keterangan' => 'nullable|string|max:500',
-            'foto' => 'required|image|mimes:jpeg,jpg,png|max:500',
+            'foto' => PhotoUploadPolicy::facePhotoRules(),
             'embedding' => 'required|array|size:'.BiometricDuplicateService::EMBEDDING_SIZE,
             'embedding.*' => 'required|numeric',
         ]);
@@ -187,6 +188,13 @@ class EnrollmentController extends Controller
 
         if ($user->enrollment_status !== 'approved') {
             return $this->error('Re-enrollment hanya bisa dilakukan jika enrollment sebelumnya sudah disetujui', 422);
+        }
+
+        // Pre-check pending SEBELUM menulis file 10 MB ke disk: user pending
+        // tidak perlu menimbulkan I/O disk percuma (cek final tetap dilakukan
+        // ulang dalam transaksi bersama lockForUpdate untuk mencegah race).
+        if (ReEnrollmentRequest::where('user_id', $user->id)->where('status', 'pending')->exists()) {
+            return $this->error('Anda sudah memiliki request re-enrollment yang masih pending', 409);
         }
 
         // R-01: simpan ke disk privat
