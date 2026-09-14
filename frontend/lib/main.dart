@@ -128,87 +128,13 @@ void main() {
         data: {'mode': kReleaseMode ? 'release' : 'debug'},
       );
 
-      // Formatters memakai DateFormat dengan locale 'id_ID' (mis. nama bulan
-      // pada `formatDate`). Tanpa inisialisasi ini, pemanggilnya melempar
-      // LocaleDataException — bug laten yang belum terlihat hanya karena
-      // formatter tanggal belum dipakai di layar mana pun.
-      await _bootLog.timed(
-        'initializeDateFormatting(id_ID)',
-        () => initializeDateFormatting('id_ID'),
-      );
-
-      await _bootLog.timed('Hive.initFlutter', Hive.initFlutter);
-
-      final sharedPreferences = await _bootLog.timed(
-        'SharedPreferences.getInstance',
-        SharedPreferences.getInstance,
-      );
-      const secureStorage = FlutterSecureStorage();
-      final secureSession = SecureSessionStore(
-        secureStorage,
-        sharedPreferences,
-      );
-      await _bootLog.timed(
-        'SecureSessionStore.initialize',
-        secureSession.initialize,
-      );
-      final sessionCoordinator = SessionCoordinator(secureSession);
-
-      // AppConfig melempar StateError kalau API_BASE_URL kosong atau melanggar
-      // policy transport (release wajib HTTPS; debug HTTP hanya host lokal/privat).
-      late final AppConfig appConfig;
-      try {
-        appConfig = AppConfig.fromEnvironment();
-        _bootLog.info(
-          'AppConfig terbaca',
-          data: {'apiBaseUri': appConfig.apiBaseUri.toString()},
-        );
-      } catch (error, stack) {
-        _bootLog.error(
-          'AppConfig gagal dibaca — pastikan --dart-define=API_BASE_URL diisi',
-          error: error,
-          stackTrace: stack,
-        );
-        rethrow;
-      }
-
-      final offlineQueueService = OfflineQueueService(
-        const SecureQueueKeyStore(secureStorage),
-      );
-      await _bootLog.timed(
-        'OfflineQueueService.init',
-        offlineQueueService.init,
-      );
-      final captureCleanupRegistry = TemporaryCaptureCleanupRegistry(
-        sharedPreferences,
-      );
-      await _bootLog.timed(
-        'TemporaryCaptureCleanupRegistry.retryCleanup',
-        captureCleanupRegistry.retryCleanup,
-      );
-
-      // L-02: lifecycle FCM. initialize() fail-safe — bila Firebase belum
-      // dikonfigurasi (google-services.json / firebase_options.dart belum ada),
-      // push menjadi no-op dan aplikasi tetap boot normal.
-      final pushMessaging = PushMessagingService();
-      await _bootLog.timed(
-        'PushMessagingService.initialize',
-        pushMessaging.initialize,
-      );
-
-      _bootLog.info('inisialisasi selesai, menjalankan UI');
-
-      runApp(
-        MyApp(
-          sharedPreferences: sharedPreferences,
-          offlineQueueService: offlineQueueService,
-          appConfig: appConfig,
-          secureSession: secureSession,
-          sessionCoordinator: sessionCoordinator,
-          captureCleanupRegistry: captureCleanupRegistry,
-          pushMessaging: pushMessaging,
-        ),
-      );
+      // Render frame pertama SEKETIKA (layar putih polos) supaya system splash
+      // Android 12+ (ikon lingkaran) segera hilang. Inisialisasi berat jalan
+      // paralel di belakangnya; MyApp.menui mengganti layar begitu siap.
+      // Tanpa ini, ikon splash sistem tampil sampai semua init selesai
+      // (~4 detik di HP low-end) karena runApp baru dipanggil setelahnya.
+      runApp(const _BootPlaceholder());
+      unawaited(_initializeAndRun());
     },
     (error, stack) {
       AppLogger.tag('Zone').error(
@@ -218,6 +144,114 @@ void main() {
       );
     },
   );
+}
+
+/// Seluruh inisialisasi boot + `runApp` final.
+///
+/// Dipisah dari [main] agar [runApp] putih polos bisa dieksekusi dulu; fungsi
+/// ini dipanggil tanpa `await` dari zona utama. Kegagalan inisialisasi tetap
+/// dianggap fatal (rethrow) — layar putih yang sudah tampil lalu menampilkan
+/// layar error melalui zone handler bila terjadi.
+Future<void> _initializeAndRun() async {
+  // Formatters memakai DateFormat dengan locale 'id_ID' (mis. nama bulan
+  // pada `formatDate`). Tanpa inisialisasi ini, pemanggilnya melempar
+  // LocaleDataException — bug laten yang belum terlihat hanya karena
+  // formatter tanggal belum dipakai di layar mana pun.
+  await _bootLog.timed(
+    'initializeDateFormatting(id_ID)',
+    () => initializeDateFormatting('id_ID'),
+  );
+
+  await _bootLog.timed('Hive.initFlutter', Hive.initFlutter);
+
+  final sharedPreferences = await _bootLog.timed(
+    'SharedPreferences.getInstance',
+    SharedPreferences.getInstance,
+  );
+  const secureStorage = FlutterSecureStorage();
+  final secureSession = SecureSessionStore(
+    secureStorage,
+    sharedPreferences,
+  );
+  await _bootLog.timed(
+    'SecureSessionStore.initialize',
+    secureSession.initialize,
+  );
+  final sessionCoordinator = SessionCoordinator(secureSession);
+
+  // AppConfig melempar StateError kalau API_BASE_URL kosong atau melanggar
+  // policy transport (release wajib HTTPS; debug HTTP hanya host lokal/privat).
+  late final AppConfig appConfig;
+  try {
+    appConfig = AppConfig.fromEnvironment();
+    _bootLog.info(
+      'AppConfig terbaca',
+      data: {'apiBaseUri': appConfig.apiBaseUri.toString()},
+    );
+  } catch (error, stack) {
+    _bootLog.error(
+      'AppConfig gagal dibaca — pastikan --dart-define=API_BASE_URL diisi',
+      error: error,
+      stackTrace: stack,
+    );
+    rethrow;
+  }
+
+  final offlineQueueService = OfflineQueueService(
+    const SecureQueueKeyStore(secureStorage),
+  );
+  await _bootLog.timed(
+    'OfflineQueueService.init',
+    offlineQueueService.init,
+  );
+  final captureCleanupRegistry = TemporaryCaptureCleanupRegistry(
+    sharedPreferences,
+  );
+  await _bootLog.timed(
+    'TemporaryCaptureCleanupRegistry.retryCleanup',
+    captureCleanupRegistry.retryCleanup,
+  );
+
+  // L-02: lifecycle FCM. initialize() fail-safe — bila Firebase belum
+  // dikonfigurasi (google-services.json / firebase_options.dart belum ada),
+  // push menjadi no-op dan aplikasi tetap boot normal.
+  final pushMessaging = PushMessagingService();
+  await _bootLog.timed(
+    'PushMessagingService.initialize',
+    pushMessaging.initialize,
+  );
+
+  _bootLog.info('inisialisasi selesai, menjalankan UI penuh');
+
+  runApp(
+    MyApp(
+      sharedPreferences: sharedPreferences,
+      offlineQueueService: offlineQueueService,
+      appConfig: appConfig,
+      secureSession: secureSession,
+      sessionCoordinator: sessionCoordinator,
+      captureCleanupRegistry: captureCleanupRegistry,
+      pushMessaging: pushMessaging,
+    ),
+  );
+}
+
+/// Layar putih polos yang dirender seketika sebagai frame pertama.
+///
+/// Tujuannya satu: mengganti system splash Android 12+ (ikon lingkaran) dengan
+/// warna sesegera mungkin, tanpa menunggu inisialisasi selesai. Tidak ada
+/// logo/spinner — setelah [_initializeAndRun] selesai, widget ini diganti
+/// [MyApp].
+class _BootPlaceholder extends StatelessWidget {
+  const _BootPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(backgroundColor: Colors.white),
+    );
+  }
 }
 
 class MyApp extends StatefulWidget {

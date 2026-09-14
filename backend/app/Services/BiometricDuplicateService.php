@@ -18,7 +18,7 @@ class BiometricDuplicateService
     public function findDuplicate(array $candidate, int $userId, int $prodiId): ?FaceEmbedding
     {
         $candidate = $this->canonicalize($candidate);
-        $threshold = (float) (ProdiSetting::where('prodi_id', $prodiId)->value('face_threshold') ?? 1.00);
+        $threshold = (float) (ProdiSetting::where('prodi_id', $prodiId)->value('face_threshold') ?? 0.60);
 
         if (! is_finite($threshold) || $threshold <= 0) {
             throw new RuntimeException('Biometric matching is unavailable');

@@ -60,7 +60,7 @@ class ProdiController extends Controller
             'sp3_jam_mulai' => 38,
             'sp3_jam_akhir' => 45,
             'do_jam_mulai' => 46,
-            'face_threshold' => 1.000,
+            'face_threshold' => 0.600,
             'default_radius_meter' => 50,
         ]);
 

@@ -1,9 +1,9 @@
 # Kontrak API Saat Ini
 
 **Status:** maintained summary  
-**Pembaruan:** 12 September 2026
+**Pembaruan:** 14 September 2026
 **Authority:** `backend/routes/api.php`, request validation, services, dan feature tests  
-**Base path:** `/api` — backend penelitian live di `https://absensi.yusrilekamahendra.com/api` (liveness: `GET /api/health` → `{"status":"ok"}`; detail host di [DEPLOYMENT.md](DEPLOYMENT.md))
+**Base path:** `/api` — backend penelitian live di `https://absensi.yusrilekamahendra.com/api` (liveness: `GET /api/health` → `{"status":"ok"}`; detail host & akses SSH di [DEPLOYMENT.md](DEPLOYMENT.md) dan [`ssh.md`](../ssh.md))
 
 Jika contoh PRD atau task plan berbeda dari dokumen ini, executable routes/validation dan dokumen ini yang berlaku.
 
@@ -147,7 +147,7 @@ Online capture time berasal dari server. Client timestamp tidak dapat memperluas
 ### Aturan Face Matching dan Lokasi (canonical)
 
 - Face match canonical: `face_distance <= face_threshold`. Server menolak bila `face_distance > face_threshold`. Comparator ini identik di mobile, backend, dan analisis FAR/FRR (L-08/R-04).
-- `face_threshold` diambil dari `prodi_settings.face_threshold` (default `1.000`) dan ikut dikirim ke mobile saat enrollment agar ambang sama.
+- `face_threshold` diambil dari `prodi_settings.face_threshold` (default seed `0.600`, berlaku di host live sejak 14 September 2026; sebelumnya `1.000`) dan ikut dikirim ke mobile saat enrollment agar ambang sama. Fallback kode aplikasi bila prodi setting tidak ada juga `0.600`.
 - GPS accuracy: server menolak fix yang `gps_accuracy` melebihi `prodi_settings.gps_accuracy_minimum` (default `20` m) atau `location_age_ms` melebihi `gps_max_age_seconds`. Pre-check UI mobile memakai baseline yang sama (20 m); nilai per-prodi server tetap otoritatif.
 
 ## Offline Mixed Batch

@@ -27,7 +27,7 @@ return new class extends Migration
             $table->integer('do_jam_mulai')->default(46);
 
             // Face recognition settings
-            $table->decimal('face_threshold', 5, 3)->default(1.000);
+            $table->decimal('face_threshold', 5, 3)->default(0.600);
             $table->integer('liveness_challenge_count')->default(1);
             $table->integer('liveness_timeout_seconds')->default(10);
             $table->integer('max_failed_attempts')->default(5);

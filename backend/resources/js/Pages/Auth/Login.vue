@@ -77,12 +77,6 @@ const submit = () => {
                 <h1 class="text-2xl font-semibold text-slate-800">Selamat datang 👋</h1>
                 <p class="mt-1.5 text-sm text-slate-400">Masuk ke dashboard admin untuk melanjutkan.</p>
 
-                <div class="mt-5 rounded-lg border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-slate-600">
-                    <p class="font-medium text-slate-700">Akun Super Admin</p>
-                    <p class="mt-1">Email: <span class="font-mono">administrator@gmail.com</span></p>
-                    <p>Password: <span class="font-mono">12345678</span></p>
-                </div>
-
                 <form class="mt-8 space-y-5" @submit.prevent="submit">
                     <div>
                         <label class="label" for="login">Email atau NIM</label>

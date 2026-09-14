@@ -133,7 +133,7 @@ class AttendanceController extends Controller
         }
 
         // 7. Validasi face recognition threshold
-        $faceThreshold = $prodiSetting?->face_threshold ?? 1.00;
+        $faceThreshold = $prodiSetting?->face_threshold ?? 0.60;
         if ($request->face_distance > $faceThreshold) {
             // face_distance ditulis ke KOLOM (bukan hanya metadata) agar percobaan
             // impostor yang gagal match tetap masuk sweep FAR/FRR (R-05).
@@ -357,7 +357,7 @@ class AttendanceController extends Controller
         }
 
         // 3. Validasi face
-        $faceThreshold = $prodiSetting?->face_threshold ?? 1.00;
+        $faceThreshold = $prodiSetting?->face_threshold ?? 0.60;
         if ($request->face_distance > $faceThreshold) {
             return $this->error('Verifikasi wajah gagal saat check-out.', 422);
         }

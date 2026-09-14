@@ -246,7 +246,7 @@ class EnrollmentController extends Controller
             'embedding_size' => count($embedding->embedding),
             'version' => $embedding->version,
             'created_at' => $embedding->created_at,
-            'face_threshold' => (float) ($prodiSetting?->face_threshold ?? 1.00),
+            'face_threshold' => (float) ($prodiSetting?->face_threshold ?? 0.60),
             'liveness_required' => true,
         ])->withHeaders(['Cache-Control' => 'private, no-store, max-age=0', 'Pragma' => 'no-cache']);
     }

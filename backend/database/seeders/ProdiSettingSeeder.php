@@ -26,7 +26,7 @@ class ProdiSettingSeeder extends Seeder
                     'sp3_jam_mulai' => 38,
                     'sp3_jam_akhir' => 45,
                     'do_jam_mulai' => 46,
-                    'face_threshold' => 1.000,
+                    'face_threshold' => 0.600,
                     'liveness_challenge_count' => 1,
                     'liveness_timeout_seconds' => 10,
                     'max_failed_attempts' => 5,

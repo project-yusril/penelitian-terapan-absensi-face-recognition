@@ -176,10 +176,10 @@ class AnalysisController extends Controller
             }
         }
 
-        // Jika hanya ada satu prodi/seting, pakai itu; jika tidak, default 1.00.
+        // Jika hanya ada satu prodi/seting, pakai itu; jika tidak, default 0.60.
         $only = ProdiSetting::whereNotNull('face_threshold')->first();
 
-        return (float) ($only?->face_threshold ?? 1.00);
+        return (float) ($only?->face_threshold ?? 0.60);
     }
 
     /**

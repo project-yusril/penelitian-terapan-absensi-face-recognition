@@ -217,6 +217,7 @@ Referensi utama:
 | [ROLE-PERMISSION-MATRIX.md](docs/ROLE-PERMISSION-MATRIX.md) | Matriks role/permission/prodi canonical & tiga lapis enforcement |
 | [THREAT-MODEL-ATTENDANCE.md](docs/THREAT-MODEL-ATTENDANCE.md) | Aktor ancaman, kontrol server, batas klaim client |
 | [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Environment, CI, backend production, Android release matrix, rollback/restore |
+| [`ssh.md`](ssh.md) ⚠️ lokal saja | Kredensial & runbook SSH server production (IP/port/user/key, deploy, backup) — di-gitignore, tidak pernah di-push |
 | [temuan.md](docs/temuan.md) | Audit menyeluruh: temuan, status remediation, acceptance, evidence |
 | [PRD-INDEX.md](docs/PRD-INDEX.md) | Indeks 9 dokumen PRD (overview s.d. non-functional) |
 | [rencana2.md](docs/rencana2.md) | Catatan implementasi & verifikasi RENCANA 2 (restrukturisasi kelas master) |

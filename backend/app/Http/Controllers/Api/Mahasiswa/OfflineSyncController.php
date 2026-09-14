@@ -63,7 +63,7 @@ class OfflineSyncController extends Controller
 
         $user = $request->user();
         $prodiSetting = ProdiSetting::where('prodi_id', $user->prodi_id)->first();
-        $faceThreshold = (float) ($prodiSetting?->face_threshold ?? 1.00);
+        $faceThreshold = (float) ($prodiSetting?->face_threshold ?? 0.60);
         $allowMock = (bool) ($prodiSetting?->allow_mock_location ?? false);
         $toleransiMasuk = $prodiSetting?->toleransi_masuk_menit ?? 15;
         $toleransiPulang = $prodiSetting?->toleransi_pulang_menit ?? 15;

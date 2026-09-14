@@ -133,7 +133,7 @@ class AnalysisController extends Controller
         }
         $only = ProdiSetting::whereNotNull('face_threshold')->first();
 
-        return (float) ($only?->face_threshold ?? 1.00);
+        return (float) ($only?->face_threshold ?? 0.60);
     }
 
     private function computeFarFrr(Collection $genuine, Collection $impostor, float $threshold): array

@@ -9,6 +9,9 @@
 *.p12
 *.jks
 *.keystore
+ssh.md
+secrets/
+backup_server_*/
 firebase-credentials*.json
 google-services.json
 GoogleService-Info.plist

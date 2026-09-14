@@ -1,8 +1,11 @@
 # Deployment dan Release
 
 **Status:** maintained runbook
-**Pembaruan:** 12 September 2026
+**Pembaruan:** 14 September 2026
 **Release matrix:** web/backend + Android; iOS tidak didukung
+
+> **Akses SSH ke server production** (IP, port, username, key, pola deploy, backup):
+> [`ssh.md`](../ssh.md) — file berisi kredensial dan di-gitignore, hanya ada di lokal workspace.
 
 ## Baseline
 
@@ -45,6 +48,12 @@ Backend penelitian **sudah live** pada 12 September 2026 di:
 | Dashboard web | `GET /` → 302 ke `/login`, cookie session `Secure`+`HttpOnly`+`SameSite=lax` aktif |
 
 Mobile terhubung ke host ini lewat `--dart-define=API_BASE_URL=https://absensi.yusrilekamahendra.com/api` (sudah diuji dari perangkat fisik Android — app boot dan mencapai halaman login). `AppConfig` menerima HTTPS apa pun tanpa allowlist, sehingga tidak ada perubahan kode untuk pindah host.
+
+### Riwayat Deploy via SSH
+
+Deploy langsung dari workspace Windows ke host dilakukan via SSH key (detail koneksi, kredensial, dan pola command: [`ssh.md`](../ssh.md)).
+
+**14 September 2026 — threshold biometrik 0.600 + perbaikan EXIF:** upload 11 file backend (checksum terverifikasi), upload `public/build` hasil `npm run build` lokal (node tidak tersedia di server), clear semua cache Laravel, `UPDATE prodi_settings SET face_threshold = 0.600` (semua 3 prodi), backup penuh DB + storage + `.env` **sebelum** perubahan (lokal: `backup_server_20260914/`). Insiden yang ditemukan & diperbaiki saat deploy: folder hasil `scp -r` ber-permission `700` sehingga apache 404 semua asset dan dashboard blank — fix `chmod 755`/`644` pada `public/build`. Analisis 19 embedding (terdekripsi) menunjukkan 14 enrollment pending 14 September sehat (norm 1.0, jarak antar-orang ~1.0–1.4) — tidak perlu re-enrollment; 1 pasangan mendekati threshold (RIFNO vs Yusril, 0.5752) untuk direview visual via dashboard.
 
 Yang **belum diverifikasi** pada host live (masuk L-09 sampai ada bukti):
 

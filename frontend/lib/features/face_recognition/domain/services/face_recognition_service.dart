@@ -85,14 +85,22 @@ class FaceRecognitionService {
   ) async {
     if (!_isInitialized) await initialize();
 
-    final decoded = img.decodeImage(imageBytes);
-    if (decoded == null) {
+    final decodedRaw = img.decodeImage(imageBytes);
+    if (decodedRaw == null) {
       _log.error(
         'gagal decode bytes gambar — bukan JPEG/PNG valid atau file kosong',
         data: {'bytes': imageBytes.length},
       );
       throw Exception('Failed to decode image bytes');
     }
+    // FIX BUG MATCHING: `takePicture()` menulis JPEG dalam orientasi sensor
+    // (pixel miring) + tag EXIF Orientation. ML Kit (`InputImage.fromFilePath`)
+    // membaca tag itu dan mengembalikan bounding box dalam koordinat UPRIGHT,
+    // sedangkan `img.decodeImage` mengembalikan pixel apa adanya (miring).
+    // Crop pakai box upright di atas pixel miring memotong area salah →
+    // embedding degenerat → semua orang match ke embedding DB pertama.
+    // `bakeOrientation` memutar pixel mengikuti EXIF sehingga sejajar box.
+    final decoded = img.bakeOrientation(decodedRaw);
     _log.debug(
       'bytes gambar ter-decode',
       data: {

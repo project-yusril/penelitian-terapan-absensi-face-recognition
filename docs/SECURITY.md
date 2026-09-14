@@ -1,6 +1,6 @@
 # Model Keamanan
 
-**Pembaruan:** 11 Agustus 2026
+**Pembaruan:** 14 September 2026
 **Backlog risiko:** [`temuan.md`](temuan.md)
 **Threat model attendance:** [`THREAT-MODEL-ATTENDANCE.md`](THREAT-MODEL-ATTENDANCE.md)
 
@@ -48,6 +48,7 @@ Secret berikut wajib berada di secret manager/deployment environment dan tidak b
 - Android keystore dan passwords
 - Firebase service account dan `GOOGLE_SERVICES_JSON_BASE64`
 - reset token, Sanctum token, dan real biometric vectors
+- SSH credential server production (key private + password) — disimpan lokal di `ssh.md` root repo (di-gitignore) dan `~/.ssh/`; tidak pernah masuk Git
 
 Jika `.env`, key, atau credential pernah dibagikan dalam archive/repository, anggap bocor dan rotasi.
 

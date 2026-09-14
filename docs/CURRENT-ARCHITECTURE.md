@@ -1,7 +1,7 @@
 # Arsitektur Saat Ini
 
 **Status:** maintained
-**Pembaruan:** 12 September 2026
+**Pembaruan:** 14 September 2026
 **Authority:** executable truth; backlog dan evidence mengikuti temuan.md
 
 ## Struktur Data Akademik (Kelas Master) — RENCANA 2
@@ -26,7 +26,7 @@ jadwals (dosen_id + mata_kuliah_id + kelas_id + hari + jam + ruangan + geofence)
 - Validasi anti-bentrok jadwal: dosen/kelas/ruangan yang sama di hari & jam overlap ditolak (interval setengah terbuka `[start, end)` — back-to-back diizinkan).
 - Dosen "mata kuliah diampu" = jadwal dengan `dosen_id` = dia.
 
-## State Data Terkini (12 September 2026)
+## State Data Terkini (14 September 2026)
 
 | Area | State |
 |---|---|
@@ -35,8 +35,8 @@ jadwals (dosen_id + mata_kuliah_id + kelas_id + hari + jam + ruangan + geofence)
 | Users | 171 (mahasiswa 150, dosen 9, admin_prodi 3, kaprodi 3, orang_tua 3, super_admin/admin_jurusan/ketua_jurusan 1) |
 | `mahasiswa_kelas` | 165 baris (angkatan 2026 = 150 pivot semester aktif; angkatan 2024 = 15 pivot arsip genap) |
 | Jadwal & MK | 8 jadwal (kelas 4A–4E genap), 3 mata kuliah master |
-| Rekam | attendances 62, attendance_logs 926 (4 produksi + 920 seed analisis R-05 + 2 tambahan), permits 12, leave 1, SP 3 |
-| Biometrik | 5 face embeddings approved (dekripsi terverifikasi), 8 geofences |
+| Rekam | attendances 62, attendance_logs 926, permits 12, leave 1, SP 3 |
+| Biometrik | 19 face embeddings (5 approved lama + 14 pending 14 September, analisis kesehatan vector: semua norm 1.0, tidak degenerat), 25 foto enrollment di host, `face_threshold` 0.600 semua prodi (host live sejak 14 September 2026) |
 
 **Pembersihan 12 September 2026:** kelas 1A–1E di semester genap 2025/2026 (hasil seeding keliru — angkatan 2026 tidak mungkin berada di semester genap 2025/2026) dihapus beserta 135 baris pivot-nya. Pivot tersebut 100% duplikat angkatan 2026 yang juga sudah terdaftar di semester ganjil aktif, tanpa jadwal maupun attendance. Tidak ada data riwayat yang hilang.
 
@@ -133,9 +133,11 @@ Selain validasi aplikasi, database menegakkan invariant berikut sebagai lapisan 
 ## Face Matching Canonical
 
 - Comparator match wajah canonical adalah `distance <= threshold`, konsisten di mobile (`FaceRecognitionService`, `EnrollmentIdentityContinuity`), backend (`face_distance > threshold` ⇒ tolak), dan analisis FAR/FRR (L-08/R-04).
+- Nilai threshold host live: `0.600` untuk semua prodi (di-set via DB 14 September 2026, deploy via SSH — lihat [`ssh.md`](../ssh.md)); fallback kode aplikasi bila prodi setting tidak ada juga `0.600` (sebelumnya `1.000`). Mobile mendapatkan nilai yang sama dari `getMyEmbedding`.
 - Baseline GPS accuracy minimum canonical adalah 20 m: default `prodi_settings.gps_accuracy_minimum`, seeder, `AppConstants.gpsAccuracyMinimum`, dan pre-check UI mobile. Nilai per-prodi di server tetap menjadi sumber kebenaran runtime.
 - Ambang SP (16/32/38/46 jam) sama antara `prodi_settings` dan `AppConstants` mobile.
 - Analisis geofence menghitung success rate dari `checkin_success` vs `checkin_failed`, bukan `geofence_valid` (R-01). Distribusi jarak tetap dari log geofence.
+- Fix degenerate embedding (APK lama): capture kamera di-bake orientasi EXIF (`bakeOrientation`) sebelum crop, sehingga bounding box ML Kit (koordinat upright) sejajar pixel. Verifikasi kesehatan embedding 14 September 2026: norm 1.0, jarak antar-orang ~1.0–1.4, tidak ada pola degenerat.
 
 ## Push Notification Lifecycle (FCM)
 

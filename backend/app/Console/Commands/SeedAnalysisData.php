@@ -168,7 +168,7 @@ class SeedAnalysisData extends Command
             'longitude' => $lon + $this->jitter(),
             'distance_to_geofence' => round(mt_rand(50, 9000) / 100, 2),
             'face_distance' => $faceDistance === null ? null : round($faceDistance, 6),
-            'face_threshold' => 1.0,
+            'face_threshold' => 0.6,
             'liveness_challenge' => $liveness[$seed % count($liveness)],
             'inference_time_ms' => mt_rand(200, 850),
             'device_model' => $devices[$seed % count($devices)],
