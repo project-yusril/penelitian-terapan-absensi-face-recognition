@@ -1,7 +1,7 @@
 # Kontrak API Saat Ini
 
 **Status:** maintained summary  
-**Pembaruan:** 14 September 2026
+**Pembaruan:** 21 September 2026
 **Authority:** `backend/routes/api.php`, request validation, services, dan feature tests  
 **Base path:** `/api` — backend penelitian live di `https://absensi.yusrilekamahendra.com/api` (liveness: `GET /api/health` → `{"status":"ok"}`; detail host & akses SSH di [DEPLOYMENT.md](DEPLOYMENT.md) dan [`ssh.md`](../ssh.md))
 

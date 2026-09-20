@@ -1,7 +1,7 @@
 # Arsitektur Saat Ini
 
 **Status:** maintained
-**Pembaruan:** 21 September 2026
+**Pembaruan:** 21 September 2026, 02:00 WIB
 **Authority:** executable truth; backlog dan evidence mengikuti temuan.md
 
 ## Struktur Data Akademik (Kelas Master) — RENCANA 2
@@ -34,7 +34,7 @@ jadwals (dosen_id + mata_kuliah_id + kelas_id + hari + jam + ruangan + geofence)
 | Semester arsip | `2025/2026-2` Genap (nonaktif) — kelas 4A–4E saja; pemilik 62 attendance riwayat |
 | Users | 171 (mahasiswa 150, dosen 9, admin_prodi 3, kaprodi 3, orang_tua 3, super_admin/admin_jurusan/ketua_jurusan 1) |
 | `mahasiswa_kelas` | 165 baris (angkatan 2026 = 150 pivot semester aktif; angkatan 2024 = 15 pivot arsip genap) |
-| Jadwal & MK | 8 jadwal (kelas 4A–4E genap), 3 mata kuliah master |
+| Jadwal & MK | 9 jadwal (kelas 4A–4E genap + **jadwal PTI kelas 1D Senin 08:00–16:00 ditambahkan 21 Sep 2026, 01:41 WIB** — TI-301, dosen Yusril Eka Mahendra M.TI, Lab Komputer 1, 27 mahasiswa 1D; detail DEPLOYMENT.md), 3 mata kuliah master |
 | Rekam | attendances 62, attendance_logs 926, permits 12, leave 1, SP 3 |
 | Biometrik | **59 face embeddings (55 approved per 21 September 2026 — admin menyetujui seluruh enrollment via dashboard; 4 rejected)**, 65 foto enrollment di host, `face_threshold` 0.600 semua prodi (host live sejak 14 September 2026). Evaluasi impostor asli 21 September 2026: 1.485 pasangan lintas-user → **FAR @ θ=0.600 = 0.0000%** (min 0.6185, mean 1.1332, maks 1.5083; bukti `eksperimen/`). Data genuine/impostor sintetis dari seeder `attendance:seed-analysis-data` (920 log) TIDAK valid sebagai hasil eksperimen. |
 
