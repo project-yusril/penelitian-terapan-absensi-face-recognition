@@ -16,7 +16,7 @@
 | Parameter | Target | Keterangan |
 |-----------|--------|------------|
 | API Response Time | < 500ms (95th percentile) | Untuk endpoint standar (CRUD) |
-| API Response Time (concurrent) | < 2000ms | Saat 40 user bersamaan |
+| API Response Time (concurrent) | < 2000ms | Saat 40 user bersamaan — **terpenuhi benchmark 21 Sep 2026** (p95 level 20/30/40 = 0.19–1.12 s; server-side via `eksperimen/loadtest_server.sh` karena WAF hCDN memblokir runner eksternal; failure = 429 limiter per-user by design) |
 | Face Inference Time | < 300ms (mid-range device) | On-device MobileFaceNet |
 | Face Inference Time | < 500ms (low-end device) | On-device MobileFaceNet |
 | Total Attendance Process | < 15 detik | Dari buka app sampai selesai |

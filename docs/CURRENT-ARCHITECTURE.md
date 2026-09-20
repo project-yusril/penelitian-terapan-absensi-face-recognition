@@ -1,7 +1,7 @@
 # Arsitektur Saat Ini
 
 **Status:** maintained
-**Pembaruan:** 14 September 2026
+**Pembaruan:** 21 September 2026
 **Authority:** executable truth; backlog dan evidence mengikuti temuan.md
 
 ## Struktur Data Akademik (Kelas Master) — RENCANA 2
@@ -36,7 +36,7 @@ jadwals (dosen_id + mata_kuliah_id + kelas_id + hari + jam + ruangan + geofence)
 | `mahasiswa_kelas` | 165 baris (angkatan 2026 = 150 pivot semester aktif; angkatan 2024 = 15 pivot arsip genap) |
 | Jadwal & MK | 8 jadwal (kelas 4A–4E genap), 3 mata kuliah master |
 | Rekam | attendances 62, attendance_logs 926, permits 12, leave 1, SP 3 |
-| Biometrik | 19 face embeddings (5 approved lama + 14 pending 14 September, analisis kesehatan vector: semua norm 1.0, tidak degenerat), 25 foto enrollment di host, `face_threshold` 0.600 semua prodi (host live sejak 14 September 2026) |
+| Biometrik | **59 face embeddings (55 approved per 21 September 2026 — admin menyetujui seluruh enrollment via dashboard; 4 rejected)**, 65 foto enrollment di host, `face_threshold` 0.600 semua prodi (host live sejak 14 September 2026). Evaluasi impostor asli 21 September 2026: 1.485 pasangan lintas-user → **FAR @ θ=0.600 = 0.0000%** (min 0.6185, mean 1.1332, maks 1.5083; bukti `eksperimen/`). Data genuine/impostor sintetis dari seeder `attendance:seed-analysis-data` (920 log) TIDAK valid sebagai hasil eksperimen. |
 
 **Pembersihan 12 September 2026:** kelas 1A–1E di semester genap 2025/2026 (hasil seeding keliru — angkatan 2026 tidak mungkin berada di semester genap 2025/2026) dihapus beserta 135 baris pivot-nya. Pivot tersebut 100% duplikat angkatan 2026 yang juga sudah terdaftar di semester ganjil aktif, tanpa jadwal maupun attendance. Tidak ada data riwayat yang hilang.
 
@@ -138,6 +138,8 @@ Selain validasi aplikasi, database menegakkan invariant berikut sebagai lapisan 
 - Ambang SP (16/32/38/46 jam) sama antara `prodi_settings` dan `AppConstants` mobile.
 - Analisis geofence menghitung success rate dari `checkin_success` vs `checkin_failed`, bukan `geofence_valid` (R-01). Distribusi jarak tetap dari log geofence.
 - Fix degenerate embedding (APK lama): capture kamera di-bake orientasi EXIF (`bakeOrientation`) sebelum crop, sehingga bounding box ML Kit (koordinat upright) sejajar pixel. Verifikasi kesehatan embedding 14 September 2026: norm 1.0, jarak antar-orang ~1.0–1.4, tidak ada pola degenerat.
+- Evaluasi FAR dengan data asli (21 September 2026): 55 embedding approved didekripsi di server (AES-256-GCM, key tidak keluar), 1.485 pasangan lintas-user dihitung dengan logika produksi `BiometricDuplicateService` → FAR @ θ=0.600 = 0.0000%; sweep θ lengkap di `eksperimen/hasil_analisis_far.txt`. FRR menunggu data genuine lapangan (protokol `eksperimen/PROTOKOL_EKSPERIMEN.md`).
+- Benchmark beban 20/30/40 (21 September 2026): WAF hCDN memblokir runner eksternal (403 challenge browser), benchmark dijalankan dari dalam server — p95 seluruh level < 2 detik, failure = 429 limiter per-user by design, 0 error Laravel (bukti `eksperimen/`).
 
 ## Push Notification Lifecycle (FCM)
 

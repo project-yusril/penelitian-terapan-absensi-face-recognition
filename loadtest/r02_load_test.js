@@ -66,12 +66,10 @@ export const options = {
   // Timeout eksplisit supaya hang tercatat sebagai failure+timeout, bukan
   // membebani VU selamanya.
   httpDebug: 'off',
+  setupTimeout: '30s',
 };
 
-let token = null;
-
-function login() {
-  if (token) return token;
+export function setup() {
   if (!TEST_EMAIL || !TEST_PASSWORD) {
     throw new Error(
       'Set -e TEST_EMAIL dan -e TEST_PASSWORD (akun mahasiswa dari seeder).'
@@ -79,7 +77,7 @@ function login() {
   }
   const res = http.post(
     `${BASE_URL}/api/auth/login`,
-    JSON.stringify({ login: TEST_EMAIL, password: TEST_PASSWORD, device_name: `k6-${__VU}` }),
+    JSON.stringify({ login: TEST_EMAIL, password: TEST_PASSWORD, device_name: 'k6-loadtest' }),
     { headers: { 'Content-Type': 'application/json' }, tags: { endpoint: 'login' } }
   );
   const ok = check(res, { 'login 200': (r) => r.status === 200 });
@@ -87,7 +85,12 @@ function login() {
     failureRate.add(1);
     throw new Error(`Login gagal: ${res.status} ${res.body.slice(0, 200)}`);
   }
-  token = res.json('data.token');
+  return { token: res.json('data.token') };
+}
+
+let token = null;
+
+function login() {
   return token;
 }
 
@@ -106,7 +109,8 @@ function get(path, tag, trend) {
 
 // Satu iterasi = satu "pengguna" mengecek dashboard, jadwal, lalu history —
 // mensimulasikan buka aplikasi saat jam masuk, tanpa mutasi data.
-export function measuredFlow() {
+export function measuredFlow(data) {
+  token = data.token;
   const okDash = get('/api/mahasiswa/dashboard', 'dashboard', dashboardLatency);
   sleep(0.5);
   const okJadwal = get('/api/mahasiswa/jadwal/today', 'jadwal', jadwalLatency);

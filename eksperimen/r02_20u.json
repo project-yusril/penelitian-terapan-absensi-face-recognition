@@ -1,0 +1,276 @@
+﻿{
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {
+            "setup": {
+                "id": "5c0f8025f7e0b6654089e5b00e950f1a",
+                "groups": {},
+                "checks": {
+                        "login 200": {
+                            "name": "login 200",
+                            "path": "::setup::login 200",
+                            "id": "647055af8ffe21e58084ae4b140cdda0",
+                            "passes": 46,
+                            "fails": 3
+                        }
+                    },
+                "name": "setup",
+                "path": "::setup"
+            }
+        },
+        "checks": {
+            "dashboard 200": {
+                "path": "::dashboard 200",
+                "id": "834732e3e331ab0c1efa32a058e51217",
+                "passes": 403,
+                "fails": 770,
+                "name": "dashboard 200"
+            },
+            "jadwal 200": {
+                "fails": 769,
+                "name": "jadwal 200",
+                "path": "::jadwal 200",
+                "id": "1c7325c77760287d1ed68eda06ed9a32",
+                "passes": 404
+            },
+            "history 200": {
+                "name": "history 200",
+                "path": "::history 200",
+                "id": "fe27b3b8edd292c7f2170a6357b087d0",
+                "passes": 390,
+                "fails": 783
+            }
+        }
+    },
+    "metrics": {
+        "absensi_request_failure": {
+            "passes": 2322,
+            "fails": 0,
+            "thresholds": {
+                "rate<0.01": true
+            },
+            "value": 1
+        },
+        "data_sent": {
+            "rate": 1624.9973966986488,
+            "count": 225596
+        },
+        "absensi_history_http_duration": {
+            "max": 972.3169,
+            "p(90)": 323.81172,
+            "p(95)": 370.11427999999984,
+            "avg": 146.13788320545592,
+            "min": 18.7863,
+            "med": 84.2509
+        },
+        "iterations": {
+            "rate": 8.44927191230126,
+            "count": 1173
+        },
+        "http_req_connecting": {
+            "med": 0,
+            "max": 74.2709,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0.277252802690583,
+            "min": 0
+        },
+        "http_req_receiving": {
+            "avg": 0.08080734304932734,
+            "min": 0,
+            "med": 0,
+            "max": 21.587,
+            "p(90)": 0,
+            "p(95)": 0.6317149999999989
+        },
+        "http_req_waiting": {
+            "max": 972.3169,
+            "p(90)": 325.25018,
+            "p(95)": 382.9443349999996,
+            "avg": 152.09971339686163,
+            "min": 17.1977,
+            "med": 87.42635
+        },
+        "iteration_duration": {
+            "min": 1057.5617,
+            "med": 1389.9069,
+            "max": 4746.7428,
+            "p(90)": 1830.0687,
+            "p(95)": 2026.85412,
+            "avg": 1461.2088803921565
+        },
+        "http_req_blocked": {
+            "avg": 0.6104258688340807,
+            "min": 0,
+            "med": 0,
+            "max": 123.3207,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "http_req_tls_handshaking": {
+            "avg": 0.31407514013452925,
+            "min": 0,
+            "med": 0,
+            "max": 42.4109,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "dropped_iterations": {
+            "count": 28,
+            "rate": 0.20168765008050749
+        },
+        "checks": {
+            "fails": 2325,
+            "passes": 1243,
+            "value": 0.3483744394618834
+        },
+        "absensi_jadwal_http_duration": {
+            "p(90)": 323.70673999999997,
+            "p(95)": 378.2270799999997,
+            "avg": 150.9205442455241,
+            "min": 18.6679,
+            "med": 86.5341,
+            "max": 709.0492
+        },
+        "data_received": {
+            "count": 2688012,
+            "rate": 19362.10084529304
+        },
+        "http_req_duration{expected_response:true}": {
+            "max": 972.3169,
+            "p(90)": 345.91754,
+            "p(95)": 409.60720999999984,
+            "avg": 172.9049390989538,
+            "min": 60.0842,
+            "med": 105.7558
+        },
+        "http_reqs": {
+            "count": 3568,
+            "rate": 25.700769124544667
+        },
+        "http_req_failed": {
+            "fails": 1243,
+            "passes": 2325,
+            "value": 0.6516255605381166
+        },
+        "vus": {
+            "value": 17,
+            "min": 0,
+            "max": 39
+        },
+        "absensi_dashboard_http_duration": {
+            "p(95)": 387.84793999999977,
+            "avg": 152.9249776641091,
+            "min": 18.3312,
+            "med": 86.9896,
+            "max": 842.3414,
+            "p(90)": 327.36652
+        },
+        "http_req_duration{endpoint:history}": {
+            "avg": 146.13788320545592,
+            "min": 18.7863,
+            "med": 84.2509,
+            "max": 972.3169,
+            "p(90)": 323.81172,
+            "p(95)": 370.11427999999984,
+            "thresholds": {
+                "p(95)<2000": false
+            }
+        },
+        "http_req_duration{endpoint:jadwal}": {
+            "avg": 150.92054424552407,
+            "min": 18.6679,
+            "med": 86.5341,
+            "max": 709.0492,
+            "p(90)": 323.70673999999997,
+            "p(95)": 378.2270799999997,
+            "thresholds": {
+                "p(95)<2000": false
+            }
+        },
+        "http_req_sending": {
+            "avg": 0.08383458520179365,
+            "min": 0,
+            "med": 0,
+            "max": 5.0122,
+            "p(90)": 0.37617000000000017,
+            "p(95)": 0.502065
+        },
+        "http_req_duration{endpoint:dashboard}": {
+            "p(95)": 387.84793999999977,
+            "avg": 152.9249776641091,
+            "min": 18.3312,
+            "med": 86.9896,
+            "max": 842.3414,
+            "p(90)": 327.36652,
+            "thresholds": {
+                "p(95)<2000": false
+            }
+        },
+        "vus_max": {
+            "value": 40,
+            "min": 20,
+            "max": 40
+        },
+        "http_req_duration": {
+            "med": 87.55075,
+            "max": 972.3169,
+            "p(90)": 325.32696,
+            "p(95)": 383.68127999999996,
+            "avg": 152.26435532511232,
+            "min": 18.3312
+        }
+    },
+    "setup_data": {
+        "tokens": [
+            "352|REDACTED-token-dihapus-dari-server",
+            "353|REDACTED-token-dihapus-dari-server",
+            "354|REDACTED-token-dihapus-dari-server",
+            "355|REDACTED-token-dihapus-dari-server",
+            "356|REDACTED-token-dihapus-dari-server",
+            "357|REDACTED-token-dihapus-dari-server",
+            "358|REDACTED-token-dihapus-dari-server",
+            "359|REDACTED-token-dihapus-dari-server",
+            "360|REDACTED-token-dihapus-dari-server",
+            "361|REDACTED-token-dihapus-dari-server",
+            "362|REDACTED-token-dihapus-dari-server",
+            "363|REDACTED-token-dihapus-dari-server",
+            "364|REDACTED-token-dihapus-dari-server",
+            "365|REDACTED-token-dihapus-dari-server",
+            "366|REDACTED-token-dihapus-dari-server",
+            "367|REDACTED-token-dihapus-dari-server",
+            "368|REDACTED-token-dihapus-dari-server",
+            "369|REDACTED-token-dihapus-dari-server",
+            "370|REDACTED-token-dihapus-dari-server",
+            "371|REDACTED-token-dihapus-dari-server",
+            "372|REDACTED-token-dihapus-dari-server",
+            "373|REDACTED-token-dihapus-dari-server",
+            "374|REDACTED-token-dihapus-dari-server",
+            "375|REDACTED-token-dihapus-dari-server",
+            "376|REDACTED-token-dihapus-dari-server",
+            "377|REDACTED-token-dihapus-dari-server",
+            "378|REDACTED-token-dihapus-dari-server",
+            "379|REDACTED-token-dihapus-dari-server",
+            "380|REDACTED-token-dihapus-dari-server",
+            "381|REDACTED-token-dihapus-dari-server",
+            "382|REDACTED-token-dihapus-dari-server",
+            "383|REDACTED-token-dihapus-dari-server",
+            "384|REDACTED-token-dihapus-dari-server",
+            "385|REDACTED-token-dihapus-dari-server",
+            "386|REDACTED-token-dihapus-dari-server",
+            "387|REDACTED-token-dihapus-dari-server",
+            "388|REDACTED-token-dihapus-dari-server",
+            "389|REDACTED-token-dihapus-dari-server",
+            "390|REDACTED-token-dihapus-dari-server",
+            "391|REDACTED-token-dihapus-dari-server",
+            "392|REDACTED-token-dihapus-dari-server",
+            "393|REDACTED-token-dihapus-dari-server",
+            "394|REDACTED-token-dihapus-dari-server",
+            "395|REDACTED-token-dihapus-dari-server",
+            "396|REDACTED-token-dihapus-dari-server",
+            "397|REDACTED-token-dihapus-dari-server"
+        ]
+    }
+}

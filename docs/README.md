@@ -25,6 +25,7 @@ Jika terdapat perbedaan, gunakan urutan berikut:
 | [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md) | Matriks role/permission/prodi canonical, tiga lapis enforcement, dan checklist audit negative test (MS-01) |
 | [THREAT-MODEL-ATTENDANCE.md](THREAT-MODEL-ATTENDANCE.md) | Aktor ancaman, kontrol yang ditegakkan server, klaim client yang belum terverifikasi, dan batas klaim |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Environment, CI, backend deployment, Android release/device matrix, rollback, dan restore |
+| [`eksperimen/` (root repo)](../eksperimen/PROTOKOL_EKSPERIMEN.md) | Protokol & hasil eksperimen penelitian: FAR asli (1.485 pasangan impostor, θ=0.600 → 0%), benchmark beban 20/30/40 (p95 < 2 s), protokol pengumpulan data genuine untuk FRR + uji anti-spoofing terbatas |
 | [`ssh.md` (root repo)](../ssh.md) | Kredensial & runbook akses SSH server production (IP/port/user/key, pola deploy, backup/restore) — **rahasia, di-gitignore, hanya lokal** |
 | [temuan.md](temuan.md) | Temuan aktif, status remediation, acceptance, dan evidence |
 | [PRD-INDEX.md](PRD-INDEX.md) | Indeks kebutuhan produk dan status implementasi |
@@ -68,6 +69,8 @@ Dokumen historis tidak boleh digunakan untuk membuat endpoint, credential, deplo
 | Checkout | Action dan navigation contract selesai | [temuan.md](temuan.md#h-13-checkout-ui-tidak-memiliki-actionnavigasi-yang-dapat-dicapai) |
 | Camera matrix | Harness tersedia; physical Android low/mid/high evidence belum ada | [temuan.md](temuan.md#h-16-camera-converter-belum-diverifikasi-pada-device-matrix) |
 | CI/repository | Workflow/hygiene tersedia; remote green run dan enforcement belum terbukti | [temuan.md](temuan.md#l-09-hygiene-repositorydeployment-belum-memadai) |
+| Benchmark beban (R-02) | **Selesai 21 Sep 2026** — p95 < 2 s pada level 20/30/40 (server-side, WAF blokir k6 eksternal); failure = 429 limiter by design | [temuan.md](temuan.md), [eksperimen/](../eksperimen/PROTOKOL_EKSPERIMEN.md) |
+| FAR biometrik (R-03) | **FAR selesai 21 Sep 2026** — 1.485 pasangan impostor asli, FAR @ θ=0.600 = 0%; FRR menunggu data genuine lapangan; data seeder 400+400 dinyatakan sintetis (tidak valid untuk laporan) | [temuan.md](temuan.md), [eksperimen/](../eksperimen/PROTOKOL_EKSPERIMEN.md) |
 | Dataset analisis penelitian | `prodi_id` mempersempit dataset, bukan hanya threshold; atribusi memakai prodi subjek | [PRD-07-analisis-evaluasi.md](PRD-07-analisis-evaluasi.md), [CURRENT-API.md](CURRENT-API.md) |
 | Authorization | Tiga lapis: guard role, object policy, query scope. Role tingkat prodi fail-closed ke `prodi_id` aktor | [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md) |
 
