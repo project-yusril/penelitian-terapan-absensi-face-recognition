@@ -79,6 +79,12 @@ Deploy langsung dari workspace Windows ke host dilakukan via SSH key (detail kon
 6. **Rebuild 4 APK debug (15:11–15:12 WIB)** dengan fix retry + `API_BASE_URL` produksi: `app-arm64-v8a-debug.apk` (117 MB), `app-armeabi-v7a-debug.apk` (92 MB), `app-x86_64-debug.apk` (107 MB), `app-debug.apk` fat (212 MB).
 7. **Ops script demo** (`eksperimen/demo_on.sh` / `demo_off.sh`) ditambahkan untuk toggle `BIOMETRIC_ALLOW_CLIENT_CLAIMS` di server dengan backup + restore permission — direview: tanpa flip `APP_ENV`, work file di luar web root, permission asli dipertahankan.
 
+**21 September 2026, 18:00–18:12 WIB — N-01 + N-02 (mobile) dan rebuild APK:**
+
+1. **N-01 — gate frame netral pasca-liveness:** verifikasi wajah absensi tidak lagi memakai frame ekspresi challenge; verifikasi menunggu frame netral berikutnya (frontal + mata terbuka, ambang identik enrollment, maks 5 detik, timeout = ulang liveness), dan fase tunggu dibatalkan saat diskontinuitas wajah (binding anti-spoofing dari review keamanan). Detail lengkap di [temuan.md N-01](temuan.md#n-01-verifikasi-wajah-dijalankan-pada-frame-ekspresi-challenge--frr-lapangan-menumpuk).
+2. **N-02 — migrasi built-in Kotlin + upgrade plugin:** app gradle bermigrasi (hapus `kotlin-android`/`kotlinOptions`), 5 plugin di-upgrade (`shared_preferences_android` 2.4.28, `device_info_plus` 13.2.0, `camera` 0.12.1, `flutter_secure_storage` 10.3.4, `file_picker` 12.3.0). Breaking change `FilePicker.platform` (12.x) diperbaiki di `leave_page.dart`. Sisa: `safe_device` masih KGP — `android.builtInKotlin` tetap `false`. Detail di [temuan.md N-02](temuan.md#n-02-plugin-android-memakai-kotlin-gradle-plugin-kgp--build-gagal-di-flutter-mendatang-agp-9).
+3. **Rebuild 4 APK debug (18:09–18:11 WIB)** dengan `API_BASE_URL` produksi, memuat N-01 + N-02: `app-arm64-v8a-debug.apk` (119 MB), `app-armeabi-v7a-debug.apk` (93 MB), `app-x86_64-debug.apk` (108 MB), `app-debug.apk` fat (213 MB). Verifikasi: `flutter test` 207/207, `flutter analyze` bersih, warning KGP build hanya untuk `safe_device`.
+
 Yang **belum diverifikasi** pada host live (masuk L-09 sampai ada bukti):
 
 1. ~~Scheduler/queue worker long-running~~ — **scheduler aktif sejak 21 September 2026, 12:00 WIB** (cron `schedule:run` per menit; perbaikan `proc_open` pada `disable_functions`). Task terverifikasi: `schedule:test` DONE, log cron `DONE` per menit, dan fix bug reminder terdeploy. Queue worker tetap mengikuti mekanisme cron (`queue:work --stop-when-empty` via scheduler).

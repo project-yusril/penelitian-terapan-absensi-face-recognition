@@ -157,7 +157,10 @@
      - "Anggukkan kepala" -> headEulerAngleX perubahan > 15 derajat
   3. Tampilkan instruksi challenge ke user
   4. Timeout: 10 detik per challenge
-  5. Jika berhasil -> lanjut ke face verification
+  5. Jika berhasil -> tunggu **frame netral pasca-liveness** (N-01): verifikasi tidak memakai
+     frame ekspresi challenge; frame berikutnya yang frontal + mata terbuka (ambang sama
+     dengan capture final enrollment) dipakai untuk verification — maks 5 detik, timeout =
+     ulang liveness dengan challenge baru; ganti wajah di tengah alur membatalkan fase tunggu
   6. Jika gagal -> boleh coba lagi (tidak ada limit, tapi dicatat di log)
 - **Anti-spoofing tambahan**:
   - Deteksi apakah wajah terlalu flat (indikasi foto/layar)
@@ -169,7 +172,7 @@
 - **Prasyarat**: Liveness detection berhasil
 - **Konfigurasi Kamera**: Sama dengan saat liveness — preview 720p (ResolutionPreset.high)
 - **Flow**:
-  1. Ambil frame wajah terbaik dari stream 720p (proses liveness)
+  1. Ambil frame wajah terbaik dari stream 720p — **frame netral pasca-liveness** (bukan frame ekspresi challenge, N-01)
   2. Crop wajah berdasarkan bounding box ML Kit
   3. Resize ke 112x112 piksel (resolusi asal tidak berpengaruh — target hanya 112x112)
   4. Normalisasi: x_norm = (x - 127.5) / 127.5

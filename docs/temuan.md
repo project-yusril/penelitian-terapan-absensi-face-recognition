@@ -41,8 +41,8 @@ Audit awal mengonsolidasikan **59 temuan utama** dan 5 task validitas penelitian
 | `php artisan test` | **Lulus: 235 test, 883 assertion** pada PHP 8.3.30 (12 September 2026, setelah test invarian guard route M2; sebelumnya 232/875 pada 20 Agustus 2026) |
 | `npm run build` | **Lulus** (18 Agustus 2026), Vite/Rolldown membangun frontend Inertia/Vue |
 | `npm audit --package-lock-only --omit=dev` dan full graph | **0 known vulnerabilities** setelah lockfile diperbarui (11 Agustus 2026) |
-| `flutter test` | **192 test lulus** (12 September 2026, setelah pembersihan dead code `features/notification/`; sebelumnya 189 pada 18 Agustus 2026), termasuk kontrak konflik biometrik dan izin multi-MK, lifecycle FCM (L-02), navigasi checkout (H-13), comparator/formatters production (L-06), permit contract, queue lease, dan camera converter |
-| `flutter analyze` | **Bersih, No issues found** (12 September 2026); CI memakai `--fatal-warnings --fatal-infos` |
+| `flutter test` | **207 test lulus** (21 September 2026, setelah N-01 gate frame netral + N-02 upgrade plugin/file_picker 12.x; sebelumnya 192 pada 12 September 2026), termasuk kontrak konflik biometrik dan izin multi-MK, lifecycle FCM (L-02), navigasi checkout (H-13), comparator/formatters production (L-06), permit contract, queue lease, camera converter, dan gate frame netral pasca-liveness |
+| `flutter analyze` | **Bersih, No issues found** (21 September 2026); CI memakai `--fatal-warnings --fatal-infos` |
 | `vendor/bin/pint --test` | **Lulus, tanpa style issue** (12 September 2026, termasuk `RouteGuardInvariantTest`) |
 | Composer advisory audit | **0 advisory** setelah DomPDF/Guzzle/CommonMark diperbarui (11 Agustus 2026) |
 | Git/history audit | Root adalah Git repository pada `main` dengan remote GitHub; history dua commit diaudit tanpa forbidden secret filename |

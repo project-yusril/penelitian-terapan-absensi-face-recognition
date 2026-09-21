@@ -163,7 +163,7 @@ Lifecycle FCM mobile diimplementasikan di `frontend/lib/core/notifications/push_
 
 | Platform | Status |
 |---|---|
-| Android | Target release aktif; signing release melalui CI/secret manager |
+| Android | Target release aktif; signing release melalui CI/secret manager. Build app memakai **built-in Kotlin** (N-02, 21 September 2026); `android.builtInKotlin` tetap `false` selama `safe_device` belum bermigrasi dari KGP |
 | iOS | Tidak didukung dan dikeluarkan dari release matrix; folder platform hanya scaffold pengembangan |
 | Web dashboard | Target aktif melalui backend Inertia |
 

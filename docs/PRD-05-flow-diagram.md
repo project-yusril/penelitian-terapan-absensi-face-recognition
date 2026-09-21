@@ -76,7 +76,9 @@
 │ 6. Tampilkan instruksi ke user                                       │
 │ 7. Timeout: 10 detik                                                 │
 │    ├── Gagal/timeout ──► "Liveness gagal. Coba lagi." (log)         │
-│    └── Berhasil ──► LANJUT KE STEP 3                                │
+│    └── Berhasil ──► TUNGGU FRAME NETRAL, lalu LANJUT KE STEP 3      │
+│    (N-01: verifikasi memakai frame netral pasca-liveness, bukan      │
+│     frame ekspresi challenge; ganti wajah = ulang liveness)          │
 └─────────────────────┬───────────────────────────────────────────────┘
                       │ PASSED
                       ▼
@@ -85,7 +87,8 @@
 ├─────────────────────────────────────────────────────────────────────┤
 │ ** Kamera: preview 720p (ResolutionPreset.high) — kualitas bagus **  │
 │                                                                      │
-│ 1. Ambil frame wajah dari stream 720p (proses liveness)              │
+│ 1. Ambil frame wajah netral dari stream 720p (N-01: bukan frame     │
+│    ekspresi challenge — frontal + mata terbuka)                      │
 │ 2. Crop wajah (bounding box dari ML Kit)                            │
 │ 3. Resize ke 112 x 112 piksel                                       │
 │    (resolusi asal tidak berpengaruh — target hanya 112x112)         │
