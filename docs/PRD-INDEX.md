@@ -93,20 +93,20 @@ Ambang ini adalah default `prodi_settings` dan sama dengan `AppConstants` mobile
 - Rate limit: group API terautentikasi memakai `throttle:api` 60/menit **per user**, `POST /auth/change-password` memakai `throttle:auth-sensitive` 5/menit per user. Keying per user, bukan per IP, agar NAT kampus tidak saling mengunci (M-23).
 - Authorization: matriks role/permission/prodi canonical ada di ROLE-PERMISSION-MATRIX.md; enforcement tiga lapis (guard role, object policy, query scope) dan filter request hanya boleh mempersempit scope (H-21/MS-01).
 - Dataset analisis penelitian: `prodi_id` mempersempit dataset — bukan hanya memilih threshold — dengan atribusi prodi subjek (`users.prodi_id`), dan endpoint analisis memakai scope aktor sehingga role tingkat prodi tidak dapat membaca prodi lain (R-04/M-24).
-- Attendance/enrollment production fail-closed. Trusted verifier (C-04/H-04) di luar scope penelitian; ADR-001 ditolak, residual risk diterima.
+- Attendance/enrollment production aktif dengan bukti client-attested sejak 21 September 2026 (keputusan pemilik proyek; revisi ADR-001). Trusted verifier (C-04/H-04) tetap di luar scope penelitian; residual risk diterima. Tanpa flag, gate kembali fail-closed.
 - Platform mobile release Android-only; iOS tidak didukung (H-17).
 - FCM lifecycle tersedia sebagai explicit opt-in; default release off (L-02).
 - Workflow Backend/Frontend CI sudah didefinisikan; remote enforcement/evidence masih mengikuti L-09.
 - **RENCANA 2 (kelas master, 20 Agustus 2026):** mata kuliah = master kurikulum (tanpa `kelas`/`dosen_id`); dosen & kelas di-plot per jadwal (`jadwals.dosen_id`/`kelas_id`); KRS diturunkan dari `mahasiswa_kelas` → kelas → jadwal; pivot `mahasiswa_mata_kuliah` dihapus; `users.kelas`/`semester` = snapshot. Unik: `mata_kuliahs(kode_mk, semester_id, prodi_id)`, `kelas(prodi_id, semester_id, tingkat, nama)`, `mahasiswa_kelas(user_id, semester_id)`. Detail & verifikasi: rencana2.md, CURRENT-ARCHITECTURE.md → "Struktur Data Akademik", CURRENT-API.md → "Perubahan Kontrak RENCANA 2".
 - **Pembersihan data (12 September 2026):** semester aktif `2026/2027-1` memuat kelas 1A–1E, 3A–3E, 5A–5E; kelas 1A–1E di semester genap 2025/2026 hasil seeding keliru dihapus beserta pivotnya (100% duplikat angkatan 2026, tanpa jadwal/attendance). Arsip genap 2025/2026 hanya 4A–4E (62 attendance riwayat). State data lengkap: CURRENT-ARCHITECTURE.md → "State Data Terkini".
-- **Backend live (12 September 2026):** backend penelitian berjalan di `https://absensi.yusrilekamahendra.com` (Hostinger); `GET /api/health` → 200. Mobile memakai `--dart-define=API_BASE_URL=https://absensi.yusrilekamahendra.com/api`. Scheduler/queue cron Hostinger dan mail delivery masih harus diverifikasi di host (bagian L-09). Detail: DEPLOYMENT.md → "Backend Production (Live)".
+- **Backend live (12 September 2026):** backend penelitian berjalan di `https://absensi.yusrilekamahendra.com` (Hostinger); `GET /api/health` → 200. Mobile memakai `--dart-define=API_BASE_URL=https://absensi.yusrilekamahendra.com/api`. **Scheduler aktif sejak 21 September 2026** (cron `schedule:run` per menit; hambatan `proc_open` Hostinger diperbaiki — detail DEPLOYMENT.md). Mail delivery masih harus diverifikasi di host (bagian L-09). Detail: DEPLOYMENT.md → "Backend Production (Live)".
 
 ### Flow Absensi
 ```
 Permit server → Geofence → Liveness challenge → Face Match → Submit evidence → Consume permit
 ```
 
-Flow tersebut hanya compatibility/non-production. Production berhenti permanen di gate `TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` karena trusted verifier di luar scope penelitian ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak).
+Flow tersebut aktif di production sejak 21 September 2026 (revisi ADR-001, keputusan pemilik proyek) dengan bukti client-attested — server tidak mengulang liveness/face matching. Mematikan `BIOMETRIC_ALLOW_CLIENT_CLAIMS` mengembalikan production ke gate `TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` karena trusted verifier tetap di luar scope penelitian ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak).
 
 ### Timeline
 - Total estimasi: ~22 minggu (5.5 bulan)

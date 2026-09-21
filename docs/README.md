@@ -47,7 +47,7 @@ Jika terdapat perbedaan, gunakan urutan berikut:
 
 ### Architecture Decision Records (ADR)
 
-- `ADR-001-trusted-biometric-verifier.md`: **DITOLAK / tidak dilanjutkan.** Rancangan trusted biometric verifier server-side (C-04/H-04). Verifier **di luar scope penelitian**; production tetap fail-closed dan residual risk diterima. Disimpan sebagai catatan keputusan bila proyek dinaikkan ke tingkat produksi. Bukan rencana aktif.
+- `ADR-001-trusted-biometric-verifier.md`: **DITOLAK / tidak dilanjutkan.** Rancangan trusted biometric verifier server-side (C-04/H-04). Verifier **di luar scope penelitian**; residual risk diterima. Revisi 21 September 2026: alur client-attested di production diaktifkan via `BIOMETRIC_ALLOW_CLIENT_CLAIMS` (keputusan pemilik proyek) — bukan penghidupan verifier. Disimpan sebagai catatan keputusan bila proyek dinaikkan ke tingkat produksi. Bukan rencana aktif.
 
 ### Historis
 

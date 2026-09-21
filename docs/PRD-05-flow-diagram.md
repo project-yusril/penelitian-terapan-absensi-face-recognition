@@ -4,8 +4,9 @@
 > Flow authoritative selalu dimulai dengan attendance permit dan invariant server
 > pada [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md) dan
 > [CURRENT-API.md](CURRENT-API.md). Offline mode memerlukan permit valid. Diagram
-> biometric flow hanya berlaku untuk compatibility/non-production; production
-> berhenti fail-closed. Trusted verifier (C-04/H-04) di luar scope penelitian
+> biometric flow aktif di production sejak 21 September 2026 (revisi ADR-001,
+> keputusan pemilik proyek) dengan bukti client-attested. Trusted verifier
+> (C-04/H-04) tetap di luar scope penelitian
 > ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak).
 
 ## 1. FLOW UTAMA: PROSES ABSENSI (CHECK-IN)

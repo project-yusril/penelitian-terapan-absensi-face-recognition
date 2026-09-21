@@ -23,7 +23,7 @@ Release/profile hanya menerima HTTPS. Debug HTTP menerima loopback, alias emulat
 
 ## Attendance Flow
 
-1. Aplikasi meminta permit dari server. Production release penelitian mengembalikan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` karena trusted verifier tidak diimplementasikan dalam scope ini.
+1. Aplikasi meminta permit dari server. Production penelitian mengizinkan alur ini sejak 21 September 2026 (`BIOMETRIC_ALLOW_CLIENT_CLAIMS=true`, revisi ADR-001); tanpa flag, server merespons `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`.
 2. Server memeriksa academic-resource invariant dan attendance window.
 3. Aplikasi memvalidasi lokasi, liveness, dan wajah.
 4. Evidence dikirim bersama permit sekali pakai.

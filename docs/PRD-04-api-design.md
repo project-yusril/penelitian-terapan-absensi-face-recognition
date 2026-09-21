@@ -6,10 +6,11 @@
 > `backend/routes/api.php`. Contoh reset token, private photo, attendance direct,
 > dan offline payload lama di bawah tidak boleh digunakan bila bertentangan
 > dengan dokumen current.
-> Endpoint attendance/enrollment yang tercantum dapat tersedia sebagai route,
-> tetapi production mengembalikan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`.
-> Trusted verifier (C-04/H-04) di luar scope penelitian ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak),
-> sehingga containment ini permanen untuk konteks penelitian.
+> Endpoint attendance/enrollment yang tercantum aktif di production sejak
+> 21 September 2026 (revisi ADR-001, keputusan pemilik proyek) dengan bukti
+> client-attested; mematikan `BIOMETRIC_ALLOW_CLIENT_CLAIMS` mengembalikan
+> `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`.
+> Trusted verifier (C-04/H-04) tetap di luar scope penelitian ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak).
 
 > **D-01 & D-02 (disinkronkan 16 Juni 2026):** Dokumen ini telah diselaraskan
 > dengan implementasi nyata di `backend/routes/api.php`. Base URL, prefix, method,

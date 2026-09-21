@@ -5,8 +5,10 @@
 > [CURRENT-ARCHITECTURE.md](CURRENT-ARCHITECTURE.md), [CURRENT-API.md](CURRENT-API.md),
 > dan [SECURITY.md](SECURITY.md). NIM/NIDN atau password universal tidak pernah
 > menjadi credential awal. Mobile release hanya untuk mahasiswa Android; fungsi
-> Dosen berjalan di dashboard web. Attendance/enrollment production
-> fail-closed; trusted verifier (C-04/H-04) di luar scope penelitian ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak).
+> Dosen berjalan di dashboard web. Attendance/enrollment production aktif dengan
+> bukti client-attested sejak 21 September 2026 (revisi ADR-001, keputusan pemilik
+> proyek); trusted verifier (C-04/H-04) tetap di luar scope penelitian
+> ([ADR-001](ADR-001-trusted-biometric-verifier.md) ditolak).
 
 ## 1. MODUL AUTENTIKASI & USER MANAGEMENT
 

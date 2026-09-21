@@ -35,7 +35,7 @@ Sistem absensi **Jurusan Teknik Elektro, Politeknik Negeri Pontianak** dengan ve
 - **Mobile** — Flutter 3.44 (Android-only; iOS bukan release target), BLoC, Dio, Hive terenkripsi, MobileFaceNet on-device.
 - **CI** — Backend CI (validate/audit/build/test) dan Frontend CI (analyze/test) pada setiap push/PR; Android release & device-test workflow manual.
 
-Flask keamanan penting: produksi **fail-closed** — mutation attendance/enrollment menolak evidence scalar client (`503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`) karena trusted verifier server-side berada di luar scope penelitian ([ADR-001](docs/ADR-001-trusted-biometric-verifier.md), [threat model](docs/THREAT-MODEL-ATTENDANCE.md)).
+Flask keamanan penting: sejak 21 September 2026, produksi mengizinkan alur attendance/enrollment berbasis scalar client (`BIOMETRIC_ALLOW_CLIENT_CLAIMS=true`, keputusan pemilik proyek — revisi ADR-001). Bukti liveness/face-distance tetap **client-attested** (bukan verifier server-side), sehingga sistem **tidak boleh diklaim tahan proxy attendance atau presentation attack** ([ADR-001](docs/ADR-001-trusted-biometric-verifier.md), [threat model](docs/THREAT-MODEL-ATTENDANCE.md)). Mematikan flag mengembalikan fail-closed `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`.
 
 ## Struktur Repositori
 

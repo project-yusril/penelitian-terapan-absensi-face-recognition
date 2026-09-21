@@ -3,6 +3,15 @@
 > **Status: DITOLAK / TIDAK DILANJUTKAN (12 Agustus 2026).** Tetap disimpan sebagai
 > catatan keputusan; **bukan** rencana aktif dan **bukan** kontrak runtime.
 >
+> **Revisi 21 September 2026 (keputusan pemilik proyek).** Alur absensi
+> client-attested di production **diaktifkan** untuk kebutuhan demo/penelitian
+> lapangan: `RequireTrustedBiometricEvidence` kini menghormati
+> `BIOMETRIC_ALLOW_CLIENT_CLAIMS=true` juga di environment production, sehingga
+> endpoint biometrik berfungsi dengan bukti **client-attested** — bukan hasil
+> verifier server-side. Verifier (di bawah) **tetap tidak dibangun** dan
+> C-04/H-04 tetap residual risk yang terdokumentasi; klaim ketahanan terhadap
+> proxy attendance/presentation attack tetap dilarang.
+>
 > **Alasan penolakan.** Trusted verifier server-side (server mengulang face matching +
 > liveness dari artefak capture) adalah kontrol tingkat produksi terhadap penyerang aktif
 > yang memodifikasi APK. Untuk **konteks penelitian/skripsi** ini, kontrol tersebut
@@ -15,8 +24,9 @@
 > **Konsekuensi.** C-04 dan H-04 **tidak diimplementasikan** dan diterima sebagai
 > **residual risk penelitian yang didokumentasikan** (lihat [temuan.md](temuan.md) C-04/H-04
 > dan [THREAT-MODEL-ATTENDANCE.md](THREAT-MODEL-ATTENDANCE.md) §"Batas Klaim yang Boleh Dibuat").
-> Production tetap fail-closed via `RequireTrustedBiometricEvidence`; data flow legacy
-> hanya untuk penelitian non-production dan diperlakukan **client-attested**, bukan bukti forensik.
+> Sejak 21 September 2026 production menerima data client-attested melalui switch
+> eksplisit; tanpa switch, gate tetap fail-closed. Data flow legacy diperlakukan
+> **client-attested**, bukan bukti forensik.
 > Jangan mengklaim ketahanan terhadap proxy attendance atau presentation attack.
 >
 > Dokumen di bawah ini adalah rancangan yang **tidak jadi dijalankan**, dipertahankan bila

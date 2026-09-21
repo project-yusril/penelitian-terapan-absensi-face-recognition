@@ -11,12 +11,13 @@ class RequireTrustedBiometricEvidence
 {
     /**
      * Client-computed liveness, face distance, embedding, and location claims
-     * are not authoritative. Keep legacy mode explicit and disabled by default,
-     * especially when production configuration is incomplete.
+     * are not authoritative. Since 21 Sep 2026 the client-attested flow is
+     * explicitly enabled for the research demo via BIOMETRIC_ALLOW_CLIENT_CLAIMS
+     * (see ADR-001 revision); the gate stays fail-closed until the flag is set.
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (! app()->isProduction() && config('biometric.allow_client_claims') === true) {
+        if (config('biometric.allow_client_claims') === true) {
             return $next($request);
         }
 

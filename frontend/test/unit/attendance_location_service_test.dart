@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:absensi_mahasiswa/features/attendance/domain/services/attendance_location_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -227,5 +228,69 @@ void main() {
       ),
       throwsA(isA<TimeoutException>()),
     );
+  });
+
+  test('retries a policy-rejected stale fix and succeeds with a fresh one',
+      () async {
+    // Android sering menyodorkan fix cache yang ditolak kebijakan umur;
+    // acquire() harus meminta fix berikutnya alih-alih langsung menyerah.
+    final provider = _Provider()
+      ..position = positionAt(DateTime.utc(2026, 7, 18, 0, 59, 45));
+    final service = buildService(provider);
+
+    await expectLater(
+      service.acquire(
+        policy: policy,
+        geofenceLat: -0.0263,
+        geofenceLon: 109.3425,
+        geofenceRadius: 100,
+      ),
+      throwsCode('location_policy_rejected'),
+    );
+    expect(provider.calls, 3, reason: 'fix basi diulang sampai batas attempt');
+  });
+
+  test('retry succeeds when a fresh fix follows a stale one', () async {
+    final stale = positionAt(DateTime.utc(2026, 7, 18, 0, 59, 45));
+    final fresh = positionAt(DateTime.utc(2026, 7, 18, 1));
+    final responses = Queue<AttendancePosition>()..addAll([stale, fresh]);
+    final provider = _Provider()
+      ..response = (_) async => responses.removeFirst();
+    final service = buildService(provider);
+
+    final fix = await service.acquire(
+      policy: policy,
+      geofenceLat: -0.0263,
+      geofenceLon: 109.3425,
+      geofenceRadius: 100,
+    );
+
+    expect(provider.calls, 2);
+    expect(fix.ageMs(Duration.zero), 0);
+  });
+
+  test('permanent conditions are not retried', () async {
+    // Di luar geofence tidak akan berubah dengan mengulang permintaan GPS,
+    // jadi acquire() harus berhenti setelah satu panggilan.
+    final provider = _Provider()
+      ..position = AttendancePosition(
+        latitude: -0.1000,
+        longitude: 109.4000,
+        accuracy: 5,
+        isMocked: false,
+        timestamp: DateTime.utc(2026, 7, 18, 1),
+      );
+    final service = buildService(provider);
+
+    await expectLater(
+      service.acquire(
+        policy: policy,
+        geofenceLat: -0.0263,
+        geofenceLon: 109.3425,
+        geofenceRadius: 100,
+      ),
+      throwsCode('outside_geofence'),
+    );
+    expect(provider.calls, 1);
   });
 }

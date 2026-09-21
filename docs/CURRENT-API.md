@@ -97,15 +97,15 @@ Response 201 memuat:
 
 Token hanya boleh digunakan sekali dan terikat user, schedule, course, action, attendance, occurrence date, dan UUID.
 
-> **Production containment:** kontrak permit/attendance scalar di bawah hanya aktif
-> untuk local/testing compatibility. Production selalu mengembalikan
-> `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`. Challenge-bound capture artifact yang
-> diverifikasi server (trusted verifier) **di luar scope penelitian** — rancangan
-> ditolak di [ADR-001](ADR-001-trusted-biometric-verifier.md), sehingga containment
-> ini bersifat permanen untuk konteks penelitian dan hanya dibuka bila proyek
-> dinaikkan ke produksi. `BIOMETRIC_ALLOW_CLIENT_CLAIMS` tidak dapat membuka bypass di production.
+> **Production (revisi 21 September 2026):** kontrak permit/attendance scalar di bawah
+> aktif di production sejak keputusan pemilik proyek membuka alur client-attested
+> (`BIOMETRIC_ALLOW_CLIENT_CLAIMS=true`, revisi ADR-001). Challenge-bound capture artifact
+> yang diverifikasi server (trusted verifier) **tetap di luar scope penelitian** — rancangan
+> ditolak di [ADR-001](ADR-001-trusted-biometric-verifier.md) — sehingga bukti liveness/face-distance
+> bersifat client-attested, bukan forensik. Mematikan flag mengembalikan
+> `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` (fail-closed).
 
-Containment yang sama berlaku untuk:
+Gate `biometric.trusted` yang sama terpasang pada (kini aktif di production selama flag diset; fail-closed 503 tanpa flag):
 
 - permit attendance;
 - online check-in/check-out dan mixed offline sync;

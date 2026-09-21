@@ -36,10 +36,27 @@ class TrustedBiometricEvidenceGateTest extends TestCase
     }
 
     #[Test]
-    public function production_rejects_client_claims_even_if_the_compatibility_switch_is_set(): void
+    public function production_honors_the_explicit_compatibility_switch(): void
     {
         $this->app->detectEnvironment(fn () => 'production');
         config(['biometric.allow_client_claims' => true]);
+
+        try {
+            $middleware = new RequireTrustedBiometricEvidence;
+            $response = $middleware->handle(Request::create('/api/mahasiswa/attendance/check-in', 'POST'), fn () => response()->json(['ok' => true]));
+
+            $this->assertSame(200, $response->getStatusCode());
+            $this->assertTrue($response->getData(true)['ok']);
+        } finally {
+            $this->app->detectEnvironment(fn () => 'testing');
+        }
+    }
+
+    #[Test]
+    public function production_without_the_switch_stays_fail_closed(): void
+    {
+        $this->app->detectEnvironment(fn () => 'production');
+        config(['biometric.allow_client_claims' => false]);
 
         try {
             $middleware = new RequireTrustedBiometricEvidence;

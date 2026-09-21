@@ -1,3 +1,4 @@
+import '../../../../core/logging/app_logger.dart';
 import '../../../../core/utils/location_utils.dart';
 
 class AttendanceLocationPolicy {
@@ -73,6 +74,8 @@ class AttendanceLocationException implements Exception {
 }
 
 class AttendanceLocationService {
+  static final AppLogger _log = AppLogger.tag('AttendanceLocation');
+
   final AttendancePositionProvider _provider;
   final Duration Function() _ticks;
   final DateTime? Function() _authoritativeNow;
@@ -109,6 +112,54 @@ class AttendanceLocationService {
     required double geofenceLon,
     required double geofenceRadius,
     Duration timeout = const Duration(seconds: 12),
+  }) async {
+    final requestedAt = _authoritativeNow();
+    if (requestedAt == null) {
+      throw const AttendanceLocationException('server_time_anchor_unavailable');
+    }
+    // Android kerap mengembalikan fix CACHE (timestamp beberapa detik–menit
+    // lampau) pada `getCurrentPosition` berakurasi tinggi, terutama saat GPS
+    // baru menyala. Fix lama itu otomatis ditolak `policy.maxAgeSeconds`,
+    // sehingga percobaan pertama sering gagal padahal perangkat berada di
+    // dalam geofence. Coba lagi sebelum menyerah: permintaan berikutnya
+    // memaksa GPS menghasilkan fix segar.
+    const maxAttempts = 3;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await _acquireOnce(
+          policy: policy,
+          geofenceLat: geofenceLat,
+          geofenceLon: geofenceLon,
+          geofenceRadius: geofenceRadius,
+          timeout: timeout,
+        );
+      } on AttendanceLocationException catch (e) {
+        // Kondisi permanen tidak ada gunanya diulang.
+        const nonRetryable = {
+          'server_time_anchor_unavailable',
+          'mock_location_detected',
+          'location_permission_denied',
+          'location_timestamp_rejected',
+          'outside_geofence',
+        };
+        if (nonRetryable.contains(e.code) || attempt == maxAttempts) {
+          rethrow;
+        }
+        _log.warn(
+          'fix lokasi ditolak, mengulang permintaan GPS',
+          data: {'attempt': attempt, 'kode': e.code},
+        );
+      }
+    }
+    throw StateError('unreachable');
+  }
+
+  Future<AttendanceLocationFix> _acquireOnce({
+    required AttendanceLocationPolicy policy,
+    required double geofenceLat,
+    required double geofenceLon,
+    required double geofenceRadius,
+    required Duration timeout,
   }) async {
     final requestedAt = _authoritativeNow();
     if (requestedAt == null) {

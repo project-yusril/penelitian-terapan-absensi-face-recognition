@@ -5,7 +5,8 @@
 > residual risk ada di [SECURITY.md](SECURITY.md), acceptance ada di
 > [temuan.md](temuan.md). Auto-deploy, iOS, anti-spoofing, dan angka performa di
 > bawah adalah target, bukan capability current; release current Android-only,
-> biometrik production fail-closed, dan deployment tetap memerlukan gate manual.
+> biometrik production memakai bukti client-attested (revisi ADR-001, 21 Sep 2026),
+> dan deployment tetap memerlukan gate manual.
 
 ---
 

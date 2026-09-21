@@ -18,6 +18,7 @@ class SendAttendanceReminder extends Command
         $hariIni = Carbon::now()->locale('id')->isoFormat('dddd');
         $targetTime = Carbon::now()->addMinutes(15)->format('H:i:s');
         $currentTime = Carbon::now()->format('H:i:s');
+        $totalSent = 0;
 
         // Cari jadwal yang mulai dalam 15 menit ke depan
         $jadwals = Jadwal::with(['mataKuliah', 'kelas.mahasiswaKelas.user'])

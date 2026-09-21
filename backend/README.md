@@ -30,7 +30,7 @@ composer dev
 
 Isi biometric encryption key, database, dan mail sebelum menguji enrollment/activation. Jangan menggunakan key atau `.env` production di local environment.
 
-`BIOMETRIC_ALLOW_CLIENT_CLAIMS=true` hanya untuk local/testing compatibility. Production selalu menolak permit, attendance, offline sync, enrollment, reference embedding, dan approval biometrik sampai trusted verifier tersedia. Jangan memakai switch tersebut sebagai production workaround.
+`BIOMETRIC_ALLOW_CLIENT_CLAIMS=true` mengaktifkan alur biometrik client-attested di semua environment, termasuk production (revisi ADR-001, 21 September 2026 — keputusan pemilik proyek untuk demo penelitian). Bukti liveness/face-distance tetap **client-attested**, bukan verifier server-side; sistem tidak boleh diklaim tahan proxy attendance atau presentation attack. Tanpa flag, gate tetap fail-closed (`503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`). Lihat [DEPLOYMENT.md](../docs/DEPLOYMENT.md) dan [ADR-001](../docs/ADR-001-trusted-biometric-verifier.md).
 
 ## Commands
 

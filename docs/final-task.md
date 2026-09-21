@@ -13,8 +13,11 @@
 >
 > Sinkronisasi 12 Agustus 2026: C-04/H-04 (trusted verifier server-side)
 > **dinyatakan di luar scope penelitian** — [ADR-001](ADR-001-trusted-biometric-verifier.md)
-> ditolak, residual risk diterima. Bukan lagi backlog aktif; production tetap
-> fail-closed permanen untuk penelitian.
+> ditolak, residual risk diterima. Bukan lagi backlog aktif.
+>
+> Sinkronisasi 21 September 2026: alur client-attested production **diaktifkan**
+> (keputusan pemilik proyek — revisi ADR-001); flag `BIOMETRIC_ALLOW_CLIENT_CLAIMS=true`
+> di server produksi. C-04/H-04 tetap residual risk; data tetap client-attested.
 >
 > Sinkronisasi lanjutan 11 Agustus 2026: R-04 (filter dataset analisis per prodi),
 > MS-01 ([matriks role-permission-prodi](ROLE-PERMISSION-MATRIX.md)), M-23 (limiter

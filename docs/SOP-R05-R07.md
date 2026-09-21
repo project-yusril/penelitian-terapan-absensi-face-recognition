@@ -6,10 +6,11 @@
 > fixture/consent/script yang benar-benar ada, akun test terisolasi, permit per
 > action/UUID, dan pengukuran eksternal dari load-test runner. Residual research
 > validity mengikuti R-01 sampai R-05 di temuan.md.
-> Production attendance fail-closed permanen untuk konteks penelitian (trusted
-> verifier di luar scope — ADR-001 ditolak);
-> SOP hanya boleh dijalankan pada environment penelitian non-production yang
-> mengaktifkan compatibility mode secara eksplisit dan mengisolasi seluruh data test.
+> Production attendance aktif dengan bukti client-attested sejak 21 September 2026
+> (revisi ADR-001, keputusan pemilik proyek; trusted verifier tetap di luar scope);
+> SOP hanya boleh dijalankan pada environment penelitian yang
+> mengisolasi seluruh data test, dan data yang dihasilkan di production tetap
+> client-attested, bukan bukti forensik.
 >
 > **Update 20 Agustus 2026:** pipeline R-05/R-07 kini **terisi dataset awal**
 > (command `php artisan attendance:seed-analysis-data` — 920 log: 400 genuine,

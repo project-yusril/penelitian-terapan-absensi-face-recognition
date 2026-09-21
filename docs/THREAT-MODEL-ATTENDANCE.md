@@ -1,10 +1,12 @@
 # Threat Model Attendance
 
 **Status:** maintained
-**Pembaruan:** 11 Agustus 2026
-**Konteks:** dokumen ini memenuhi bagian "buat threat model" pada acceptance C-04 di [temuan.md](temuan.md). Dokumen ini **tidak menutup C-04/H-04**. Tujuannya adalah menyatakan apa yang diverifikasi server, apa yang masih merupakan klaim client, dan mengapa production fail-closed.
+**Pembaruan:** 21 September 2026
+**Konteks:** dokumen ini memenuhi bagian "buat threat model" pada acceptance C-04 di [temuan.md](temuan.md). Dokumen ini **tidak menutup C-04/H-04**. Tujuannya adalah menyatakan apa yang diverifikasi server, apa yang masih merupakan klaim client, dan apa arti pembukaan alur client-attested di production.
 
-> **Keputusan scope 12 Agustus 2026.** C-04/H-04 (trusted verifier server-side) **di luar scope penelitian**. Rancangan verifier ditinjau di [ADR-001](ADR-001-trusted-biometric-verifier.md) dan **ditolak**; verifier tidak dibangun. Threat model ini tetap valid sebagai pernyataan batas klaim: production fail-closed permanen (untuk penelitian) dan data legacy adalah **client-attested**. Bagian "Arah Remediasi C-04" di bawah kini menjadi **panduan bila proyek dinaikkan ke produksi**, bukan backlog aktif.
+> **Keputusan scope 12 Agustus 2026.** C-04/H-04 (trusted verifier server-side) **di luar scope penelitian**. Rancangan verifier ditinjau di [ADR-001](ADR-001-trusted-biometric-verifier.md) dan **ditolak**; verifier tidak dibangun. Threat model ini tetap valid sebagai pernyataan batas klaim. Bagian "Arah Remediasi C-04" di bawah kini menjadi **panduan bila proyek dinaikkan ke produksi**, bukan backlog aktif.
+>
+> **Revisi 21 September 2026 (keputusan pemilik proyek).** Production **tidak lagi fail-closed permanen**: `BIOMETRIC_ALLOW_CLIENT_CLAIMS=true` diset di server produksi sehingga endpoint biometrik aktif dengan bukti **client-attested** untuk demo penelitian. Konsekuensi: skenario serangan pada data scalar client (koordinat, liveness, face distance palsu) kini **memungkinkan secara teknis di production** oleh aktor A1 dengan sesi sah — risiko yang sama dengan mode compatibility sebelumnya, kini diterima eksplisit untuk konteks penelitian. Kontrol server (permit, anti-replay, binding, window, geofence) tetap ditegakkan. Sistem **tidak boleh diklaim tahan proxy attendance/presentation attack**.
 
 ## Aset yang Dilindungi
 
@@ -29,11 +31,12 @@
 
 Diverifikasi pada `AttendancePermitService`, `AttendancePolicyService`, `Api/Mahasiswa/AttendanceController`, `OfflineSyncController`, dan `RequireTrustedBiometricEvidence`.
 
-> **Containment production:** selama challenge-bound capture verifier belum tersedia,
-> endpoint permit, check-in/out, offline sync, enrollment/re-enrollment, reference
-> embedding, dan approval biometrik ditolak `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED`.
-> Switch `BIOMETRIC_ALLOW_CLIENT_CLAIMS=true` hanya bekerja di environment
-> non-production untuk compatibility test; production selalu fail-closed.
+> **Revisi production 21 September 2026:** sejak flag `BIOMETRIC_ALLOW_CLIENT_CLAIMS=true`
+> diset di server produksi (keputusan pemilik proyek, revisi ADR-001), endpoint permit,
+> check-in/out, offline sync, enrollment/re-enrollment, reference embedding, dan approval
+> biometrik **aktif** di production dengan bukti client-attested. Mematikan flag
+> mengembalikan penolakan `503 TRUSTED_BIOMETRIC_EVIDENCE_REQUIRED` (fail-closed).
+> Nilai scalar client di bawah **bukan** bukti yang diverifikasi server — status ini tidak berubah.
 
 | Kontrol | Mekanisme |
 |---|---|
