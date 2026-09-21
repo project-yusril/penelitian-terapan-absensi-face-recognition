@@ -2,7 +2,8 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
-    id("kotlin-android")
+    // N-02: id("kotlin-android") dihapus — app bermigrasi ke built-in Kotlin
+    // (AGP 9-ready). Panduan: docs.flutter.dev migrate-to-built-in-kotlin.
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -22,10 +23,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     defaultConfig {
@@ -76,4 +73,11 @@ dependencies {
 
 flutter {
     source = "../.."
+}
+
+// N-02: pengganti kotlinOptions setelah migrasi built-in Kotlin.
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
 }

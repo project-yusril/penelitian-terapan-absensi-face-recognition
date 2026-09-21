@@ -554,6 +554,17 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 - Test: `frontend/test/unit/attendance_neutral_frame_gate_test.dart` (7 kasus: frontal lolos, menoleh ditolak, ambang eulerX konsisten enrollment, mata terpejam/satu mata/null fail-closed). `flutter test` 16/16 lulus (gate + face_recognition), `flutter analyze` bersih.
 - Sisa terkait: kalibrasi threshold tetap menunggu data genuine lapangan R-03 (protokol `eksperimen/PROTOKOL_EKSPERIMEN.md`); perbaikan ini membuat distribusi jarak genuine yang akan dikumpulkan sudah bersih dari inflasi pose.
 
+### [N-02] Plugin Android memakai Kotlin Gradle Plugin (KGP) — build gagal di Flutter mendatang (AGP 9)
+
+- Bukti: build APK 21 September 2026 memunculkan warning Flutter 3.44: "Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): camera_android_camerax, device_info_plus, safe_device, shared_preferences_android". Flutter docs `migrate-to-built-in-kotlin`: KGP tidak kompatibel dengan Android Gradle Plugin 9 dan support legacy-nya akan dihapus dari Flutter.
+- Dampak: build Android akan gagal total saat Flutter/AGP di-upgrade; warning adalah masa tenggang.
+- Perbaikan (21 September 2026, strategi "migrasi app + plugin siap"):
+  1. App gradle bermigrasi ke built-in Kotlin: `id("kotlin-android")` dan blok `kotlinOptions` dihapus dari `android/app/build.gradle.kts`, diganti `kotlin { compilerOptions { jvmTarget = JVM_17 } }` sesuai panduan resmi. Deklarasi KGP di `android/settings.gradle.kts` dibiarkan `apply false` untuk plugin transitive yang masih butuh KGP.
+  2. Upgrade plugin yang sudah punya versi built-in Kotlin: `shared_preferences_android` 2.4.23→2.4.28 (dipin langsung di pubspec agar transitive resolve tidak turun lagi), `device_info_plus` 12.4.0→13.2.0, `camera_android_camerax` 0.7.2→0.7.4+8 (via `camera` 0.12.0+1→0.12.1), `flutter_secure_storage` 9.2.4→10.3.4 (prasyarat win32 ^6; app tidak memakai `AndroidOptions`/`encryptedSharedPreferences` yang deprecated di 10.0.0), `file_picker` 8.1.4→12.3.0 (prasyarat win32 juga).
+  3. Breaking-change akibat upgrade diperbaiki: `file_picker` 12.x menghapus `FilePicker.platform` — `leave_page.dart` `_pickFile` beralih ke static `FilePicker.pickFile()` (pilih satu file; API `type`/`allowedExtensions` tidak berubah).
+- Sisa (terbuka): `safe_device` 1.4.1 (terbaru per 21 Sep 2026) **masih KGP lama** — dipakai untuk deteksi mock location di alur absensi (`attendance_page.dart`, `geolocator_attendance_position_provider.dart`). Warning build kini hanya menyebut plugin ini. Tindak lanjut: tunggu upstream bermigrasi, atau ganti dengan alternatif (`geolocator.isMocked` sudah dipakai sebagai sinyal primer; safe_device hanya pelengkap). `android.builtInKotlin=true` TIDAK boleh diaktifkan sampai plugin ini selesai bermigrasi; migrasi penuh juga butuh Flutter 3.47+ dan AGP 9.
+- Verifikasi: `flutter test` 207/207 lulus, `flutter analyze` bersih, keempat APK debug di-rebuild sukses (fat + 3 ABI). Warning KGP tersisa hanya untuk safe_device.
+
 ## Temuan Low
 
 ### [L-01] Dependency constraints terlalu longgar

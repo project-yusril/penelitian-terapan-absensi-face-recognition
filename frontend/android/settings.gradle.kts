@@ -20,6 +20,9 @@ pluginManagement {
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.11.1" apply false
+    // N-02: deklarasi KGP dihapus dari build app (built-in Kotlin).
+    // Dibiarkan apply false bila plugin transitive masih butuh KGP selama
+    // safe_device belum bermigrasi.
     id("org.jetbrains.kotlin.android") version "2.2.20" apply false
     // L-02: plugin FCM/Firebase. Diterapkan bersyarat di app/build.gradle.kts
     // hanya bila google-services.json tersedia, agar build tanpa konfigurasi

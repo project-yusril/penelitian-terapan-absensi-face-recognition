@@ -575,14 +575,16 @@ class _SubmitLeaveSheetState extends State<_SubmitLeaveSheet> {
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    // file_picker 12.x (N-02): FilePicker.platform dihapus, memakai static
+    // FilePicker.pickFile untuk pilih satu file.
+    final result = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
     );
-    if (result != null && result.files.isNotEmpty) {
+    if (result != null) {
       setState(() {
-        _fileName = result.files.single.name;
-        _filePath = result.files.single.path;
+        _fileName = result.name;
+        _filePath = result.path;
       });
     }
   }
