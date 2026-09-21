@@ -120,6 +120,16 @@ class _AttendancePageState extends State<AttendancePage>
   String? _permitToken;
   AttendanceLocationPolicy? _locationPolicy;
 
+  /// N-01: setelah liveness lolos, verifikasi wajah TIDAK langsung dijalankan
+  /// pada frame ekspresi challenge (senyum/kepala menoleh/mata terpejam) —
+  /// embedding-nya degenerat dibanding referensi wajah netral sehingga jarak
+  /// genuine membengkak dan "Verifikasi wajah gagal" muncul terus-menerus.
+  /// Stream dibiarkan jalan dan verifikasi menunggu frame berikutnya yang
+  /// kembali netral (menghadap lurus + mata terbuka, tracking wajah sama).
+  bool _awaitingNeutralFrame = false;
+  Timer? _neutralWaitTimer;
+  static const Duration _neutralWaitTimeout = Duration(seconds: 5);
+
   CameraDescription? _activeCamera;
   late final SingleInflightFramePipeline<void> _framePipeline;
   final AttemptGeneration _attempts = AttemptGeneration();
@@ -149,6 +159,9 @@ class _AttendancePageState extends State<AttendancePage>
       _attemptId = _attempts.begin();
       _continuity.reset();
       _livenessService.reset();
+      _awaitingNeutralFrame = false; // N-01
+      _neutralWaitTimer?.cancel();
+      _neutralWaitTimer = null;
       if (_cameraController?.value.isInitialized ?? false) {
         _startFaceDetection();
       }
@@ -158,6 +171,9 @@ class _AttendancePageState extends State<AttendancePage>
     _attempts.cancel();
     _continuity.reset();
     _livenessService.reset();
+    _awaitingNeutralFrame = false; // N-01
+    _neutralWaitTimer?.cancel();
+    _neutralWaitTimer = null;
     unawaited(_stopImageStream());
   }
 
@@ -390,6 +406,13 @@ class _AttendancePageState extends State<AttendancePage>
       if (discontinuity != LivenessDiscontinuity.none) {
         _livenessService.reset();
         _livenessPassed = false;
+        // N-01: fase tunggu netral terikat pada wajah yang lolos liveness.
+        // Wajah keluar frame / berganti (foto, orang lain) harus memaksa
+        // challenge liveness baru — verifikasi tidak boleh berjalan pada
+        // wajah pasca-diskontinuitas yang tidak pernah lolos challenge.
+        _awaitingNeutralFrame = false;
+        _neutralWaitTimer?.cancel();
+        _neutralWaitTimer = null;
       }
       if (faces.isEmpty) {
         if (mounted) setState(() => _faceDetected = false);
@@ -407,6 +430,25 @@ class _AttendancePageState extends State<AttendancePage>
       final face = faces.single;
       if (mounted) setState(() => _faceDetected = true);
       if (_currentStep != 1) return;
+
+      // N-01: fase tunggu frame netral pasca-liveness. Wajah masih dilacak
+      // (kontinuitas aktif di atas), jadi cukup tunggu pose kembali netral
+      // lalu verifikasi dengan frame itu — bukan frame ekspresi challenge.
+      if (_awaitingNeutralFrame) {
+        if (!_isNeutralEnoughForVerification(face)) return;
+        _awaitingNeutralFrame = false;
+        _neutralWaitTimer?.cancel();
+        _neutralWaitTimer = null;
+        if (mounted) {
+          setState(() {
+            _currentStep = 2;
+            _statusMessage = 'Memverifikasi wajah...';
+          });
+        }
+        await _verifyFace(snapshot, face);
+        return;
+      }
+
       final passed = await _livenessService.checkChallenge(face, _challenge);
       if (!_isCurrent(snapshot.attemptId)) return;
       if (mounted) {
@@ -421,14 +463,61 @@ class _AttendancePageState extends State<AttendancePage>
       if (mounted) {
         setState(() {
           _livenessPassed = true;
-          _currentStep = 2;
-          _statusMessage = 'Memverifikasi wajah...';
+          // N-01: verifikasi ditunda sampai frame netral. Tahap tetap 1 agar
+          // indikator progress liveness tetap tampil penuh saat menunggu.
+          _awaitingNeutralFrame = true;
+          _statusMessage = 'Hadapkan wajah lurus ke kamera...';
         });
       }
-      await _verifyFace(snapshot, face);
+      _startNeutralWaitTimer(snapshot.attemptId);
+      return;
     } catch (e, stack) {
       _log.error('analisis frame absensi gagal', error: e, stackTrace: stack);
     }
+  }
+
+  /// N-01: gate frame netral pasca-liveness. Mengembalikan true hanya bila
+  /// wajah kembali menghadap lurus dengan mata terbuka — kondisi yang sama
+  /// dengan syarat capture final enrollment — sehingga embedding yang
+  /// dibandingkan dengan referensi berasal dari pose yang setara.
+  bool _isNeutralEnoughForVerification(Face face) =>
+      _livenessService.isFaceFacingFront(face) &&
+      _livenessService.areEyesOpen(face);
+
+  /// N-01: tunggu frame netral maksimal 5 detik. Lewat dari itu (wajah
+  /// menoleh terus / deteksi macet) alur diulang dengan challenge baru,
+  /// alih-alih diam tanpa umpan balik.
+  void _startNeutralWaitTimer(int attemptId) {
+    _neutralWaitTimer?.cancel();
+    _neutralWaitTimer = Timer(_neutralWaitTimeout, () {
+      if (!_isCurrent(attemptId) || !_awaitingNeutralFrame) return;
+      _log.warn(
+        'menunggu frame netral melewati batas waktu, liveness diulang',
+        data: {'attemptId': attemptId, 'timeoutDetik': _neutralWaitTimeout.inSeconds},
+      );
+      _abortNeutralWait();
+    });
+  }
+
+  /// N-01: menunggu frame netral terlalu lama (wajah menoleh terus /
+  /// deteksi macet) → alih-alih diam selamanya, ulangi liveness dengan
+  /// challenge baru agar alur tetap hidup.
+  void _abortNeutralWait() {
+    _neutralWaitTimer?.cancel();
+    _neutralWaitTimer = null;
+    if (!mounted) return;
+    setState(() {
+      _awaitingNeutralFrame = false;
+      _livenessPassed = false;
+      _livenessProgress = 0;
+      _challenge = _livenessService.getRandomChallenge();
+      _statusMessage = AppConstants.livenessChallengeLabels[_challenge] ??
+          'Ikuti instruksi';
+    });
+    _attemptId = _attempts.begin();
+    _continuity.reset();
+    _livenessService.reset();
+    _startFaceDetection();
   }
 
   /// Instruksi liveness yang jelas + progres (mis. "Kedipkan mata (1/3)").
@@ -484,6 +573,7 @@ class _AttendancePageState extends State<AttendancePage>
           _statusMessage = 'Verifikasi wajah gagal. Coba lagi.';
           _currentStep = 1;
           _livenessPassed = false; // C-02: reset
+          _awaitingNeutralFrame = false; // N-01
           _challenge = _livenessService.getRandomChallenge();
         }
       });
@@ -502,6 +592,7 @@ class _AttendancePageState extends State<AttendancePage>
           _statusMessage = 'Error verifikasi: $e';
           _currentStep = 1;
           _livenessPassed = false;
+          _awaitingNeutralFrame = false; // N-01
         });
       }
       _attemptId = _attempts.begin();
@@ -691,6 +782,7 @@ class _AttendancePageState extends State<AttendancePage>
         _statusMessage = 'Gagal mengirim absensi: $e';
         _currentStep = 1;
         _livenessPassed = false;
+        _awaitingNeutralFrame = false; // N-01
       });
       _attemptId = _attempts.begin();
       _continuity.reset();
@@ -751,6 +843,7 @@ class _AttendancePageState extends State<AttendancePage>
       _statusMessage = message;
       _currentStep = 1;
       _livenessPassed = false;
+      _awaitingNeutralFrame = false; // N-01
     });
   }
 
@@ -759,6 +852,7 @@ class _AttendancePageState extends State<AttendancePage>
     WidgetsBinding.instance.removeObserver(this);
     _lifecycleActive = false;
     _attempts.cancel();
+    _neutralWaitTimer?.cancel(); // N-01
     final controller = _cameraController;
     if (controller != null) unawaited(_cameraCommands.run(controller.dispose));
     _faceDetector.close();

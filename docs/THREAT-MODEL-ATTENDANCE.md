@@ -50,6 +50,7 @@ Diverifikasi pada `AttendancePermitService`, `AttendancePolicyService`, `Api/Mah
 | Status dan alpha | Diturunkan server dari waktu server dan setting prodi |
 | Batas kualitas lokasi | Akurasi dan umur fix ditolak bila melewati policy prodi (baseline `gps_accuracy_minimum` 20 m) |
 | Comparator match | Ambang `face_distance <= face_threshold` konsisten mobile/backend/analisis (L-08/R-04); server menegakkan penolakan |
+| Binding capture-liveness mobile (client-side, N-01) | Verifikasi absensi hanya berjalan pada frame netral **setelah** wajah yang sama (tracking kontinu) melewati challenge liveness; ganti wajah/foto di tengah alur membatalkan fase tunggu dan memaksa challenge baru. Kontrol client-side — bukan pengganti verifier server (C-04 tetap residual), tetapi menutup celah verifikasi pada wajah yang tidak lolos challenge |
 | Transport | HTTPS wajib pada release; cleartext debug hanya loopback/emulator atau LAN privat terpercaya dengan akun/data uji |
 | Abuse rate | Permit dan capture dibatasi `throttle:attendance` 10/menit per user; group API terautentikasi dibatasi `throttle:api` 60/menit per user (M-23). Keying per user, bukan per IP |
 | Scope pembaca | Endpoint analisis memakai scope aktor: role tingkat prodi tidak dapat membaca data prodi lain (M-24). Matriks lengkap di [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md) |
