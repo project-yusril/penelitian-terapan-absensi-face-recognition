@@ -21,6 +21,9 @@ Schedule::command('attendance:send-reminder')->everyFiveMinutes();
 
 Schedule::command('notifications:process-outbox')->everyMinute()->withoutOverlapping()->onOneServer();
 
+// Scheduler: purge foto attempt berisiko > 30 hari (FOTO ATTEMPT BERISIKO).
+Schedule::command('attendance:purge-attempt-fotos')->dailyAt('03:30')->withoutOverlapping()->onOneServer();
+
 // Scheduler: Backup database harian jam 02:00 (rotasi 14 hari).
 Schedule::command('backup:database')->dailyAt('02:00')->withoutOverlapping();
 

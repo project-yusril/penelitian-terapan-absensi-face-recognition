@@ -236,6 +236,8 @@ Prefix `/mahasiswa/attendance`. Check-in/out & sync butuh middleware `enrollment
     "app_version": "1.0.0",
     "mock_location_detected": false  // C-03/R-03: nama field WAJIB ini
 }
+// attempt_foto: multipart file terpisah (jpeg/png, maks 10 MB) — disimpan
+// server hanya bila attempt berisiko (FR-ABS-009); attempt aman diabaikan.
 
 // Response 201
 {
@@ -317,6 +319,10 @@ Prefix `/mahasiswa/attendance`. Check-in/out & sync butuh middleware `enrollment
     }
 }
 ```
+
+// attempt_foto_b64: field opsional per item (base64 data URI jpeg/png, maks
+// ~10 MB sebelum encode). Disimpan hanya bila item berisiko (FR-ABS-009);
+// base64 tidak valid diabaikan tanpa menggagalkan sync item tersebut.
 
 #### GET `/mahasiswa/jadwal/today` (H-03)
 ```json

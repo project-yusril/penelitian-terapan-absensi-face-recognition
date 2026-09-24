@@ -55,6 +55,9 @@ Route::middleware(['auth', 'user.active', 'web.role:super_admin,ketua_jurusan,ad
             ->middleware('signed')->name('web.private.re-enrollment-photos.show');
         Route::get('/private/leave-documents/{leaveRequest}', [PrivateFileController::class, 'leaveDocument'])
             ->middleware('signed')->name('web.private.leave-documents.show');
+        Route::get('/private/attempt-fotos/{attendanceLog}', [PrivateFileController::class, 'attemptFoto'])
+            ->where('attendanceLog', 'a\d+:(checkin|checkout)|log\d+')
+            ->middleware('signed')->name('web.private.attempt-fotos.show');
 
         Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 

@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Services\AttemptFotoService;
 use App\Services\AuthorizationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -26,7 +28,7 @@ class AttendanceController extends Controller
         }
 
         $items = $authorization->scopeAttendances(
-            Attendance::with(['user:id,nama,nim', 'mataKuliah:id,nama']),
+            Attendance::with(['user:id,nama,nim,foto_enrollment', 'mataKuliah:id,nama']),
             $request->user(),
         )
             ->when($search, function ($q) use ($search) {
@@ -53,6 +55,9 @@ class AttendanceController extends Controller
                 'durasi_efektif_menit' => $a->durasi_efektif_menit,
                 'is_offline_synced' => (bool) $a->is_offline_synced,
                 'is_overridden' => (bool) $a->is_overridden,
+                'checkin_foto_url' => $a->checkin_foto_path ? URL::temporarySignedRoute('web.private.attempt-fotos.show', now()->addMinutes(10), ['attendanceLog' => 'a'.$a->id.':checkin']) : null,
+                'checkout_foto_url' => $a->checkout_foto_path ? URL::temporarySignedRoute('web.private.attempt-fotos.show', now()->addMinutes(10), ['attendanceLog' => 'a'.$a->id.':checkout']) : null,
+                'enrollment_foto_url' => $a->user?->foto_enrollment ? URL::temporarySignedRoute('web.private.enrollment-photos.show', now()->addMinutes(10), ['user' => $a->user_id]) : null,
             ]);
 
         return Inertia::render('Attendance/Index', [

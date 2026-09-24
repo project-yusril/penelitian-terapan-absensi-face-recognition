@@ -70,7 +70,7 @@ const navGroups = computed(() => [
         label: 'Sistem',
         items: [
             { name: 'Konfigurasi', route: 'settings.index', icon: 'edit', show: can(['super_admin', 'admin_prodi', 'kaprodi']) },
-            { name: 'Mode Pengujian', route: 'test-mode.index', icon: 'search', show: can(['super_admin']) },
+            { name: 'Mode Penelitian', route: 'test-mode.index', icon: 'search', show: can(['super_admin']) },
             { name: 'Analisis', route: 'analysis.index', icon: 'academic', show: can(['super_admin']) },
         ],
     },

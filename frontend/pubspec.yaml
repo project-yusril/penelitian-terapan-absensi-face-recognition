@@ -45,9 +45,6 @@ dependencies:
   # Device Info
   # 13.2.0: built-in Kotlin, AGP 9-ready (N-02). 13.x butuh Flutter 3.41.6+.
   device_info_plus: ^13.2.0
-  # N-02: safe_device tertinggal di KGP lama (1.4.1 pun belum built-in Kotlin).
-  # Ditunda sampai upstream bermigrasi; flutter 3.44 masih support legacy KGP.
-  safe_device: ^1.3.10
 
   # UI Components
   intl: ^0.20.2

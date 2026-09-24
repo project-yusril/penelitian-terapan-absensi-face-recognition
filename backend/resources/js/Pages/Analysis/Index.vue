@@ -140,6 +140,62 @@ const spSegments = computed(() => donutSegments(asp.value.sp_level_distribution,
 const simLevels = computed(() => Object.entries(sim.value.per_concurrent_level ?? {}));
 const simTotal = computed(() => sim.value.total_tests ?? 0);
 
+/* ===== Penilaian kualitas otomatis (interpretasi angka) ===== */
+// FAR: persen orang asing (impostor) yang BERHASIL memalsukan wajah orang lain.
+// Semakin kecil semakin bagus. < 1% sangat bagus, 1-5% wajar, > 5% rawan penipuan.
+const farVerdict = computed(() => {
+    if (v.value.far === null || v.value.far === undefined) return { tone: 'slate', text: 'Belum ada data impostor berlabel. Aktifkan Mode Pengujian untuk mengumpulkannya.' };
+    const f = Number(v.value.far);
+    if (f <= 1) return { tone: 'emerald', text: `Bagus. Dari ${v.value.impostor_count} percobaan penipuan (orang asing mengaku wajah orang lain), hanya ${f}% yang lolos. Sistem hampir mustahil ditipu wajah serupa.` };
+    if (f <= 5) return { tone: 'amber', text: `Cukup. ${f}% dari ${v.value.impostor_count} percobaan penipuan lolos — masih bisa diterima, tapi sebagian kecil orang asing berhasil absen untuk orang lain.` };
+    return { tone: 'rose', text: `Kurang bagus. ${f}% dari ${v.value.impostor_count} percobaan penipuan lolos — sistem rawan disalahgunakan (absen titip wajah). Pertimbangkan menurunkan θ.` };
+});
+
+// FRR: persen pemilik wajah ASLI yang justru DITOLAK sistem.
+// Semakin kecil semakin nyaman. < 2% sangat bagus, 2-10% wajar, > 10% mengganggu.
+const frrVerdict = computed(() => {
+    if (v.value.frr === null || v.value.frr === undefined) return { tone: 'slate', text: 'Belum ada data wajah asli berlabel. Aktifkan Mode Pengujian untuk mengumpulkannya.' };
+    const f = Number(v.value.frr);
+    if (f <= 2) return { tone: 'emerald', text: `Bagus. Hanya ${f}% dari ${v.value.genuine_count} absensi wajah asli yang ditolak — mahasiswa hampir tidak pernah gagal absen karena wajahnya tidak dikenali.` };
+    if (f <= 10) return { tone: 'amber', text: `Cukup. ${f}% dari ${v.value.genuine_count} absensi wajah asli ditolak — sebagian kecil mahasiswa perlu mengulang absen (pencahayaan/pose memengaruhi).` };
+    return { tone: 'rose', text: `Kurang bagus. ${f}% dari ${v.value.genuine_count} absensi wajah asli ditolak — mahasiswa sering gagal absen walau wajahnya sendiri. Pertimbangkan menaikkan θ.` };
+});
+
+// EER: titik tunggal yang meringkas akurasi — kondisi ketika FAR ≈ FRR.
+// Semakin kecil semakin akurat model. < 5% sangat baik, 5-10% baik, > 10% lemah.
+const eerVerdict = computed(() => {
+    if (v.value.eer === null || v.value.eer === undefined) return { tone: 'slate', text: 'EER dihitung dari sweep FAR/FRR terhadap threshold; butuh data genuine & impostor berlabel.' };
+    const e = Number(v.value.eer);
+    if (e <= 5) return { tone: 'emerald', text: `Sangat baik. EER ${e}% berarti pada titik keseimbangan, error menipu DAN error menolak pemilik asli sama-sama hanya ${e}% — akurasi model MobileFaceNet di dataset ini setara ~${(100 - e).toFixed(1)}%.` };
+    if (e <= 10) return { tone: 'amber', text: `Baik. EER ${e}% berarti error keseimbangan sekitar ${e}% — layak untuk absensi dengan θ yang tepat, meski belum seteliti sistem komersial.` };
+    return { tone: 'rose', text: `Lemah. EER ${e}% berarti pada titik terbaiknya pun error mencapai ${e}% — model sering tertukar antara menerima penipu dan menolak pemilik asli.` };
+});
+
+// θ Optimal: threshold tempat FAR dan FRR paling seimbang (|FAR-FRR| minimum).
+// Nilainya bukan "bagus/buruk", tapi panduan setting. Bandingkan dengan θ aktif.
+const thresholdVerdict = computed(() => {
+    if (v.value.optimal_threshold === null || v.value.optimal_threshold === undefined) return { tone: 'slate', text: 'Diambil dari sweep θ = 0.30–1.40 (step 0.05): titik dengan selisih FAR dan FRR terkecil.' };
+    const active = Number(v.value.threshold ?? 0);
+    const opt = Number(v.value.optimal_threshold);
+    const eerPoint = sweep.value.find((p) => Math.abs(p.threshold - opt) < 0.03);
+    const basis = eerPoint ? `Di titik ini FAR ${eerPoint.far ?? '—'}% dan FRR ${eerPoint.frr ?? '—'}% paling seimbang.` : '';
+    if (Math.abs(active - opt) < 0.03) {
+        return { tone: 'emerald', text: `Setting θ = ${active} sudah tepat — sama dengan titik optimal. ${basis}` };
+    }
+    const dir = active > opt ? 'lebih ketat' : 'lebih longgar';
+    const eff = active > opt
+        ? 'menekan penipuan tapi menolak lebih banyak wajah asli'
+        : 'mempermudah absensi tapi membuka peluang penipuan lebih besar';
+    return { tone: 'amber', text: `Setting θ = ${active} ${dir} dari titik optimal ${opt} — artinya ${eff}. Set θ = ${opt} bila ingin keseimbangan terbaik. ${basis}` };
+});
+
+const toneClass = {
+    emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+    amber: 'bg-amber-50 text-amber-700 border-amber-100',
+    rose: 'bg-rose-50 text-rose-700 border-rose-100',
+    slate: 'bg-slate-50 text-slate-600 border-slate-100',
+};
+
 /* ===== Tabel pendamping (sr-only & print-friendly) ===== */
 const distRows = computed(() => Object.entries(v.value.distribution ?? {}));
 const geoRows = computed(() => Object.entries(geo.value.distribution ?? {}));
@@ -179,6 +235,7 @@ const geoRows = computed(() => Object.entries(geo.value.distribution ?? {}));
             </div>
             <p class="mt-2 text-3xl font-semibold text-rose-600">{{ v.far ?? '—' }}<span v-if="v.far !== null" class="text-base">%</span></p>
             <p class="mt-1 text-xs text-slate-400">{{ v.impostor_count }} impostor diuji</p>
+            <p class="mt-2 rounded-lg border p-2 text-xs leading-relaxed" :class="toneClass[farVerdict.tone]">{{ farVerdict.text }}</p>
         </div>
         <div class="card p-5 transition-shadow hover:shadow-md">
             <div class="flex items-center justify-between">
@@ -187,6 +244,7 @@ const geoRows = computed(() => Object.entries(geo.value.distribution ?? {}));
             </div>
             <p class="mt-2 text-3xl font-semibold text-amber-600">{{ v.frr ?? '—' }}<span v-if="v.frr !== null" class="text-base">%</span></p>
             <p class="mt-1 text-xs text-slate-400">{{ v.genuine_count }} genuine diuji</p>
+            <p class="mt-2 rounded-lg border p-2 text-xs leading-relaxed" :class="toneClass[frrVerdict.tone]">{{ frrVerdict.text }}</p>
         </div>
         <div class="card p-5 transition-shadow hover:shadow-md">
             <div class="flex items-center justify-between">
@@ -195,6 +253,7 @@ const geoRows = computed(() => Object.entries(geo.value.distribution ?? {}));
             </div>
             <p class="mt-2 text-3xl font-semibold text-brand-600">{{ v.eer ?? '—' }}<span v-if="v.eer !== null" class="text-base">%</span></p>
             <p class="mt-1 text-xs text-slate-400">Keseimbangan FAR ≈ FRR</p>
+            <p class="mt-2 rounded-lg border p-2 text-xs leading-relaxed" :class="toneClass[eerVerdict.tone]">{{ eerVerdict.text }}</p>
         </div>
         <div class="card p-5 transition-shadow hover:shadow-md">
             <div class="flex items-center justify-between">
@@ -203,6 +262,7 @@ const geoRows = computed(() => Object.entries(geo.value.distribution ?? {}));
             </div>
             <p class="mt-2 text-3xl font-semibold text-emerald-600">{{ v.optimal_threshold ?? '—' }}</p>
             <p class="mt-1 text-xs text-slate-400">Titik EER dari sweep</p>
+            <p class="mt-2 rounded-lg border p-2 text-xs leading-relaxed" :class="toneClass[thresholdVerdict.tone]">{{ thresholdVerdict.text }}</p>
         </div>
     </div>
 
@@ -217,6 +277,12 @@ const geoRows = computed(() => Object.entries(geo.value.distribution ?? {}));
                 </div>
                 <span class="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">{{ v.total }} total</span>
             </div>
+
+            <p class="mb-4 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
+                <strong class="text-slate-600">Artinya:</strong> seberapa mirip wajah yang di-scan dengan wajah terdaftar. Skala 0 = wajah identik, semakin besar = semakin beda.
+                Verifikasi diterima bila jarak &le; &theta; ({{ v.threshold }}). <strong class="text-slate-600">Cara membaca:</strong> tumpukan batang yang besar di kiri (rentang 0&ndash;0.4) berarti mayoritas absensi terverifikasi dengan keyakinan tinggi &mdash; bagus.
+                Kalau batang menumpuk di kanan (&gt;0.6) berarti verifikasi sering terjadi di ambang batas &mdash; rawan salah tolak/salah terima. Garis &theta; saat ini memisahkan daerah "diterima" (kiri) dan "ditolak" (kanan).
+            </p>
 
             <div class="flex flex-col items-center gap-6 sm:flex-row">
                 <!-- Donut -->
@@ -279,6 +345,12 @@ const geoRows = computed(() => Object.entries(geo.value.distribution ?? {}));
                 <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">EER {{ v.eer ?? '—' }}%</span>
             </div>
 
+            <p class="mb-4 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
+                <strong class="text-slate-600">Artinya:</strong> hasil eksperimen menyapu semua kemungkinan &theta; (0.30&ndash;1.40) untuk menunjukkan trade-off dua jenis kesalahan. Batang merah (FAR) = seberapa sering <em>penipu lolos</em>; batang kuning (FRR) = seberapa sering <em>wajah asli ditolak</em>.
+                <strong class="text-slate-600">Cara membaca:</strong> FAR turun saat &theta; kecil (sistem ketat), FRR turun saat &theta; besar (sistem longgar) &mdash; keduanya berlawanan arah. Titik potong keduanya adalah EER; garis hijau menandai &theta; optimal di situ.
+                <strong class="text-slate-600">Bagus/tidak:</strong> kurva ideal turun tajam di dekat &theta; optimal (transisi tegas antara terima/tolak). Kalau kurva landai, wajah asli dan penipu sulit dipisahkan.
+            </p>
+
             <div v-if="!sweep.length" class="flex h-48 items-center justify-center text-sm text-slate-400">
                 <div class="text-center">
                     <Icon name="search" class="mx-auto h-8 w-8" />
@@ -317,6 +389,12 @@ const geoRows = computed(() => Object.entries(geo.value.distribution ?? {}));
                 </div>
                 <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">{{ geo.success_rate ?? 0 }}% sukses</span>
             </div>
+
+            <p class="mb-4 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
+                <strong class="text-slate-600">Artinya:</strong> penilaian fitur pembatas lokasi &mdash; absensi hanya diterima bila HP berada di dalam radius kampus. Bar hijau/merah = rasio percobaan absen yang berhasil vs gagal (gagal bisa karena di luar radius, atau gagal di tahap wajah/liveness setelahnya).
+                Grafik batang menunjukkan seberapa jauh mahasiswa berada dari titik geofence saat absen. <strong class="text-slate-600">Bagus/tidak:</strong> success rate &ge; 90% bagus (absensi lancar tanpa membuka celah absen dari luar kampus); 70&ndash;90% wajar (GPS sering meleset di dalam gedung); &lt; 70% mengganggu &mdash; banyak mahasiswa sah gagal absen karena ketidaktelitian GPS, bukan karena pelanggaran.
+                Batang yang menumpuk di 0&ndash;25 m menegaskan absensi memang terjadi di area kampus.
+            </p>
 
             <!-- Ringkasan sukses/gagal -->
             <div class="mb-5 flex h-3 w-full overflow-hidden rounded-full bg-slate-100" role="img" aria-label="Rasio keberhasilan geofence">
@@ -366,6 +444,12 @@ const geoRows = computed(() => Object.entries(geo.value.distribution ?? {}));
                 </div>
                 <span class="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">{{ lat.stats?.avg ?? '—' }} ms avg</span>
             </div>
+
+            <p class="mb-4 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
+                <strong class="text-slate-600">Artinya:</strong> kecepatan komputasi model pengenalan wajah MobileFaceNet di perangkat mahasiswa &mdash; dari frame kamera sampai keluar hasil pencocokan. Rata-rata, median, P95 (95% pengguna mencapai angka ini atau lebih cepat), dan max diukur per record absensi; daftar <em>Per Perangkat</em> membandingkan HP yang berbeda.
+                <strong class="text-slate-600">Bagus/tidak:</strong> untuk absensi mobile, rata-rata &le; 300 ms sangat bagus (terasa instan); 300&ndash;1000 ms masih nyaman; &gt; 1000 ms terasa lambat dan berisiko pengguna menggerakkan HP sebelum proses selesai (gagal absen).
+                P95 jauh di atas rata-rata berarti sebagian kecil perangkat lemah tertinggal &mdash; lihat baris perangkatnya. Model ringan seperti MobileFaceNet umumnya menargetkan ratusan milidetik di HP kelas menengah.
+            </p>
 
             <!-- Gauge rata-rata -->
             <div class="mb-5 flex items-center gap-5">
@@ -440,6 +524,11 @@ const geoRows = computed(() => Object.entries(geo.value.distribution ?? {}));
                     Terbaik: {{ bestWeek.label }} · {{ bestWeek.pct }}%
                 </span>
             </div>
+
+            <p class="mb-4 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
+                <strong class="text-slate-600">Artinya:</strong> dampak sistem absensi wajah terhadap disiplin mahasiswa dalam 4 minggu terakhir. Batang biru = total jadwal pertemuan, hijau = hadir (termasuk terlambat), merah = alpha (tanpa keterangan); badge kanan-atas menunjukkan minggu terbaik. Donut bawah merinci komposisi status (hadir/terlambat/alpha/izin/sakit) dan level Surat Peringatan (SP 1&ndash;3, DO) yang terakumulasi.
+                <strong class="text-slate-600">Bagus/tidak:</strong> persentase hadir &ge; 90% sangat bagus (sistem efektif menekan bolos); 75&ndash;90% baik tapi ada ruang perbaikan; &lt; 75% perlu perhatian. Yang paling penting: tren naik minggu demi minggu menandakan sistem berdampak &mdash; kehadiran membaik karena mahasiswa tidak bisa absen titip. Alpha yang turun dan distribusi SP yang menumpuk di "Aman" adalah indikator keberhasilan penelitian.
+            </p>
 
             <!-- Grouped bar chart -->
             <div class="flex h-52 items-end gap-6" role="img" aria-label="Grafik batang tren kehadiran per minggu">
@@ -522,6 +611,11 @@ const geoRows = computed(() => Object.entries(geo.value.distribution ?? {}));
                 </div>
                 <span class="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">{{ simLevels.length }} level</span>
             </div>
+
+            <p class="mb-4 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">
+                <strong class="text-slate-600">Artinya:</strong> uji ketahanan sistem saat banyak mahasiswa absen di waktu yang sama (mis. jam istirahat atau menjelang kelas dimulai). "Level" = jumlah absensi yang ditekan bersamaan; untuk tiap level dicatat latensi rata-rata/maksimum dan persentase keberhasilan (badge tabel: hijau &ge; 90%, kuning 70&ndash;90%, merah &lt; 70%).
+                <strong class="text-slate-600">Bagus/tidak:</strong> kalau latensi dan success rate tetap stabil saat level naik, backend dan database sanggup menangani jam sibuk &mdash; bagus. Latensi membengkak 2&ndash;3&times; atau success rate anjlok di level tinggi menandakan bottleneck (antrian, koneksi DB, atau server) yang perlu dioptimasi. Sistem yang baik mampu mempertahankan success rate &ge; 90% hingga level konkurensi tertinggi yang diuji.
+            </p>
 
             <div v-if="!simLevels.length" class="flex h-40 items-center justify-center text-center text-sm text-slate-400">
                 <div>

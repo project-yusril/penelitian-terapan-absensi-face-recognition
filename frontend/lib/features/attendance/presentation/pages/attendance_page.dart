@@ -1,13 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dio/dio.dart' show FormData, MultipartFile, DioMediaType;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'package:safe_device/safe_device.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/constants/app_constants.dart';
@@ -25,6 +26,7 @@ import '../../domain/services/attendance_location_service.dart';
 import '../../domain/services/attendance_capture_orchestrator.dart';
 import '../../../face_recognition/domain/services/face_recognition_service.dart';
 import '../../../face_recognition/domain/services/liveness_detection_service.dart';
+import '../../../face_recognition/domain/services/attempt_foto_compressor.dart';
 import '../../../face_recognition/domain/services/camera_frame_analysis.dart';
 import '../../../face_recognition/domain/services/camera_frame_snapshot.dart';
 import '../../../face_recognition/domain/services/frame_analysis_pipeline.dart';
@@ -51,6 +53,8 @@ class AttendancePage extends StatefulWidget {
   final double geofenceRadius;
   final bool isCheckout;
   final int? attendanceId;
+  final FaceRecognitionService? faceService;
+  final LivenessDetectionService? livenessService;
 
   /// H-02/L-08: GPS akurasi minimum yang masih bisa diterima (meter).
   /// Selaras dengan baseline terdokumentasi `AppConstants.gpsAccuracyMinimum`
@@ -69,6 +73,8 @@ class AttendancePage extends StatefulWidget {
     required this.geofenceRadius,
     this.isCheckout = false,
     this.attendanceId,
+    this.faceService,
+    this.livenessService,
   });
 
   @override
@@ -103,8 +109,14 @@ class _AttendancePageState extends State<AttendancePage>
       minFaceSize: 0.3,
     ),
   );
-  final LivenessDetectionService _livenessService = LivenessDetectionService();
-  final FaceRecognitionService _faceService = FaceRecognitionService();
+  late final LivenessDetectionService _livenessService =
+      widget.livenessService ?? LivenessDetectionService();
+  late final FaceRecognitionService _faceService =
+      widget.faceService ?? FaceRecognitionService();
+  // Layar ini hanya membuang service yang ia buat sendiri; service hasil
+  // injeksi (mis. dari test) tetap dimiliki pemanggilnya.
+  late final bool _ownsFaceService = widget.faceService == null;
+  late final bool _ownsLivenessService = widget.livenessService == null;
   bool _isCameraInitialized = false;
   bool _faceDetected = false;
   bool _livenessPassed = false; // C-02: track real liveness result
@@ -137,6 +149,10 @@ class _AttendancePageState extends State<AttendancePage>
   final AsyncCommandSerializer _cameraCommands = AsyncCommandSerializer();
   int _attemptId = 0;
   bool _lifecycleActive = true;
+
+  /// FOTO ATTEMPT BERISIKO: frame kamera terakhir dari pipeline verifikasi.
+  /// Dipakai saat submit untuk menghasilkan bukti foto bila attempt berisiko.
+  CameraFrameSnapshot? _lastAttemptSnapshot;
 
   /// M-02: UUID yang di-generate sekali per attempt; dikirim ke backend.
   final String _clientUuid = const Uuid().v4();
@@ -190,14 +206,11 @@ class _AttendancePageState extends State<AttendancePage>
       _mockLocationDetected = false;
     });
 
-    try {
-      // L-03: cek mock GPS (akan dicek lagi sebelum submit untuk amankan offline)
-      final isMockLocation = await SafeDevice.isMockLocation;
-      if (isMockLocation) {
-        _blockMockLocation();
-        return;
-      }
+    // Diambil sebelum await pertama agar tidak memegang BuildContext di
+    // seberang gap async (use_build_context_synchronously).
+    final locationService = context.read<AttendanceLocationService>();
 
+    try {
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -216,10 +229,12 @@ class _AttendancePageState extends State<AttendancePage>
         ),
       );
 
-      // SafeDevice dapat mengembalikan false bila listener native-nya belum
-      // menerima fix pertama. Setelah posisi tersedia, gabungkan pemeriksaan
-      // ulang itu dengan flag `Location.isMock()` yang dibawa Geolocator.
-      final deviceMockDetected = await SafeDevice.isMockLocation;
+      // N-02: sinyal mock perangkat dibaca via provider lokasi terinjeksi
+      // (flag `Location.isMock()` Android pada fix cache terakhir). Fix utama
+      // di atas sudah memeriksa `position.isMocked`; pemeriksaan ulang ini
+      // tetap berlaku sebagai lapis kedua (L-03) sebelum submit.
+      final deviceMockDetected = await locationService
+          .isDeviceMockLocation();
       if (AttendanceLocationService.isMockDetected(
         positionIsMocked: _currentPosition!.isMocked,
         deviceMockDetected: deviceMockDetected,
@@ -237,13 +252,17 @@ class _AttendancePageState extends State<AttendancePage>
 
       _gpsAccuracy = _currentPosition!.accuracy;
 
-      // H-02: tolak akurasi GPS yang terlalu rendah
+      // H-02: tolak akurasi GPS yang terlalu rendah. Pesan dibedakan dari
+      // penolakan geofence: user dengan GPS buruk justru DI DALAM area, dan
+      // menyuruhnya "mendekat" hanya membingungkan.
       if (_gpsAccuracy > AttendancePage.maxGpsAccuracy) {
         setState(() {
           _locationValid = false;
           _isValidating = false;
           _statusMessage =
-              'Akurasi GPS terlalu rendah (${_gpsAccuracy.toStringAsFixed(0)}m). Pastikan GPS aktif & berada di luar gedung.';
+              'Sinyal GPS belum akurat (±${_gpsAccuracy.toStringAsFixed(0)} m, '
+              'butuh ≤${AttendancePage.maxGpsAccuracy.toStringAsFixed(0)} m). '
+              'Coba lagi di area terbuka, jauh dari dinding tebal.';
         });
         return;
       }
@@ -485,8 +504,8 @@ class _AttendancePageState extends State<AttendancePage>
       _livenessService.areEyesOpen(face);
 
   /// N-01: tunggu frame netral maksimal 5 detik. Lewat dari itu (wajah
-  /// menoleh terus / deteksi macet) alur diulang dengan challenge baru,
-  /// alih-alih diam tanpa umpan balik.
+  /// menoleh terus / deteksi macet) alur diulang dengan challenge yang sama
+  /// (permit-bound), alih-alih diam tanpa umpan balik.
   void _startNeutralWaitTimer(int attemptId) {
     _neutralWaitTimer?.cancel();
     _neutralWaitTimer = Timer(_neutralWaitTimeout, () {
@@ -500,8 +519,13 @@ class _AttendancePageState extends State<AttendancePage>
   }
 
   /// N-01: menunggu frame netral terlalu lama (wajah menoleh terus /
-  /// deteksi macet) → alih-alih diam selamanya, ulangi liveness dengan
-  /// challenge baru agar alur tetap hidup.
+  /// deteksi macet) → ulangi liveness dengan challenge yang SAMA.
+  ///
+  /// Challenge dikirim server di permit dan divalidasi ulang saat submit;
+  /// menggantinya di sini membuat payload `liveness_challenge` tidak cocok
+  /// dengan permit dan pengiriman ditolak 403. Reset state liveness tetap
+  /// diperlukan agar urutan netral→challenge diukur ulang, tetapi targetnya
+  /// tetap challenge asli permit.
   void _abortNeutralWait() {
     _neutralWaitTimer?.cancel();
     _neutralWaitTimer = null;
@@ -510,7 +534,6 @@ class _AttendancePageState extends State<AttendancePage>
       _awaitingNeutralFrame = false;
       _livenessPassed = false;
       _livenessProgress = 0;
-      _challenge = _livenessService.getRandomChallenge();
       _statusMessage = AppConstants.livenessChallengeLabels[_challenge] ??
           'Ikuti instruksi';
     });
@@ -570,13 +593,20 @@ class _AttendancePageState extends State<AttendancePage>
           _currentStep = 3;
           _statusMessage = 'Verifikasi berhasil! Mengirim data...';
         } else {
+          // Challenge TIDAK diganti saat retry: permit masih memegang
+          // challenge asli, dan submit memvalidasi kesesuaiannya (403 jika
+          // beda). Cukup ulangi liveness dengan challenge yang sama.
           _statusMessage = 'Verifikasi wajah gagal. Coba lagi.';
           _currentStep = 1;
           _livenessPassed = false; // C-02: reset
           _awaitingNeutralFrame = false; // N-01
-          _challenge = _livenessService.getRandomChallenge();
         }
       });
+
+      // FOTO ATTEMPT BERISIKO: simpan snapshot frame terakhir untuk dibawa
+      // saat submit bila attempt berisiko (jarak wajah borderline/mock/
+      // liveness nyaris gagal). Gagal kompresi tidak boleh memblokir absensi.
+      _lastAttemptSnapshot = snapshot;
 
       if (result.isMatch) {
         await _submitAttendance(snapshot.attemptId);
@@ -604,6 +634,62 @@ class _AttendancePageState extends State<AttendancePage>
 
   bool _isCurrent(int attemptId) =>
       mounted && _lifecycleActive && _attempts.isCurrent(attemptId);
+
+  /// Pesan kegagalan lokasi yang menyebut penyebab sebenarnya.
+  ///
+  /// `location_policy_rejected` berarti akurasi/umur fix di luar ambang
+  /// kebijakan server — BUKAN di luar geofence. Menyamarkannya sebagai
+  /// "di luar area" membuat user mencari sinyal padahal harus menunggu fix
+  /// GPS lebih akurat/segar. Angka yang disebut diambil dari fix yang
+  /// DITOLAK (dibawa exception), bukan state fix terakhir yang berhasil —
+  /// keduanya bisa berbeda berminit saat GPS baru menyala.
+  String _locationFailureMessage(Object error) {
+    if (error is AttendanceLocationException) {
+      switch (error.code) {
+        case 'location_policy_rejected':
+          final policy = _locationPolicy;
+          final maxAcc = policy != null && policy.maxAccuracyMeters > 0
+              ? policy.maxAccuracyMeters
+              : AttendancePage.maxGpsAccuracy;
+          final maxAgeSec = policy != null && policy.maxAgeSeconds > 0
+              ? policy.maxAgeSeconds
+              : 0;
+          final rejectedAcc = error.accuracyMeters;
+          final rejectedAgeMs = error.ageMs;
+          // Umur fix hanya diketahui saat ditolak kebijakan; jika umurnya
+          // yang melanggar (bukan akurasi), arahkan menunggu fix segar —
+          // bukan menyalahkan sinyal.
+          final ageExceeded =
+              rejectedAgeMs != null &&
+              maxAgeSec > 0 &&
+              rejectedAgeMs > maxAgeSec * 1000;
+          if (ageExceeded) {
+            return 'Sinyal GPS sudah basi '
+                '(${(rejectedAgeMs / 1000).round()} detik lalu, butuh ≤'
+                '$maxAgeSec detik). Tunggu sebentar lalu coba lagi '
+                'agar GPS menghasilkan fix baru.';
+          }
+          final accText = rejectedAcc != null
+              ? '±${rejectedAcc.toStringAsFixed(0)} m'
+              : '±${_gpsAccuracy.toStringAsFixed(0)} m';
+          return 'Sinyal GPS belum cukup akurat (butuh ≤'
+              '${maxAcc.toStringAsFixed(0)} m, '
+              'saat ini $accText). '
+              'Tunggu sebentar lalu coba lagi di area terbuka.';
+        case 'location_timestamp_rejected':
+          return 'Waktu lokasi tidak valid. Periksa jam perangkat Anda.';
+        case 'server_time_anchor_unavailable':
+          return 'Waktu server belum tersedia. Periksa koneksi lalu coba lagi.';
+        case 'outside_geofence':
+          final dist = error.distanceMeters;
+          final distText = dist != null
+              ? '${dist.toStringAsFixed(0)} m'
+              : '${_distanceToGeofence.toStringAsFixed(0)} m';
+          return 'Anda di luar area perkuliahan ($distText).';
+      }
+    }
+    return 'Lokasi terbaru tidak valid: $error';
+  }
 
   Future<void> _stopImageStream() => _cameraCommands.run(() async {
     final controller = _cameraController;
@@ -671,7 +757,7 @@ class _AttendancePageState extends State<AttendancePage>
         return;
       }
       _failSubmission(
-        'Lokasi terbaru tidak valid: $e',
+        _locationFailureMessage(e),
         error: e,
         stackTrace: stack,
       );
@@ -719,6 +805,21 @@ class _AttendancePageState extends State<AttendancePage>
         ...data,
         'type': widget.isCheckout ? 'check_out' : 'check_in',
       };
+      // FOTO ATTEMPT BERISIKO: attempt offline = jendela curang terluas,
+      // sehingga server menyimpan foto semua attempt offline yang membawanya.
+      // Foto dikirim base64; validasi server tetap menolak bila bukan JPEG/
+      // PNG atau melebihi batas. Gagal kompresi tidak memblokir absensi.
+      if (_lastAttemptSnapshot != null) {
+        try {
+          final foto = await AttemptFotoCompressor.compressSnapshot(
+            _lastAttemptSnapshot!,
+          );
+          offlinePayload['attempt_foto_b64'] = base64Encode(foto.bytes);
+        } catch (e, stack) {
+          _log.error('gagal menyiapkan foto attempt offline (dilewati)',
+              error: e, stackTrace: stack);
+        }
+      }
       await queueService.enqueue(
         type: widget.isCheckout
             ? OfflineQueueItem.checkOutType
@@ -755,6 +856,52 @@ class _AttendancePageState extends State<AttendancePage>
     final endpoint = widget.isCheckout
         ? ApiConstants.checkOutEndpoint
         : ApiConstants.checkInEndpoint;
+
+    // FOTO ATTEMPT BERISIKO: lampirkan foto terkompres bila attempt berisiko
+    // (jarak wajah borderline terhadap threshold, mock GPS, atau koneksi
+    // offline). Gagal menyiapkan foto tidak memblokir absensi.
+    final attemptRisk =
+        _faceThreshold > 0 && _faceDistance >= _faceThreshold * 0.75 ||
+            freshFix.mockDetected;
+    if (attemptRisk && _lastAttemptSnapshot != null) {
+      try {
+        final foto = await AttemptFotoCompressor.compressSnapshot(
+          _lastAttemptSnapshot!,
+        );
+        if (!_isCurrent(attemptId)) return;
+        final form = FormData.fromMap(data);
+        form.files.add(MapEntry(
+          'attempt_foto',
+          MultipartFile.fromBytes(
+            foto.bytes,
+            filename: 'attempt.jpg',
+            contentType: DioMediaType('image', 'jpeg'),
+          ),
+        ));
+        if (!mounted) return;
+        setState(() {
+          _statusMessage = 'Mengirim data absensi...';
+        });
+        final response = await apiClient.uploadFile(endpoint, data: form);
+        if (!_isCurrent(attemptId)) return;
+        if (!mounted) return;
+        final respData = response.data is Map<String, dynamic>
+            ? response.data['data']
+            : null;
+        Navigator.pop(context, {
+          'success': true,
+          'offline': false,
+          'data': respData ?? data,
+          'distance': _distanceToGeofence,
+          'faceDistance': _faceDistance,
+          'inferenceTimeMs': _inferenceTimeMs,
+        });
+        return;
+      } catch (e, stack) {
+        _log.error('gagal menyiapkan foto attempt (dilewati)',
+            error: e, stackTrace: stack);
+      }
+    }
 
     setState(() {
       _statusMessage = 'Mengirim data absensi...';
@@ -821,6 +968,11 @@ class _AttendancePageState extends State<AttendancePage>
   /// layar lalu diam, sehingga siklus "verifikasi berhasil → gagal kirim →
   /// ulangi" berputar tanpa meninggalkan satu baris log pun — dari luar
   /// tampak seperti aplikasi menggantung, padahal ada kegagalan berulang.
+  ///
+  /// Regresi retry: stream kamera wajib dinyalakan kembali. Sebelumnya yang
+  /// dinyalakan hanya `_startFaceDetection()` via pemanggil di catch submit,
+  /// sementara `_verifyFace()` sudah mematikan stream sebelum verifikasi —
+  /// alur "verifikasi gagal kirim → ulangi" diam tanpa frame baru.
   void _failSubmission(
     String message, {
     Object? error,
@@ -845,6 +997,11 @@ class _AttendancePageState extends State<AttendancePage>
       _livenessPassed = false;
       _awaitingNeutralFrame = false; // N-01
     });
+    // Stream sudah dimatikan `_verifyFace()` sebelum verifikasi berjalan;
+    // tanpa restart di sini layar liveness tampak hidup tetapi tidak pernah
+    // menerima frame baru. Idempoten: `_startFaceDetection()` melewatkan
+    // controller yang masih streaming.
+    _startFaceDetection();
   }
 
   @override
@@ -856,8 +1013,8 @@ class _AttendancePageState extends State<AttendancePage>
     final controller = _cameraController;
     if (controller != null) unawaited(_cameraCommands.run(controller.dispose));
     _faceDetector.close();
-    _livenessService.dispose();
-    _faceService.dispose();
+    if (_ownsLivenessService) _livenessService.dispose();
+    if (_ownsFaceService) _faceService.dispose();
     super.dispose();
   }
 
@@ -1025,13 +1182,25 @@ class _AttendancePageState extends State<AttendancePage>
     }
 
     final selisih = _distanceToGeofence - widget.geofenceRadius;
+    // Dua penyebab berbeda pada tahap lokasi harus terlihat berbeda: fix GPS
+    // buruk (user di dalam area, hanya akurasinya melebihi ambang) vs benar-
+    // benar di luar geofence. Menyamakan keduanya membuat user dengan GPS
+    // buruk mencoba "mendekat" tanpa hasil.
+    final lowAccuracy =
+        !_mockLocationDetected && _gpsAccuracy > AttendancePage.maxGpsAccuracy;
     final title = _mockLocationDetected
         ? 'Lokasi palsu terdeteksi'
-        : 'Anda di luar area perkuliahan';
+        : lowAccuracy
+            ? 'Sinyal GPS belum akurat'
+            : 'Anda di luar area perkuliahan';
     final detail = _mockLocationDetected
         ? 'Matikan aplikasi Fake GPS / mock location, lalu coba lagi.'
-        : 'Mendekatlah sekitar ${selisih.clamp(0, double.infinity).toStringAsFixed(0)} m '
-              'lagi ke ${widget.mataKuliahName}.';
+        : lowAccuracy
+            ? 'Akurasi ±${_gpsAccuracy.toStringAsFixed(0)} m, butuh '
+                '≤${AttendancePage.maxGpsAccuracy.toStringAsFixed(0)} m. '
+                'Cari tempat terbuka lalu coba lagi.'
+            : 'Mendekatlah sekitar ${selisih.clamp(0, double.infinity).toStringAsFixed(0)} m '
+                'lagi ke ${widget.mataKuliahName}.';
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -1043,7 +1212,9 @@ class _AttendancePageState extends State<AttendancePage>
               Icon(
                 _mockLocationDetected
                     ? Icons.gpp_maybe_outlined
-                    : Icons.wrong_location_outlined,
+                    : lowAccuracy
+                        ? Icons.gps_off_outlined
+                        : Icons.wrong_location_outlined,
                 size: 56,
                 color: AppColors.danger,
               ),

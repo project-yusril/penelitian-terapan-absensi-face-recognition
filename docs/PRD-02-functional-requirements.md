@@ -128,7 +128,7 @@
 - **Platform**: Mobile
 - **Flow**:
   1. Ambil koordinat GPS (latitude, longitude)
-  2. Cek mock location (safe_device):
+   2. Cek mock location (Geolocator `position.isMocked` + `Location.isMock()`; `safe_device` dihapus 22 September 2026 — N-02):
      - Jika terdeteksi fake GPS -> TOLAK, tampilkan "Terdeteksi manipulasi lokasi"
      - Log anomaly ke backend
   3. Hitung jarak ke titik geofence mata kuliah yang sedang berlangsung
@@ -263,6 +263,17 @@
   - Data yang di-queue: timestamp, koordinat, distance, face distance, device info
   - Backend validasi: timestamp harus masih dalam range waktu mata kuliah
   - Flag: synced_offline = true (untuk monitoring)
+
+#### FR-ABS-009: Foto Attempt Berisiko
+- **Deskripsi**: Sistem menyimpan foto bukti hanya untuk attempt absensi berisiko (keputusan diskusi 23 September 2026 — bukan semua attempt, hemat ~16 GB/semester)
+- **Platform**: Mobile + Backend
+- **Detail**:
+  - Kriteria risiko diputuskan **server-side** (`AttemptFotoService::riskReasons()`): face match gagal, `face_borderline` (face_distance ≥ 0.75 × threshold), mock location terdeteksi, liveness gagal, atau offline sync
+  - Mobile mengirim `attempt_foto` (multipart, jpeg/png, maks 10 MB) saat check-in/checkout online, atau `attempt_foto_b64` (base64) pada sync offline; foto dikompres ≤ 500 KB di sisi klien (`AttemptFotoCompressor`)
+  - Kolom: `attendance_logs.foto_path` + `foto_reason`, `attendances.checkin_foto_path`/`checkout_foto_path`
+  - File di disk privat `face` (tanpa symlink publik), akses hanya signed URL ber-otorisasi pemilik attendance, tiap akses ter-audit (`attempt_foto_accessed`)
+  - Retensi 30 hari: `attendance:purge-attempt-fotos` (scheduler harian) menghapus file dan menolkan kolom path; angka/metadata tetap tersimpan untuk analisis FAR/FRR
+  - Attempt aman tidak pernah menyimpan foto
 
 ---
 

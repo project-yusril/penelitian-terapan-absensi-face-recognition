@@ -41,7 +41,8 @@
 ├─────────────────────────────────────────────────────────────────────┤
 │ 1. Ambil koordinat GPS (latitude, longitude)                         │
 │ 2. Cek akurasi GPS >= minimum (default 20m)                         │
-│ 3. Cek mock location (safe_device)                                   │
+│ 3. Cek mock location (Geolocator isMocked + isMock;                   │
+│    safe_device dihapus 22 Sep 2026 — N-02)                            │
 │    ├── Terdeteksi fake GPS ──► TOLAK + Log anomaly                  │
 │    └── Tidak terdeteksi ──► Lanjut                                  │
 │ 4. Hitung jarak ke geofence (Geolocator.distanceBetween)            │
@@ -135,6 +136,8 @@
 │   → Kirim notifikasi ke dosen                                        │
 │                                                                      │
 │ Kirim data ke backend API (POST /attendance/check-in)                │
+│ + attempt_foto bila attempt berisiko (FR-ABS-009: server memutuskan  │
+│   simpan/tidak via AttemptFotoService::riskReasons)                  │
 │ Tampilkan: "Check-in berhasil - [STATUS]"                           │
 │ Update akumulasi alpha di backend                                    │
 └─────────────────────────────────────────────────────────────────────┘

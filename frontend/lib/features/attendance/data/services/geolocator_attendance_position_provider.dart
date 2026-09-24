@@ -1,5 +1,4 @@
 import 'package:geolocator/geolocator.dart';
-import 'package:safe_device/safe_device.dart';
 
 import '../../domain/services/attendance_location_service.dart';
 
@@ -29,6 +28,22 @@ class GeolocatorAttendancePositionProvider
     );
   }
 
+  /// N-02: sinyal mock perangkat kini dibaca dari flag `Location.isMock()`
+  /// Android pada fix terakhir (`Geolocator.getLastKnownPosition`) — jalur
+  /// kanonik yang sama dengan `position.isMocked` di atas. Menggantikan
+  /// plugin `safe_device` (tertinggal di KGP lama) dengan zero-dependency
+  /// tambahan; hasilnya identik untuk kasus fake GPS yang diteruskan ke
+  /// provider lokasi sistem.
   @override
-  Future<bool> isDeviceMockLocation() => SafeDevice.isMockLocation;
+  Future<bool> isDeviceMockLocation() async {
+    try {
+      final last = await Geolocator.getLastKnownPosition();
+      return last?.isMocked ?? false;
+    } catch (_) {
+      // Tidak ada fix cache / permission berubah di antara panggilan:
+      // fail-open di sini karena sinyal ini hanya pelengkap — fix utama
+      // yang baru diambil tetap diperiksa lewat `position.isMocked`.
+      return false;
+    }
+  }
 }

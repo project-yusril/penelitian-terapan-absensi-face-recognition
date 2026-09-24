@@ -108,6 +108,26 @@ class AuthorizationService
         return $this->denyAll($query);
     }
 
+    /**
+     * H-21/M-25: geofence ikut scope aktor. Geofence global (prodi_id null)
+     * hanya terlihat oleh super_admin; aktor tingkat prodi terbatas pada
+     * geofence prodinya sendiri.
+     */
+    public function scopeGeofences(Builder $query, User $actor): Builder
+    {
+        if ($this->isSuperAdmin($actor)) {
+            return $query;
+        }
+
+        if ($this->usesProdiScope($actor)) {
+            return $actor->prodi_id
+                ? $query->where('prodi_id', $actor->prodi_id)
+                : $this->denyAll($query);
+        }
+
+        return $this->denyAll($query);
+    }
+
     public function assertCanManageSystemSettings(User $actor): void
     {
         abort_unless($this->isSuperAdmin($actor), 403);
@@ -210,6 +230,21 @@ class AuthorizationService
         }
 
         abort_unless($actor->hasAnyRole(['admin_jurusan', 'admin_prodi']) && $actor->prodi_id, 403);
+        abort_unless($prodiId !== null && $prodiId === $actor->prodi_id, 403);
+    }
+
+    /**
+     * Menegakkan scope aktor untuk resource yang memiliki prodi_id opsional
+     * (mis. geofence global prodi_id = null). Aktor tingkat prodi tidak boleh
+     * menyentuh resource di luar prodinya; null hanya berlaku untuk super_admin.
+     */
+    public function assertCanManageProdiResource(User $actor, ?int $prodiId): void
+    {
+        if ($this->isSuperAdmin($actor)) {
+            return;
+        }
+
+        abort_unless($actor->hasAnyRole(['admin_jurusan', 'admin_prodi', 'ketua_jurusan', 'kaprodi']) && $actor->prodi_id, 403);
         abort_unless($prodiId !== null && $prodiId === $actor->prodi_id, 403);
     }
 

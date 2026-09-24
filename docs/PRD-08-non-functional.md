@@ -108,7 +108,7 @@
 
 | Threat | Mitigation |
 |--------|-----------|
-| Fake GPS / Mock Location | safe_device package detection |
+| Fake GPS / Mock Location | Geolocator `position.isMocked` + `Location.isMock()` via `getLastKnownPosition` (safe_device dihapus 22 Sep 2026 — N-02) |
 | Foto wajah (print attack) | Liveness detection (challenge-response) |
 | Video replay | Random challenge (tidak bisa diprediksi) |
 | Video call | Challenge timeout (10 detik), texture detection |

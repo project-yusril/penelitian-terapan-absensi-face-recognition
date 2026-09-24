@@ -72,6 +72,10 @@ Route::middleware(['auth:sanctum', 'user.active', 'throttle:api'])->group(functi
         PrivateFileController::class,
         'leaveDocument',
     ])->middleware('signed')->name('private.leave-documents.show');
+    Route::get('/private/attempt-fotos/{attendanceLog}', [
+        PrivateFileController::class,
+        'attemptFoto',
+    ])->where('attendanceLog', 'a\d+:(checkin|checkout)|log\d+')->middleware('signed')->name('private.attempt-fotos.show');
 
     // Auth
     Route::prefix('auth')->group(function () {

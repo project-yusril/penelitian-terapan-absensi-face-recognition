@@ -11,9 +11,11 @@ use App\Models\Jadwal;
 use App\Models\ProdiSetting;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Services\AttemptFotoService;
 use App\Services\AttendancePermitService;
 use App\Services\AttendancePolicyService;
 use App\Services\NotificationOutboxService;
+use App\Services\PhotoUploadPolicy;
 use App\Services\SpDetectionService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -45,6 +47,7 @@ class AttendanceController extends Controller
             'app_version' => 'nullable|string|max:20',
             'permit_token' => 'required|string|size:64',
             'client_uuid' => 'required|uuid',
+            'attempt_foto' => 'nullable|image|mimes:jpeg,jpg,png|max:'.PhotoUploadPolicy::MAX_FOTO_KB,
         ]);
 
         // Liveness wajib lolos (anti-spoofing wajah) — R-04
@@ -134,6 +137,19 @@ class AttendanceController extends Controller
 
         // 7. Validasi face recognition threshold
         $faceThreshold = $prodiSetting?->face_threshold ?? 0.60;
+        $riskReasons = AttemptFotoService::riskReasons(
+            (float) $request->face_distance,
+            (float) $faceThreshold,
+            $request->boolean('mock_location_detected'),
+            $request->boolean('liveness_passed'),
+        );
+
+        // FOTO ATTEMPT BERISIKO: simpan foto bila attempt masuk kriteria risiko.
+        // Simpan SEBELUM transaksi DB supaya file tetap ada sebagai bukti audit
+        // walau attempt ditolak; jika DB gagal, file dihapus di catch.
+        $attemptFotoService = app(AttemptFotoService::class);
+        $attemptFotoPath = $riskReasons === [] ? null : $attemptFotoService->store($request);
+
         if ($request->face_distance > $faceThreshold) {
             // face_distance ditulis ke KOLOM (bukan hanya metadata) agar percobaan
             // impostor yang gagal match tetap masuk sweep FAR/FRR (R-05).
@@ -148,6 +164,8 @@ class AttendanceController extends Controller
                     'device_os' => $request->device_os,
                     'app_version' => $request->app_version,
                     'gps_accuracy' => $request->gps_accuracy,
+                    'foto_path' => $attemptFotoPath,
+                    'foto_reason' => $riskReasons[0] ?? null,
                 ]);
 
             return $this->error('Verifikasi wajah gagal. Silakan coba lagi.', 422);
@@ -198,7 +216,7 @@ class AttendanceController extends Controller
         // tangkap QueryException dan kembalikan 422 idempotent (bukan 500).
 
         try {
-            [$attendance, $duplicate] = DB::transaction(function () use ($permits, $permit, $user, $jadwal, $pertemuanKe, $now, $status, $request, $distance, $alphaMenit, $jamMulai, $faceThreshold) {
+            [$attendance, $duplicate] = DB::transaction(function () use ($permits, $permit, $user, $jadwal, $pertemuanKe, $now, $status, $request, $distance, $alphaMenit, $jamMulai, $faceThreshold, $attemptFotoService, $attemptFotoPath, $riskReasons) {
                 User::whereKey($user->id)->lockForUpdate()->firstOrFail();
                 $lockedPermit = $permits->lockForConsumption($permit->id);
                 if ($lockedPermit->consumed_at) {
@@ -222,6 +240,7 @@ class AttendanceController extends Controller
                     'checkin_face_distance' => $request->face_distance,
                     'checkin_liveness_passed' => $request->liveness_passed,
                     'checkin_device' => $request->device_model,
+                    'checkin_foto_path' => $attemptFotoPath,
                     'alpha_menit' => $alphaMenit,
                 ]);
                 $permits->consume($lockedPermit);
@@ -241,6 +260,8 @@ class AttendanceController extends Controller
                         'device_os' => $request->device_os,
                         'app_version' => $request->app_version,
                         'gps_accuracy' => $request->gps_accuracy,
+                        'foto_path' => $attemptFotoPath,
+                        'foto_reason' => $riskReasons[0] ?? null,
                     ]);
                 $this->auditMutation($request, $attendance, 'checkin_attendance', [], [
                     'status' => $status, 'client_uuid' => $request->client_uuid,
@@ -267,7 +288,14 @@ class AttendanceController extends Controller
                     return $this->checkInResponse($existing, true);
                 }
 
+                if ($attemptFotoPath) {
+                    $attemptFotoService->delete($attemptFotoPath);
+                }
+
                 return $this->error('Occurrence attendance sudah memiliki check-in dengan UUID berbeda', 409);
+            }
+            if ($attemptFotoPath) {
+                $attemptFotoService->delete($attemptFotoPath);
             }
             throw $e;
         }
@@ -307,6 +335,7 @@ class AttendanceController extends Controller
             'jadwal_id' => 'required|exists:jadwals,id',
             'permit_token' => 'required|string|size:64',
             'client_uuid' => 'required|uuid',
+            'attempt_foto' => 'nullable|image|mimes:jpeg,jpg,png|max:'.PhotoUploadPolicy::MAX_FOTO_KB,
         ]);
 
         // Liveness wajib lolos (anti-spoofing wajah) — R-04
@@ -358,11 +387,37 @@ class AttendanceController extends Controller
 
         // 3. Validasi face
         $faceThreshold = $prodiSetting?->face_threshold ?? 0.60;
+        $riskReasons = AttemptFotoService::riskReasons(
+            (float) $request->face_distance,
+            (float) $faceThreshold,
+            $request->boolean('mock_location_detected'),
+            $request->boolean('liveness_passed'),
+        );
+
+        // FOTO ATTEMPT BERISIKO: simpan foto bila attempt masuk kriteria risiko.
+        $attemptFotoService = app(AttemptFotoService::class);
+        $attemptFotoPath = $riskReasons === [] ? null : $attemptFotoService->store($request);
+
         if ($request->face_distance > $faceThreshold) {
+            $this->logAttempt($user->id, $attendance->id, 'checkout_face_not_match', 'Face verification gagal saat check-out',
+                $this->buildResearchMetadata($request, ['threshold' => $faceThreshold]), [
+                    'latitude' => $request->latitude,
+                    'longitude' => $request->longitude,
+                    'face_distance' => $request->face_distance,
+                    'face_threshold' => $faceThreshold,
+                    'inference_time_ms' => $request->inference_time_ms,
+                    'device_model' => $request->device_model,
+                    'device_os' => $request->device_os,
+                    'app_version' => $request->app_version,
+                    'gps_accuracy' => $request->gps_accuracy,
+                    'foto_path' => $attemptFotoPath,
+                    'foto_reason' => $riskReasons[0] ?? null,
+                ]);
+
             return $this->error('Verifikasi wajah gagal saat check-out.', 422);
         }
 
-        $result = DB::transaction(function () use ($permits, $permit, $attendance, $user, $request, $distance, $faceThreshold, $prodiSetting) {
+        $result = DB::transaction(function () use ($permits, $permit, $attendance, $user, $request, $distance, $faceThreshold, $prodiSetting, $attemptFotoPath, $riskReasons) {
             User::whereKey($user->id)->lockForUpdate()->firstOrFail();
             $lockedPermit = $permits->lockForConsumption($permit->id);
             if ($lockedPermit->consumed_at) {
@@ -407,6 +462,8 @@ class AttendanceController extends Controller
                 'checkout_distance' => round($distance, 2),
                 'checkout_face_distance' => $request->face_distance,
                 'checkout_liveness_passed' => $request->liveness_passed,
+                'checkout_device' => $request->device_model,
+                'checkout_foto_path' => $attemptFotoPath,
                 'alpha_menit' => $totalAlphaMenit,
                 'durasi_efektif_menit' => $durasiEfektifMenit,
             ]);
@@ -428,6 +485,8 @@ class AttendanceController extends Controller
                     'device_os' => $request->device_os,
                     'app_version' => $request->app_version,
                     'gps_accuracy' => $request->gps_accuracy,
+                    'foto_path' => $attemptFotoPath,
+                    'foto_reason' => $riskReasons[0] ?? null,
                 ]);
             $this->auditMutation($request, $lockedAttendance, 'checkout_attendance',
                 ['checkout_time' => null], ['checkout_time' => $actualCheckoutTime, 'client_uuid' => $request->client_uuid]);
@@ -562,6 +621,7 @@ class AttendanceController extends Controller
             'latitude', 'longitude', 'distance_to_geofence', 'face_distance',
             'face_threshold', 'liveness_challenge', 'inference_time_ms',
             'device_model', 'device_os', 'app_version', 'gps_accuracy',
+            'foto_path', 'foto_reason',
         ];
 
         // test_type adalah kolom enum('genuine','impostor') — hanya boleh diisi

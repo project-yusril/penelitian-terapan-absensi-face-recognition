@@ -31,6 +31,8 @@ class AttendanceLog extends Model
         'error_message',
         'keterangan',
         'metadata',
+        'foto_path',
+        'foto_reason',
     ];
 
     protected function casts(): array

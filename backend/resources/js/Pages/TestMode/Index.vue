@@ -25,8 +25,8 @@ const fmt = (iso) => {
 </script>
 
 <template>
-    <Head title="Mode Pengujian" />
-    <PageHeader title="Mode Pengujian" subtitle="Aktifkan pelabelan data verifikasi wajah untuk evaluasi FAR/FRR penelitian" />
+    <Head title="Mode Penelitian" />
+    <PageHeader title="Mode Penelitian" subtitle="Aktifkan pelabelan data verifikasi wajah untuk evaluasi FAR/FRR penelitian" />
 
     <div class="card flex items-center justify-between p-6">
         <div class="flex items-start gap-4">
@@ -36,7 +36,8 @@ const fmt = (iso) => {
             <div>
                 <p class="font-medium text-slate-700">Status: {{ enabled ? 'Aktif' : 'Nonaktif' }}</p>
                 <p class="mt-0.5 max-w-xl text-sm text-slate-500">
-                    Saat aktif, sistem akan menandai setiap verifikasi wajah sebagai data uji. Admin
+                    Mode penelitian (dahulu disebut mode pengujian/test mode). Saat aktif, sistem akan menandai
+                    setiap verifikasi wajah sebagai data uji. Admin
                     melabeli tiap log di tabel bawah sebagai <strong>genuine</strong> (orang yang
                     benar) atau <strong>impostor</strong> (orang lain), lalu lihat FAR/FRR/EER di
                     menu <strong>Analisis</strong>.
@@ -70,7 +71,7 @@ const fmt = (iso) => {
         <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <div>
                 <p class="font-medium text-slate-700">Log Verifikasi Belum Berlabel</p>
-                <p class="text-sm text-slate-400">50 entri terbaru saat mode pengujian aktif</p>
+                <p class="text-sm text-slate-400">50 entri terbaru saat mode penelitian aktif</p>
             </div>
         </div>
 
@@ -117,7 +118,7 @@ const fmt = (iso) => {
                     </tr>
                     <tr v-if="!unlabeled.length">
                         <td colspan="7" class="px-5 py-10 text-center text-sm text-slate-400">
-                            Belum ada log uji yang perlu dilabeli. Aktifkan mode pengujian lalu
+                            Belum ada log uji yang perlu dilabeli. Aktifkan mode penelitian lalu
                             lakukan check-in untuk merekam sampel.
                         </td>
                     </tr>

@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import PageHeader from '@/Components/PageHeader.vue';
 import DataTable from '@/Components/DataTable.vue';
+import Modal from '@/Components/Modal.vue';
 import StatusBadge from '@/Components/StatusBadge.vue';
 import Icon from '@/Components/Icon.vue';
 
@@ -20,6 +21,7 @@ const columns = [
     { key: 'durasi', label: 'Durasi', align: 'center' },
     { key: 'status', label: 'Status', sortable: true },
     { key: 'flags', label: 'Catatan', align: 'center' },
+    { key: 'bukti', label: 'Bukti', align: 'center' },
 ];
 
 const statusFilter = ref(props.filters.status ?? '');
@@ -33,6 +35,13 @@ const applyFilters = () => {
         per_page: props.filters.per_page,
     }, { preserveState: true, preserveScroll: true, replace: true });
 };
+
+// Bukti visual: foto attempt berisiko (check-in/checkout) berdampingan dengan
+// foto enrollment pemilik akun — untuk pemeriksaan genuine vs impostor.
+const buktiRow = ref(null);
+
+const openBukti = (row) => { buktiRow.value = row; };
+const closeBukti = () => { buktiRow.value = null; };
 
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1).replace('_', ' ') : s);
 </script>
@@ -81,5 +90,47 @@ const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1).replace('_', ' ')
                 <span v-if="!row.is_offline_synced && !row.is_overridden" class="text-slate-300">—</span>
             </div>
         </template>
+        <template #cell:bukti="{ row }">
+            <button
+                v-if="row.checkin_foto_url || row.checkout_foto_url"
+                type="button"
+                class="badge bg-violet-50 text-violet-600 hover:bg-violet-100"
+                title="Lihat foto attempt berisiko vs foto enrollment"
+                @click="openBukti(row)"
+            >
+                <Icon name="eye" class="mr-1 h-3.5 w-3.5" aria-hidden="true" /> Foto
+            </button>
+            <span v-else class="text-slate-300">—</span>
+        </template>
     </DataTable>
+
+    <Modal :show="!!buktiRow" title="Bukti Visual Attempt Berisiko" max-width="3xl" @close="closeBukti">
+        <div v-if="buktiRow">
+            <p class="mb-4 text-sm text-slate-500">
+                {{ buktiRow.nama }} ({{ buktiRow.nim }}) — {{ buktiRow.mata_kuliah }}, {{ buktiRow.tanggal }}.
+                Bandingkan foto saat absen dengan foto enrollment pemilik akun.
+                Foto hanya tersedia untuk attempt berisiko dan terhapus otomatis setelah 30 hari.
+            </p>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div v-if="buktiRow.enrollment_foto_url" class="rounded-xl border border-slate-100 p-3">
+                    <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Foto Enrollment</p>
+                    <img :src="buktiRow.enrollment_foto_url" alt="Foto enrollment mahasiswa" class="w-full rounded-lg object-cover" loading="lazy" />
+                </div>
+                <div v-if="buktiRow.checkin_foto_url" class="rounded-xl border border-slate-100 p-3">
+                    <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Saat Check-in</p>
+                    <img :src="buktiRow.checkin_foto_url" alt="Foto saat check-in" class="w-full rounded-lg object-cover" loading="lazy" />
+                </div>
+                <div v-if="buktiRow.checkout_foto_url" class="rounded-xl border border-slate-100 p-3">
+                    <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Saat Check-out</p>
+                    <img :src="buktiRow.checkout_foto_url" alt="Foto saat check-out" class="w-full rounded-lg object-cover" loading="lazy" />
+                </div>
+            </div>
+            <p v-if="!buktiRow.enrollment_foto_url" class="mt-3 text-xs text-slate-400">
+                Foto enrollment tidak tersedia untuk mahasiswa ini.
+            </p>
+        </div>
+        <template #footer>
+            <button type="button" class="btn-secondary" @click="closeBukti">Tutup</button>
+        </template>
+    </Modal>
 </template>

@@ -374,6 +374,7 @@ CREATE TABLE attendances (
     checkin_face_distance DECIMAL(10, 6) NULL, -- euclidean distance
     checkin_liveness_passed BOOLEAN DEFAULT FALSE,
     checkin_device VARCHAR(100) NULL,
+    checkin_foto_path VARCHAR(255) NULL,      -- foto attempt berisiko (23 Sep 2026, lihat catatan bawah)
     
     -- Check-out data
     checkout_time TIMESTAMP NULL,
@@ -383,6 +384,7 @@ CREATE TABLE attendances (
     checkout_face_distance DECIMAL(10, 6) NULL,
     checkout_liveness_passed BOOLEAN DEFAULT FALSE,
     checkout_device VARCHAR(100) NULL,
+    checkout_foto_path VARCHAR(255) NULL,     -- foto attempt berisiko (23 Sep 2026)
     
     -- Status & Kalkulasi
     status ENUM('hadir', 'hadir_terlambat', 'pending', 'alpha', 'izin', 'sakit') DEFAULT 'alpha',
@@ -452,6 +454,8 @@ CREATE TABLE attendance_logs (
     test_type ENUM('genuine', 'impostor') NULL,
     
     error_message TEXT NULL,
+    foto_path VARCHAR(255) NULL,              -- foto attempt berisiko (23 Sep 2026, lihat catatan bawah)
+    foto_reason VARCHAR(30) NULL,             -- face_not_match | face_borderline | mock_location | liveness_failed | offline_sync
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
     FOREIGN KEY (attendance_id) REFERENCES attendances(id) ON DELETE SET NULL,
@@ -462,6 +466,8 @@ CREATE TABLE attendance_logs (
     INDEX idx_log_test (is_test_mode, test_type)
 );
 ```
+
+> **Kolom foto attempt berisiko (migrasi 23 September 2026).** Kolom `foto_path`/`foto_reason` di `attendance_logs` dan `checkin_foto_path`/`checkout_foto_path` di `attendances` disengaja **bukan foto untuk semua attempt**: pada 500 mahasiswa × 5 sesi/minggu, menyimpan semua foto berarti ~16 GB per semester. Foto hanya disimpan ketika attempt masuk kriteria risiko (`face_not_match`, `face_borderline` dengan face_distance ≥ 0.75 × threshold, `mock_location`, `liveness_failed`, `offline_sync`), diputuskan server-side oleh `AttemptFotoService::riskReasons()`. File disimpan di disk privat `face` (sama dengan enrollment, tanpa symlink publik), diakses hanya via signed URL ber-otorisasi + audit akses, dan di-purge 30 hari oleh command `attendance:purge-attempt-fotos`; angka/metadata tetap tersimpan selamanya sebagai data penelitian. Implementasi: `app/Services/AttemptFotoService.php`.
 
 ### 2.15 Tabel: `alpha_accumulations`
 ```sql

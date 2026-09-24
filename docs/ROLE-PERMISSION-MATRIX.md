@@ -5,7 +5,7 @@
 > mengaudit kelengkapan negative test lintas role dan lintas prodi (Definition
 > of Done "Authorization matrix memiliki negative tests").
 >
-> Pembaruan terakhir: 11 Agustus 2026.
+> Pembaruan terakhir: 24 September 2026 (geofence prodi-scoped + foto attempt).
 
 ## Cara Dokumen Ini Diturunkan
 
@@ -73,6 +73,7 @@ mempersempit** scope, tidak pernah memperluasnya (H-21).
 | `scopeProdis` | Semua | Prodi aktor saja | Prodi dari MK yang diampu | Ditolak semua |
 | `scopeMataKuliahs` | Semua | `prodi_id` aktor | `dosen_id` aktor | Ditolak semua |
 | `scopeAttendances` | Semua | Lewat `mataKuliah.prodi_id` | Lewat `mataKuliah.dosen_id` | Ditolak semua |
+| `assertCanManageProdiResource` (geofence) | Semua, termasuk geofence global (`prodi_id = null`) | Hanya geofence prodinya; geofence global ditolak | — | Ditolak semua |
 
 "Role tingkat prodi" = `ketua_jurusan`, `admin_jurusan`, `kaprodi`,
 `admin_prodi`. Aktor tingkat prodi **tanpa** `prodi_id` selalu fail-closed
@@ -125,7 +126,7 @@ Jumlah route dihitung per entri tabel route, termasuk varian method.
 |---|---|
 | Enam role dashboard | `dashboard`, `attendance`, `notifications`, `profile`, `logout`, `two-factor`, `push-subscriptions`, `private` |
 | `super_admin`, `ketua_jurusan`, `admin_jurusan`, `kaprodi`, `admin_prodi` | `reports`, `sp` |
-| `super_admin`, `admin_jurusan`, `admin_prodi` | Master akademik web (`users`, `prodi`, `mata-kuliah`, `jadwal`, `geofence`, `semester`, `tahun-ajaran`) dan seluruh `api/admin/*` |
+| `super_admin`, `admin_jurusan`, `admin_prodi` | Master akademik web (`users`, `prodi`, `mata-kuliah`, `jadwal`, `geofence`, `semester`, `tahun-ajaran`) dan seluruh `api/admin/*` — geofence ditambah lapis 2 (24 Sep 2026): admin prodi hanya mengelola geofence prodinya via `assertCanManageProdiResource()`, geofence global (`prodi_id = null`) hanya `super_admin` |
 | `super_admin`, `admin_jurusan` | `audit-trail` |
 | `super_admin`, `admin_prodi`, `kaprodi` | `settings` |
 | `super_admin`, `kaprodi` | `enrollments`, `re-enrollments`, `leave-requests`, `api/kaprodi/*` |
@@ -162,6 +163,8 @@ Dipakai untuk menilai kelengkapan, bukan sekadar keberadaan, negative test.
 |---|---|---|
 | Role rendah memanggil endpoint role tinggi | 403 | Ya — C-02, C-07 |
 | Aktor prodi A memutasi record prodi B | 403, record tidak berubah | Ya — C-03 |
+| Admin prodi mengelola geofence prodi lain / geofence global | 403 | Ya — `GeofenceScopeTest` (24 Sep 2026, 10 test) |
+| Pihak non-pemilik membaca foto attempt berisiko | 403 (dosen sengaja tidak diizinkan — bukti biometrik sensitif; pemilik, kaprodi/super_admin/admin prodi terkait lolos via `assertCanApproveProdiResource`) | Ya — `AttemptFotoTest` (24 Sep 2026, 9 test) |
 | Aktor prodi A membaca daftar/laporan prodi B | Terfilter atau 403 | Ya — H-21 |
 | Aktor prodi A membaca **analisis penelitian** prodi B | 403 | Ya — MS-01, `AnalysisProdiScopeTest` |
 | Self-escalation ke role setara/lebih tinggi | 403 | Ya — C-02 |
@@ -182,6 +185,7 @@ Dipakai untuk menilai kelengkapan, bukan sekadar keberadaan, negative test.
 
 ## Riwayat
 
+- 24 September 2026 — geofence menjadi prodi-scoped (lapis 2 `assertCanManageProdiResource()` di `GeofenceController`; geofence global `prodi_id = null` hanya `super_admin`) dan route foto attempt berisiko `GET /private/attempt-fotos/{attendanceLog}` (API + web) masuk domain `private` dengan object policy per pemilik/role. Regresi: `GeofenceScopeTest` (10 test), `AttemptFotoTest` (9 test).
 - 11 Agustus 2026 — dokumen dibuat (MS-01). Penyusunannya menemukan bahwa
   `api/admin/analysis/*` terbuka untuk `admin_jurusan`/`admin_prodi` tanpa scope
   aktor, sehingga role tingkat prodi dapat membaca statistik kehadiran,

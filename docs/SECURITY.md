@@ -1,6 +1,6 @@
 # Model Keamanan
 
-**Pembaruan:** 14 September 2026
+**Pembaruan:** 24 September 2026 (foto attempt berisiko + geofence prodi-scoped terdeploy live)
 **Backlog risiko:** [`temuan.md`](temuan.md)
 **Threat model attendance:** [`THREAT-MODEL-ATTENDANCE.md`](THREAT-MODEL-ATTENDANCE.md)
 
@@ -17,6 +17,7 @@
 - FCM token dicabut (device `deleteToken` + backend `POST /fcm-token` kosong) saat logout dan sesi invalid, sehingga perangkat bersama tidak menerima push milik akun sebelumnya (L-02/C-06).
 - Face embedding terenkripsi menggunakan key biometrik terpisah.
 - Biometric/medical files private dan diakses melalui authenticated signed route.
+- Foto attempt berisiko (23 September 2026) hanya disimpan untuk attempt berisiko yang diputuskan server-side; file di disk privat `face`, akses signed URL ber-otorisasi pemilik dengan audit per akses, purge otomatis 30 hari.
 - Android release fail-closed tanpa release signing secrets.
 - Throttle login web (`throttle:login`, 5/menit per IP+identitas, 30/menit per IP) dan TOTP verify (`throttle:5,1`).
 - Seluruh group API terautentikasi memakai `throttle:api` (60/menit per user) dan `POST /auth/change-password` memakai `throttle:auth-sensitive` (5/menit per user) karena memverifikasi `current_password`. Keying per user, bukan per IP, agar NAT kampus tidak saling mengunci (M-23).

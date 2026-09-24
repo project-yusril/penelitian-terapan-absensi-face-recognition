@@ -63,6 +63,12 @@ class RouteGuardInvariantTest extends TestCase
         'api/private/enrollment-photos/{user}' => ['GET'],
         'api/private/re-enrollment-photos/{reEnrollment}' => ['GET'],
         'api/private/leave-documents/{leaveRequest}' => ['GET'],
+        // FOTO ATTEMPT BERISIKO: signed URL + audit akses di controller.
+        // Pemilik attendance melihat fotonya sendiri; kaprodi/admin via
+        // AuthorizationService::assertCanApproveProdiResource di dalam
+        // PrivateFileController@attemptFoto (lihat juga ROLE-PERMISSION-MATRIX).
+        'api/private/attempt-fotos/{attendanceLog}' => ['GET'],
+        'private/attempt-fotos/{attendanceLog}' => ['GET'],
     ];
 
     private const ROLE_GUARD_MIDDLEWARE = [

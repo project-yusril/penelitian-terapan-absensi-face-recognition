@@ -1,7 +1,7 @@
 # Arsitektur Saat Ini
 
 **Status:** maintained
-**Pembaruan:** 21 September 2026, 02:00 WIB
+**Pembaruan:** 24 September 2026, 10:00 WIB
 **Authority:** executable truth; backlog dan evidence mengikuti temuan.md
 
 ## Struktur Data Akademik (Kelas Master) — RENCANA 2
@@ -34,7 +34,7 @@ jadwals (dosen_id + mata_kuliah_id + kelas_id + hari + jam + ruangan + geofence)
 | Semester arsip | `2025/2026-2` Genap (nonaktif) — kelas 4A–4E saja; pemilik 62 attendance riwayat |
 | Users | 171 (mahasiswa 150, dosen 9, admin_prodi 3, kaprodi 3, orang_tua 3, super_admin/admin_jurusan/ketua_jurusan 1) |
 | `mahasiswa_kelas` | 165 baris (angkatan 2026 = 150 pivot semester aktif; angkatan 2024 = 15 pivot arsip genap) |
-| Jadwal & MK | 9 jadwal (kelas 4A–4E genap + **jadwal PTI kelas 1D Senin 08:00–16:00 ditambahkan 21 Sep 2026, 01:41 WIB** — TI-301, dosen Yusril Eka Mahendra M.TI, Lab Komputer 1, 27 mahasiswa 1D; detail DEPLOYMENT.md), 3 mata kuliah master |
+| Jadwal & MK | 11 jadwal (kelas 4A–4E genap + jadwal PTI kelas 1D **Senin 08:00–16:00 ID 9** (21 Sep) dan **Rabu 09:00–16:00 ID 11** (23 Sep) — TI-301, dosen Yusril Eka Mahendra M.TI, Lab Komputer 1, 27 mahasiswa 1D; jadwal 10 (Selasa 09:00–22:00) diperpanjang 22 Sep untuk demo; detail DEPLOYMENT.md), 3 mata kuliah master |
 | Rekam | attendances 62, attendance_logs 926, permits 12, leave 1, SP 3 |
 | Biometrik | **59 face embeddings (55 approved per 21 September 2026 — admin menyetujui seluruh enrollment via dashboard; 4 rejected)**, 65 foto enrollment di host, `face_threshold` 0.600 semua prodi (host live sejak 14 September 2026). Evaluasi impostor asli 21 September 2026: 1.485 pasangan lintas-user → **FAR @ θ=0.600 = 0.0000%** (min 0.6185, mean 1.1332, maks 1.5083; bukti `eksperimen/`). Data genuine/impostor sintetis dari seeder `attendance:seed-analysis-data` (920 log) TIDAK valid sebagai hasil eksperimen. |
 
@@ -157,13 +157,14 @@ Lifecycle FCM mobile diimplementasikan di `frontend/lib/core/notifications/push_
 - Face embedding dienkripsi AES-256-GCM dengan biometric key terpisah dari `APP_KEY`.
 - Key ID/keyring mendukung rotasi; plaintext legacy dipurge melalui migration.
 - Foto enrollment/re-enrollment dan dokumen izin berada pada private disk.
+- **Foto attempt berisiko (23 September 2026):** hanya attempt absensi berisiko yang menyimpan foto bukti — kriteria diputuskan server-side oleh `AttemptFotoService::riskReasons()` (face gagal/borderline, mock location, liveness gagal, offline sync). File di disk privat `face` (`storage/app/face/attempt/`), akses hanya signed URL ber-otorisasi pemilik + audit akses, purge 30 hari via `attendance:purge-attempt-fotos`. Kolom: `attendance_logs.foto_path`/`foto_reason`, `attendances.checkin_foto_path`/`checkout_foto_path`.
 - Akses file memerlukan authentication, signed URL berumur pendek, object-level authorization, dan response `private, no-store`.
 
 ## Platform Support
 
 | Platform | Status |
 |---|---|
-| Android | Target release aktif; signing release melalui CI/secret manager. Build app memakai **built-in Kotlin** (N-02, 21 September 2026); `android.builtInKotlin` tetap `false` selama `safe_device` belum bermigrasi dari KGP |
+| Android | Target release aktif; signing release melalui CI/secret manager. Build app memakai **built-in Kotlin** (N-02, 21 September 2026); app gradle bermigrasi dan **`safe_device` dihapus total 22 September 2026** sehingga tidak ada lagi plugin KGP legacy — `android.builtInKotlin=true` siap diaktifkan saat Flutter 3.47+/AGP 9 diadopsi |
 | iOS | Tidak didukung dan dikeluarkan dari release matrix; folder platform hanya scaffold pengembangan |
 | Web dashboard | Target aktif melalui backend Inertia |
 

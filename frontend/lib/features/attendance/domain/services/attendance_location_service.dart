@@ -68,7 +68,20 @@ abstract class AttendancePositionProvider {
 
 class AttendanceLocationException implements Exception {
   final String code;
-  const AttendanceLocationException(this.code);
+
+  /// Detail fix yang ditolak pada kegagalan `location_policy_rejected` /
+  /// `outside_geofence` — dipakai pesan error untuk menyebut angka yang
+  /// SESUNGGUHNYA ditolak, bukan angka fix terakhir yang berhasil.
+  final double? accuracyMeters;
+  final int? ageMs;
+  final double? distanceMeters;
+
+  const AttendanceLocationException(
+    this.code, {
+    this.accuracyMeters,
+    this.ageMs,
+    this.distanceMeters,
+  });
   @override
   String toString() => code;
 }
@@ -105,6 +118,10 @@ class AttendanceLocationService {
     required bool positionIsMocked,
     required bool deviceMockDetected,
   }) => positionIsMocked || deviceMockDetected;
+
+  /// N-02: akses sinyal mock tingkat perangkat lewat provider terinjeksi,
+  /// tanpa ketergantungan pada plugin eksternal (dulu `safe_device`).
+  Future<bool> isDeviceMockLocation() => _provider.isDeviceMockLocation();
 
   Future<AttendanceLocationFix> acquire({
     required AttendanceLocationPolicy policy,
@@ -208,7 +225,13 @@ class AttendanceLocationService {
       accuracy: position.accuracy,
       ageMs: sourceAge.inMilliseconds,
     )) {
-      throw const AttendanceLocationException('location_policy_rejected');
+      // Sertakan angka fix yang ditolak supaya pesan error menyebut
+      // penyebab sebenarnya (akurasi vs umur), bukan angka fix lama.
+      throw AttendanceLocationException(
+        'location_policy_rejected',
+        accuracyMeters: position.accuracy,
+        ageMs: sourceAge.inMilliseconds,
+      );
     }
     final distance = LocationUtils.haversineDistance(
       position.latitude,
@@ -217,7 +240,10 @@ class AttendanceLocationService {
       geofenceLon,
     );
     if (!distance.isFinite || distance > geofenceRadius) {
-      throw const AttendanceLocationException('outside_geofence');
+      throw AttendanceLocationException(
+        'outside_geofence',
+        distanceMeters: distance.isFinite ? distance : null,
+      );
     }
     return AttendanceLocationFix(
       position: position,
@@ -233,7 +259,11 @@ class AttendanceLocationService {
   ) {
     final age = fix.ageMs(_ticks());
     if (!policy.accepts(accuracy: fix.position.accuracy, ageMs: age)) {
-      throw const AttendanceLocationException('location_policy_rejected');
+      throw AttendanceLocationException(
+        'location_policy_rejected',
+        accuracyMeters: fix.position.accuracy,
+        ageMs: age,
+      );
     }
     return age;
   }

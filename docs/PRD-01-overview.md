@@ -74,6 +74,7 @@ Sistem Absensi Mahasiswa adalah platform terintegrasi yang terdiri dari aplikasi
 - Push notification (FCM)
 - Export data (Excel/PDF)
 - Mode pengujian untuk evaluasi FAR/FRR
+- Foto bukti attempt absensi berisiko (FR-ABS-009, 23 September 2026) — bukti investigasi pasca-kejadian, bukan verifier realtime
 
 #### Di Luar Scope:
 - Face identification (1:N) — hanya face verification (1:1)
@@ -247,7 +248,7 @@ Super Admin (Owner/Peneliti)
 | Face Detection | Google ML Kit Face Detection |
 | Face Embedding | MobileFaceNet (.tflite) - output 192-dim |
 | Geolocation | Geolocator package |
-| Mock Location Detection | safe_device package |
+| Mock Location Detection | Geolocator (`position.isMocked` + `Location.isMock()` via `getLastKnownPosition`; `safe_device` dihapus 22 September 2026 — N-02) |
 | Camera | camera package |
 | State Management | Riverpod / Bloc |
 | HTTP Client | Dio |

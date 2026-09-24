@@ -54,6 +54,7 @@ Diverifikasi pada `AttendancePermitService`, `AttendancePolicyService`, `Api/Mah
 | Transport | HTTPS wajib pada release; cleartext debug hanya loopback/emulator atau LAN privat terpercaya dengan akun/data uji |
 | Abuse rate | Permit dan capture dibatasi `throttle:attendance` 10/menit per user; group API terautentikasi dibatasi `throttle:api` 60/menit per user (M-23). Keying per user, bukan per IP |
 | Scope pembaca | Endpoint analisis memakai scope aktor: role tingkat prodi tidak dapat membaca data prodi lain (M-24). Matriks lengkap di [ROLE-PERMISSION-MATRIX.md](ROLE-PERMISSION-MATRIX.md) |
+| Bukti attempt berisiko (23 September 2026) | Server menyimpan foto bukti **hanya untuk attempt berisiko** (face gagal/borderline, mock location, liveness gagal, offline sync — kriteria dihitung server-side, bukan klaim client). Akses kembali butuh signed URL ber-otorisasi pemilik + audit per akses; purge 30 hari. Foto adalah bukti investigasi pasca-kejadian, bukan verifier realtime — tidak menutup residual C-04 |
 
 > Catatan metrik penelitian: analisis success rate geofence dihitung dari `checkin_success` vs `checkin_failed`, bukan `geofence_valid` (R-01), dan filter `prodi_id` mempersempit dataset dengan atribusi prodi subjek (R-04). Keduanya memperbaiki *validitas laporan*, bukan menutup residual C-04 di bawah.
 

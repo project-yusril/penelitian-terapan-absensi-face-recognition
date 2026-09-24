@@ -9,14 +9,17 @@ use App\Models\AuditTrail;
 use App\Models\Jadwal;
 use App\Models\ProdiSetting;
 use App\Models\User;
+use App\Services\AttemptFotoService;
 use App\Services\AttendancePermitService;
 use App\Services\AttendancePolicyService;
 use App\Services\NotificationOutboxService;
+use App\Services\PhotoUploadPolicy;
 use App\Services\SpDetectionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Offline Sync Controller
@@ -59,6 +62,7 @@ class OfflineSyncController extends Controller
             'attendances.*.device_os' => 'nullable|string|max:50',
             'attendances.*.app_version' => 'nullable|string|max:20',
             'attendances.*.permit_token' => 'required|string|size:64',
+            'attendances.*.attempt_foto_b64' => 'nullable|string',
         ]);
 
         $user = $request->user();
@@ -154,10 +158,14 @@ class OfflineSyncController extends Controller
                 continue;
             }
 
+            // FOTO ATTEMPT BERISIKO: semua attempt offline = risiko (jendela
+            // curang terluas), jadi foto selalu disimpan bila dikirim client.
+            $attemptFotoPath = $this->storeAttemptFoto($item);
+
             try {
                 $result = DB::transaction(function () use (
                     $user, $jadwal, $item, $timestamp, $distance, $permit, $permits,
-                    $toleransiMasuk, $toleransiPulang, $batasTerlambatPersen, $faceThreshold
+                    $toleransiMasuk, $toleransiPulang, $batasTerlambatPersen, $faceThreshold, $attemptFotoPath
                 ) {
                     User::whereKey($user->id)->lockForUpdate()->firstOrFail();
                     $lockedPermit = $permits->lockForConsumption($permit->id);
@@ -170,9 +178,9 @@ class OfflineSyncController extends Controller
 
                     $result = $item['type'] === 'check_in'
                         ? $this->processCheckIn($user, $jadwal, $item, $timestamp, $distance,
-                            $toleransiMasuk, $batasTerlambatPersen, $faceThreshold)
+                            $toleransiMasuk, $batasTerlambatPersen, $faceThreshold, $attemptFotoPath)
                         : $this->processCheckOut($user, $jadwal, $item, $timestamp, $distance,
-                            $toleransiPulang, $faceThreshold);
+                            $toleransiPulang, $faceThreshold, $attemptFotoPath);
 
                     if ($result['status'] === 'success') {
                         $permits->consume($lockedPermit);
@@ -206,7 +214,7 @@ class OfflineSyncController extends Controller
      */
     private function processCheckIn(
         $user, $jadwal, array $item, Carbon $timestamp, float $distance,
-        int $toleransi, int $batasTerlambatPersen, float $faceThreshold
+        int $toleransi, int $batasTerlambatPersen, float $faceThreshold, ?string $attemptFotoPath = null
     ): array {
         // Cek sudah ada check-in untuk jadwal pada tanggal itu (selain via uuid)
         $existing = Attendance::where('user_id', $user->id)
@@ -264,6 +272,7 @@ class OfflineSyncController extends Controller
             'checkin_face_distance' => $item['face_distance'],
             'checkin_liveness_passed' => (bool) $item['liveness_passed'],
             'checkin_device' => $item['device_model'] ?? null,
+            'checkin_foto_path' => $attemptFotoPath,
             'alpha_menit' => $alphaMenit,
             'is_offline_synced' => true,
             'catatan' => 'Offline sync',
@@ -312,7 +321,7 @@ class OfflineSyncController extends Controller
      */
     private function processCheckOut(
         $user, $jadwal, array $item, Carbon $timestamp, float $distance,
-        int $toleransiPulang, float $faceThreshold
+        int $toleransiPulang, float $faceThreshold, ?string $attemptFotoPath = null
     ): array {
         $attendanceId = $item['attendance_id'] ?? null;
 
@@ -364,6 +373,7 @@ class OfflineSyncController extends Controller
             'checkout_distance' => round($distance, 2),
             'checkout_face_distance' => $item['face_distance'],
             'checkout_liveness_passed' => (bool) $item['liveness_passed'],
+            'checkout_foto_path' => $attemptFotoPath,
             'alpha_menit' => $totalAlpha,
             'durasi_efektif_menit' => $durasiEfektif,
             'is_offline_synced' => true,
@@ -436,7 +446,7 @@ class OfflineSyncController extends Controller
         ];
     }
 
-    private function log(int $userId, ?int $attendanceId, string $action, string $keterangan, array $item): void
+    private function log(int $userId, ?int $attendanceId, string $action, string $keterangan, array $item, ?string $fotoPath = null, ?string $fotoReason = null): void
     {
         AttendanceLog::create([
             'attendance_id' => $attendanceId,
@@ -454,10 +464,42 @@ class OfflineSyncController extends Controller
             'device_os' => $item['device_os'] ?? null,
             'app_version' => $item['app_version'] ?? null,
             'gps_accuracy' => $item['gps_accuracy'] ?? null,
+            'foto_path' => $fotoPath,
+            'foto_reason' => $fotoReason,
             'metadata' => [
                 'original_timestamp' => $item['timestamp'] ?? null,
                 'client_uuid' => $item['client_uuid'] ?? null,
             ],
         ]);
+    }
+
+    /**
+     * Simpan foto attempt offline (base64 JPEG/PNG dari queue klien).
+     * Validasi ketat: dekode maks MAX_FOTO_KB, tipe image yang diizinkan.
+     */
+    private function storeAttemptFoto(array $item): ?string
+    {
+        $b64 = $item['attempt_foto_b64'] ?? null;
+        if (! is_string($b64) || $b64 === '') {
+            return null;
+        }
+
+        $binary = base64_decode($b64, true);
+        if ($binary === false || strlen($binary) > PhotoUploadPolicy::MAX_FOTO_KB * 1024) {
+            return null;
+        }
+
+        $finfo = new \finfo(FILEINFO_MIME_TYPE);
+        $mime = $finfo->buffer($binary);
+        if (! in_array($mime, ['image/jpeg', 'image/png'], true)) {
+            return null;
+        }
+
+        $path = AttemptFotoService::DIRECTORY.'/'.uniqid('offline_', true).'.'.($mime === 'image/png' ? 'png' : 'jpg');
+        if (! Storage::disk(AttemptFotoService::DISK)->put($path, $binary)) {
+            return null;
+        }
+
+        return $path;
     }
 }

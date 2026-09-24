@@ -1,7 +1,7 @@
 # Temuan Audit Menyeluruh Absensi Mahasiswa
 
 Tanggal audit: 17 Juli 2026
-Pembaruan status terakhir: 18 Agustus 2026
+Pembaruan status terakhir: 24 September 2026 (deploy fitur foto attempt berisiko + geofence prodi-scoped ke host live)
 Scope: `backend/`, `frontend/`, seluruh dokumentasi di `docs/`, konfigurasi platform, migration, seeder, test, dan dependency manifest/lockfile.
 Metode: review statis lintas backend Laravel, web Inertia/Vue, Flutter, database, security, business logic, serta verifikasi build/test/tooling yang tersedia.
 
@@ -38,12 +38,12 @@ Audit awal mengonsolidasikan **59 temuan utama** dan 5 task validitas penelitian
 | Pemeriksaan | Hasil |
 |---|---|
 | `composer validate --strict` | **Lulus**, manifest valid; DomPDF dipin `^3.1` |
-| `php artisan test` | **Lulus: 235 test, 883 assertion** pada PHP 8.3.30 (12 September 2026, setelah test invarian guard route M2; sebelumnya 232/875 pada 20 Agustus 2026) |
-| `npm run build` | **Lulus** (18 Agustus 2026), Vite/Rolldown membangun frontend Inertia/Vue |
+| `php artisan test` | **Lulus: 255 test, 936 assertion** pada PHP 8.3.30 (24 September 2026, setelah fitur foto attempt berisiko + geofence scope prodi; sebelumnya 235/883 pada 12 September 2026) |
+| `npm run build` | **Lulus** (24 September 2026, 1.57s), Vite/Rolldown membangun frontend Inertia/Vue |
 | `npm audit --package-lock-only --omit=dev` dan full graph | **0 known vulnerabilities** setelah lockfile diperbarui (11 Agustus 2026) |
-| `flutter test` | **207 test lulus** (21 September 2026, setelah N-01 gate frame netral + N-02 upgrade plugin/file_picker 12.x; sebelumnya 192 pada 12 September 2026), termasuk kontrak konflik biometrik dan izin multi-MK, lifecycle FCM (L-02), navigasi checkout (H-13), comparator/formatters production (L-06), permit contract, queue lease, camera converter, dan gate frame netral pasca-liveness |
-| `flutter analyze` | **Bersih, No issues found** (21 September 2026); CI memakai `--fatal-warnings --fatal-infos` |
-| `vendor/bin/pint --test` | **Lulus, tanpa style issue** (12 September 2026, termasuk `RouteGuardInvariantTest`) |
+| `flutter test` | **214 test lulus** (24 September 2026; 22 September 2026 setelah N-01 gate frame netral + N-02 hapus safe_device/KGP, sebelumnya 192 pada 12 September 2026), termasuk kontrak konflik biometrik dan izin multi-MK, lifecycle FCM (L-02), navigasi checkout (H-13), comparator/formatters production (L-06), permit contract, queue lease, camera converter, gate frame netral pasca-liveness, dan regresi retry permit-bound |
+| `flutter analyze` | **Bersih, No issues found** (22 September 2026); CI memakai `--fatal-warnings --fatal-infos` |
+| `vendor/bin/pint --test` | **Bersih pada seluruh file yang disentuh fitur foto attempt** (24 September 2026); catatan: file lama di luar fitur masih menyimpan debt style Pint baseline (dilaporkan 24 September 2026, tidak dipakai fitur mana pun) |
 | Composer advisory audit | **0 advisory** setelah DomPDF/Guzzle/CommonMark diperbarui (11 Agustus 2026) |
 | Git/history audit | Root adalah Git repository pada `main` dengan remote GitHub; history dua commit diaudit tanpa forbidden secret filename |
 
@@ -65,6 +65,28 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
 > [CURRENT-API.md](CURRENT-API.md#izinsakit-leave-request), [PRD-02](PRD-02-functional-requirements.md),
 > [PRD-03 §2.17](PRD-03-database-design.md), [PRD-04 §5](PRD-04-api-design.md),
 > [PRD-05 §8](PRD-05-flow-diagram.md), dan rencana kerja [rencana-izin.md](rencana-izin.md).
+
+> **Update 24 September 2026 — fitur foto attempt berisiko (keputusan diskusi 23 Sep 2026).**
+> Foto check-in/checkout **tidak** disimpan untuk semua attempt (16 GB/semester pada
+> 500 mahasiswa); hanya attempt berisiko: face match gagal, `face_borderline`
+> (face_distance ≥ 0.75 × threshold), mock location, liveness gagal, atau offline
+> sync — diputuskan server-side oleh `AttemptFotoService::riskReasons()`. File ke
+> disk privat `face`, akses hanya signed URL ber-otorisasi + audit
+> (`attempt_foto_accessed`), purge 30 hari via `attendance:purge-attempt-fotos`
+> (kolom path dinolkan, angka/metadata tetap untuk R-03/R-04/FAR-FRR). Kolom baru:
+> `attendance_logs.foto_path`/`foto_reason`, `attendances.checkin_foto_path`/
+> `checkout_foto_path` (migrasi `2026_09_23_000001`, idempotent). Offline sync
+> menerima `attempt_foto_b64` per item. Geofence kini prodi-scoped: admin prodi
+> hanya boleh mengelola geofence prodinya via `assertCanManageProdiResource()`
+> (null = global, super_admin saja). Bukti: `php artisan test` → **255/255 (936
+> assertion)** termasuk 9 test `AttemptFotoTest` + 10 test `GeofenceScopeTest`;
+> `flutter test` → **214/214**; `npm run build` lulus. **Terdeploy ke host live
+> 24 September 2026, 09:54 WIB** (backup dulu, 14 file + migrasi `--force` DONE +
+> build Vite + permission + clear cache; `/api/health` 200, dashboard + asset 200,
+> route `private.attempt-foto` terdaftar, log 0 error — detail
+> [DEPLOYMENT.md](DEPLOYMENT.md)). Kontrak terdokumentasi di
+> [CURRENT-API.md](CURRENT-API.md#online-check-incheckout) dan
+> [PRD-03 §2.14](PRD-03-database-design.md).
 
 ## Temuan Critical
 
@@ -562,8 +584,8 @@ Build yang lulus tidak menghapus temuan runtime/business logic. Banyak bug berad
   1. App gradle bermigrasi ke built-in Kotlin: `id("kotlin-android")` dan blok `kotlinOptions` dihapus dari `android/app/build.gradle.kts`, diganti `kotlin { compilerOptions { jvmTarget = JVM_17 } }` sesuai panduan resmi. Deklarasi KGP di `android/settings.gradle.kts` dibiarkan `apply false` untuk plugin transitive yang masih butuh KGP.
   2. Upgrade plugin yang sudah punya versi built-in Kotlin: `shared_preferences_android` 2.4.23→2.4.28 (dipin langsung di pubspec agar transitive resolve tidak turun lagi), `device_info_plus` 12.4.0→13.2.0, `camera_android_camerax` 0.7.2→0.7.4+8 (via `camera` 0.12.0+1→0.12.1), `flutter_secure_storage` 9.2.4→10.3.4 (prasyarat win32 ^6; app tidak memakai `AndroidOptions`/`encryptedSharedPreferences` yang deprecated di 10.0.0), `file_picker` 8.1.4→12.3.0 (prasyarat win32 juga).
   3. Breaking-change akibat upgrade diperbaiki: `file_picker` 12.x menghapus `FilePicker.platform` — `leave_page.dart` `_pickFile` beralih ke static `FilePicker.pickFile()` (pilih satu file; API `type`/`allowedExtensions` tidak berubah).
-- Sisa (terbuka): `safe_device` 1.4.1 (terbaru per 21 Sep 2026) **masih KGP lama** — dipakai untuk deteksi mock location di alur absensi (`attendance_page.dart`, `geolocator_attendance_position_provider.dart`). Warning build kini hanya menyebut plugin ini. Tindak lanjut: tunggu upstream bermigrasi, atau ganti dengan alternatif (`geolocator.isMocked` sudah dipakai sebagai sinyal primer; safe_device hanya pelengkap). `android.builtInKotlin=true` TIDAK boleh diaktifkan sampai plugin ini selesai bermigrasi; migrasi penuh juga butuh Flutter 3.47+ dan AGP 9.
-- Verifikasi: `flutter test` 207/207 lulus, `flutter analyze` bersih, keempat APK debug di-rebuild sukses (fat + 3 ABI). Warning KGP tersisa hanya untuk safe_device.
+- **TUNTAS (22 September 2026): `safe_device` dihapus total.** Plugin terakhir penyandang KGP lama ini (1.4.1 masih belum bermigrasi upstream) diganti tanpa dependency tambahan: sinyal mock perangkat kini dibaca langsung dari flag `Location.isMock()` Android pada fix cache terakhir via `Geolocator.getLastKnownPosition` (`geolocator_attendance_position_provider.dart`, fail-open karena hanya lapis pelengkap — fix utama yang baru diambil tetap diperiksa `position.isMocked`). Alur absensi (`attendance_page.dart`) dan `AttendanceLocationService.isDeviceMockLocation()` tidak lagi menyentuh API plugin; semantik deteksi fake GPS yang diteruskan ke provider lokasi sistem identik. Dengan ini tidak ada lagi plugin KGP legacy di dependency graph dan `android.builtInKotlin=true` aman diaktifkan saat Flutter 3.47+/AGP 9 diadopsi.
+- Verifikasi (22 September 2026): `flutter test` 214/214 lulus (termasuk regresi retry permit-bound baru `attendance_retry_challenge_test.dart`), `flutter analyze` bersih ("No issues found"), keempat APK debug di-rebuild sukses (fat + 3 ABI) **tanpa warning KGP sama sekali** — catatan build lengkap (waktu, ukuran, `API_BASE_URL`) di [DEPLOYMENT.md entri 22:00 WIB](DEPLOYMENT.md).
 
 ## Temuan Low
 

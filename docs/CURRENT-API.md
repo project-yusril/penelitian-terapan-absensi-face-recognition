@@ -1,7 +1,7 @@
 # Kontrak API Saat Ini
 
 **Status:** maintained summary  
-**Pembaruan:** 21 September 2026
+**Pembaruan:** 24 September 2026 (foto attempt berisiko terdeploy live — migrasi dijalankan, route `private.attempt-foto` aktif; detail DEPLOYMENT.md)  
 **Authority:** `backend/routes/api.php`, request validation, services, dan feature tests  
 **Base path:** `/api` — backend penelitian live di `https://absensi.yusrilekamahendra.com/api` (liveness: `GET /api/health` → `{"status":"ok"}`; detail host & akses SSH di [DEPLOYMENT.md](DEPLOYMENT.md) dan [`ssh.md`](../ssh.md))
 
@@ -63,8 +63,14 @@ Endpoint private berada di protected group dan tetap membutuhkan signed URL:
 - `GET /private/enrollment-photos/{user}`
 - `GET /private/re-enrollment-photos/{reEnrollment}`
 - `GET /private/leave-documents/{leaveRequest}`
+- `GET /private/attempt-fotos/{attendanceLog}` (API + web, 23 September 2026)
 
 Tidak ada anonymous enrollment-photo endpoint.
+
+Foto attempt (bagian Foto Attempt Berisiko di bawah) hanya dapat diakses pemilik
+attendance-nya via signed URL dinamis `AttemptFotoService::url()`; setiap akses
+di-audit dengan action `attempt_foto_accessed`. File yang sudah di-purge
+mengembalikan null (bukan URL mati).
 
 ## Attendance Permit
 
@@ -141,6 +147,9 @@ Respons tidak mengirim NIM, kelas, user ID, distance, threshold, atau embedding.
 - face distance
 - liveness result dan challenge yang diberikan permit
 - optional telemetry seperti GPS accuracy, inference time, device, dan app version
+- optional `attempt_foto` (multipart file jpeg/png, maks 10 MB) — foto bukti attempt
+
+**Foto attempt berisiko (23 September 2026):** server menyimpan `attempt_foto` hanya bila attempt masuk kriteria risiko yang dihitung server-side oleh `AttemptFotoService::riskReasons()` — face match gagal, face_distance borderline (≥ 0.75 × threshold), mock location, liveness gagal, atau offline sync. Path foto ditulis ke `attendance_logs.foto_path` (+ `foto_reason`) dan `attendances.checkin_foto_path`/`checkout_foto_path`. Foto aman tidak pernah disimpan; file di-purge 30 hari (`attendance:purge-attempt-fotos`). Akses kembali hanya via route privat ber-otorisasi (signed URL, lihat bagian Akses File Privat).
 
 Online capture time berasal dari server. Client timestamp tidak dapat memperluas attendance window.
 
@@ -189,6 +198,8 @@ Online capture time berasal dari server. Client timestamp tidak dapat memperluas
 ```
 
 `type` menggunakan underscore: `check_in` atau `check_out`, bukan hyphen. Maksimum 20 item. Setiap item memerlukan permit dan UUID berbeda. Hasil dipetakan per `client_uuid`.
+
+**Foto offline (23 September 2026):** item yang masuk kriteria risiko dapat membawa `attempt_foto_b64` (base64 data URI jpeg/png, maks ~10 MB sebelum encode). Server mendekode, memvalidasi mime/ukuran dengan kebijakan yang sama seperti online, dan menyimpannya dengan mekanisme `AttemptFotoService`; base64 tidak valid diabaikan tanpa menggagalkan sync. Retensi 30 hari sama dengan foto online.
 
 ## Izin/Sakit (Leave Request)
 
